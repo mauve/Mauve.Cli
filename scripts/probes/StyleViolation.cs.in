@@ -1,0 +1,10 @@
+namespace InfrastructureProbe
+{
+    internal static class StyleViolation
+    {
+        internal static int GetValue()
+        {
+            return 1;
+        }
+    }
+}

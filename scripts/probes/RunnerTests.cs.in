@@ -1,0 +1,24 @@
+using Mauve.Governance.Testing.MSTest;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+[assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
+
+namespace InfrastructureProbe;
+
+/// <summary>Exercises the real test runner, independently of parser behavior.</summary>
+[TestClass]
+public sealed class RunnerTests
+{
+    /// <summary>Gets or sets the context injected by MSTest.</summary>
+    public TestContext? TestContext { get; set; }
+
+    /// <summary>Checks runner injection while emitting native Governance traits.</summary>
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-Infrastructure")]
+    [TestProperty(Metadata.Requirement, "FEAT-Infrastructure-001")]
+    public void RunnerInjectsTestContext()
+    {
+        Assert.IsNotNull(TestContext);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(TestContext.TestName));
+    }
+}

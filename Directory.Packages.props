@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Mauve.Governance.Logging.Analyzers" Version="0.14.0" />
+    <PackageVersion Include="Mauve.Governance.Testing.Analyzers" Version="0.14.0" />
+    <PackageVersion Include="Mauve.Governance.Testing.MSTest" Version="0.14.0" />
+    <PackageVersion Include="Mauve.Governance.Testing.TrxLogger" Version="0.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="MSTest" Version="4.5.1" />
+  </ItemGroup>
+</Project>

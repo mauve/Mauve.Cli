@@ -1,0 +1,15 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace InfrastructureProbe;
+
+/// <summary>Intentionally invalid metadata for a negative analyzer probe.</summary>
+[TestClass]
+public sealed class MissingMetadata
+{
+    /// <summary>Must be rejected before the test runner executes.</summary>
+    [TestMethod]
+    public void RejectsMissingFeature()
+    {
+        Assert.Fail();
+    }
+}
