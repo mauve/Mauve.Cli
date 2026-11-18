@@ -10,10 +10,10 @@ and the installed [policy](../governance.md).
 
 FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
-FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09 and FEAT-12 are active. Portable test methods are
-declared for each, but this implementation has no observed product test-run
-evidence yet.
-Remaining parser requirements are in `Requirements/Planned/`; they are not
+FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-11 and FEAT-12 are active.
+Portable test methods are declared for each, but this implementation has no
+observed product test-run evidence yet.
+FEAT-10, FEAT-13 and FEAT-14 remain in `Requirements/Planned/`; they are not
 passing coverage and do not receive active ledger rows.
 
 The attempted product test run stopped during restore with `NU1301` because
@@ -91,6 +91,10 @@ or protected hosted provenance.
 | FEAT-12-003 | portable automated | `CommandModelTests.Create_RejectsInheritedOptionCollisionsButAllowsDisjointScopes` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-12-004 | portable automated | `HelpDocumentTests.Create_ProjectsInheritedOptionsWithTheirDeclaringOwner` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-12-004 | portable automated | `CliInvokerTests.InvokeAsync_ExposesInheritedValuesFromTheirDeclaringCommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-11-001 | portable automated | `CliModelGeneratorTests.Generate_CompilesAndRunsNestedAliasBinding` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Package-free generator-driver harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-11-002 | portable automated | `CliModelGeneratorTests.Generate_UpdatesAliasesAndProducesStableUnchangedOutput` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Package-free generator-driver harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-11-003 | portable automated | `CliModelGeneratorTests.Generate_CompilesAndRunsNestedAliasBinding` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Package-free parity harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-11-004 | portable automated | `CliModelGeneratorTests.Generate_ReportsUnsupportedMembersAndEmitsNoInvalidRoot`; `CliModelGeneratorTests.Generate_ReportsDuplicateSiblingAliasesAndEmitsNoRoot` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Package-free generator-driver harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated
