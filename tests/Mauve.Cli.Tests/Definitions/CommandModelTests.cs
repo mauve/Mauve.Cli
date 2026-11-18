@@ -273,4 +273,16 @@ public sealed class CommandModelTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(
             () => GC.KeepAlive(new CliLimits(maximumModelNodes: 0)));
     }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-004")]
+    public void Create_RejectsStandardHelpOptionCollisions()
+    {
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--help", typeof(bool), OptionArity.BooleanFlag));
+
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            CommandModel.Create(root, includeStandardHelp: true));
+    }
 }

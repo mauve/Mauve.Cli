@@ -24,6 +24,7 @@ public sealed class PositionalDefinition
     /// <param name="defaultValue">The constant used by <see cref="DefaultValuePolicy.Constant"/>.</param>
     /// <param name="defaultValueFactory">The factory used by <see cref="DefaultValuePolicy.Factory"/>.</param>
     /// <param name="validators">Ordered validators for available values.</param>
+    /// <param name="defaultDisplay">Explicit non-sensitive text allowed in generated help.</param>
     public PositionalDefinition(
         string name,
         Type valueType,
@@ -37,7 +38,8 @@ public sealed class PositionalDefinition
         DefaultValuePolicy defaultValuePolicy = DefaultValuePolicy.None,
         object? defaultValue = null,
         Func<object?>? defaultValueFactory = null,
-        IEnumerable<IValueValidator>? validators = null)
+        IEnumerable<IValueValidator>? validators = null,
+        string? defaultDisplay = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -54,6 +56,7 @@ public sealed class PositionalDefinition
         DefaultValuePolicy = defaultValuePolicy;
         DefaultValue = defaultValue;
         DefaultValueFactory = defaultValueFactory;
+        DefaultDisplay = defaultDisplay;
         List<IValueValidator> validatorCopy = validators is null ? [] : [with(validators)];
         if (validatorCopy.Exists(static validator => validator is null))
         {
@@ -101,4 +104,7 @@ public sealed class PositionalDefinition
 
     /// <summary>Gets the ordered validators for available values.</summary>
     public IReadOnlyList<IValueValidator> Validators => _validators;
+
+    /// <summary>Gets explicit display text for a declared default, when allowed.</summary>
+    public string? DefaultDisplay { get; }
 }

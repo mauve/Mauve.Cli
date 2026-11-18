@@ -1,7 +1,7 @@
 # FEAT-08: Help and Usage
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Produce useful, customizable help from command and argument metadata.
@@ -9,10 +9,12 @@ Produce useful, customizable help from command and argument metadata.
 ## Context
 Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
-[FEAT-06](../FEAT-06-Defaults-And-Validation.md), and
-[FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md). Pack grouping is
-provided by [FEAT-14](FEAT-14-OptionPacks.md); its composition rules are
-not owned here. Reference: `../maz/Console/Cli/CommandDef.cs` and
+[FEAT-06](FEAT-06-Defaults-And-Validation.md), and
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Pack grouping is
+provided by [FEAT-14](Planned/FEAT-14-OptionPacks.md); its composition rules
+are not owned here. The implementation decision is recorded in
+[ADR-007](../Architecture/ADR-007-Help-Projection-And-Precedence.md).
+Reference: `../maz/Console/Cli/CommandDef.cs` and
 `../maz/Console/Cli/OptionPack.cs`.
 
 ## Requirements
@@ -33,22 +35,22 @@ Support application-supplied output customization and pack group metadata withou
 
 ### FEAT-08-004 - Help precedence
 Specify whether help bypasses requiredness and validation and how it interacts with malformed or unknown input.
-**Acceptance:** Under the proposal, leaf help works without required inputs, but malformed definitions and unknown options still produce failure; no handler executes.
+**Acceptance:** Leaf help works without required inputs, but malformed definitions and unknown options still produce failure; no handler executes.
 **Security:** Help must not mask malformed models or transform a failed parse into an invocation.
 
 ## Design
-#### Proposed help model and rendering
+#### Help model and rendering
 
-Separate a pure `HelpDocument`-like data projection from text rendering;
-the name is illustrative, not approved API. Input is a validated immutable
-model plus a canonical selected path and help-display settings.
+Separate a pure `HelpDocument` data projection from text rendering. Input is
+a validated immutable model and an optional command definition from that
+model.
 Data includes canonical usage path, descriptions, visible child summaries,
 ordered positionals, visible local/inherited options with aliases and
 value labels, safe declared default/allowed-value text, and stable pack
 group identities/titles/descriptions. Do not construct command/pack instances
 or invoke handlers, converters, default factories, validators or providers.
 
-Proposed plain-text ordering: usage; short/long description; visible children
+Plain-text ordering: usage; short/long description; visible children
 in declaration order; positionals; flat option groups ordered by their first
 member's appearance in FEAT-12's effective definition order. Ungrouped options
 belong to an owner-specific ungrouped group, not one global group moved before
@@ -73,8 +75,9 @@ displayed as effective (FEAT-06). Advanced-only help is not initial scope; do no
 `--help-more` or tree-filter modes without separate approval.
 
 Text output is deterministic and independent of ambient terminal width.
-Default width is proposed as 80 columns, configurable explicitly; test
-at narrow and ordinary widths without depending on OS newline conventions.
+Default width is 80 columns, configurable explicitly, and values below 20
+columns are rejected. Output uses LF line endings and wraps long unbroken
+words as well as ordinary text.
 Sanitize every display field before constructing the public projection:
 remove C0/C1/DEL control characters (including ESC/CSI/NEL), Unicode line/
 paragraph separators and bidi control characters. Titles/labels become
@@ -85,12 +88,24 @@ renderer receives already sanitized/sensitivity-filtered data, not a raw
 metadata escape hatch. Fail a throwing output sink explicitly;
 do not report successful display after a write fault.
 
+The public surface is `HelpDocument.Create(model, command)`,
+`HelpTextRenderer.Render(document, width)` and `HelpOutput.Write`. The
+projection excludes hidden definitions and includes explicit default text
+only for non-required, non-sensitive definitions with an active default
+policy. Option groups expose the selected command's canonical path separately
+from their stable group key; ungrouped options use the owner-specific
+`@ungrouped` key, which cannot collide with a declared group key.
+Reusing a key with conflicting title or description metadata on one command
+is an invalid model.
+
 #### Help request and error precedence
 
 Rendering an explicitly selected command's help is separate from recognizing
-a help option in argv. Propose an opt-in standard-help installation that
-adds one inherited root boolean `--help`/`-h`; reject registration collisions
-instead of silently overriding application flags. The token must set help
+a help option in argv. `CommandModel.Create(..., includeStandardHelp: true)`
+installs a marked boolean `--help`/`-h` definition on every command in the
+snapshot; this provides selected-leaf recognition until FEAT-12 implements
+general option inheritance. Reject spelling collisions instead of silently
+overriding application flags. The token must set help
 true; `--help=false` or `--help false` is an ordinary false flag value, not a help request.
 `--help` after `--` is a positional. No automatic help subcommand is implied.
 
@@ -109,7 +124,7 @@ value, duplicate scalar and out-of-scope options still fail; help never
 repairs their token structure. Invalid conversion text is not converted on
 the help path and therefore does not prevent help.
 
-| argv / condition | Proposed outcome |
+| argv / condition | Outcome |
 | --- | --- |
 | `copy --help`, required source omitted | Leaf help; no requiredness error or callbacks. |
 | `copy --count=bad --help` | Leaf help; numeric converter is not called. |
@@ -123,22 +138,29 @@ the help path and therefore does not prevent help.
 | Hidden or sensitive option in extended custom output | Hidden excluded; sensitive actual and display-only default/allowed-value text never supplied. |
 | Retry child pack flattened before Network own options | Retry group precedes Network; inherited ungrouped root options do not jump ahead of local groups. |
 
-#### Extraction and approval
+#### Extraction and implementation boundary
 
 Maz predefines several help options and groups pack options in a renderer
 that also serves its application UI. Only metadata-derived usage/grouping
 is carried forward; renderer/config/environment services are excluded.
-Approve helper installation, layout, width policy and the precise bypass
-precedence above. All required help semantics are here and in the linked
-pack/grammar owners; inspecting maz is unnecessary.
+The helper installation, layout, width policy and bypass precedence above
+are the approved behavior. Pack membership/order and general inherited
+options remain owned by FEAT-14 and FEAT-12 respectively; inspecting maz is
+unnecessary.
 
 ## Metrics Impact
-**Instruments:** none - planned help does not introduce runtime metrics.
+**Instruments:** none - help does not introduce runtime metrics.
 
 ## Verification
-Future snapshots and behavioral tests cover root/leaf usage, aliases, hidden
-and sensitive metadata, group order, customization and help/error precedence.
-No passing help evidence is asserted.
+`HelpDocumentTests.Create_ProjectsVisibleCommandsPositionalsAndOptionAliases`,
+`HelpDocumentTests.Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults`,
+`HelpDocumentTests.Write_PreservesGroupOrderAndUsesCustomRendererAndSink`,
+`CliParserTests.Parse_HelpBypassesConversionAndRequirednessButNotStructuralErrors`
+and `CommandModelTests.Create_RejectsStandardHelpOptionCollisions` cover the
+projection, output and precedence contracts. The package-free harness invoked
+these methods successfully, but it is not product MSTest or Governance
+acceptance evidence; the product test run remains blocked by the missing
+local Governance feed. See the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

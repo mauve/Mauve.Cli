@@ -12,7 +12,7 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-03](FEAT-03-Token-Grammar.md),
 [FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md) and
-[FEAT-08](FEAT-08-Help-And-Usage.md). Pack access is owned by
+[FEAT-08](../FEAT-08-Help-And-Usage.md). Pack access is owned by
 [FEAT-14](FEAT-14-OptionPacks.md). Evidence:
 `../maz/Console/Cli/CliCompletionProvider.cs` and
 `../maz/CliGenerator.Tests/CompletionTreeGeneratorTests.cs`.

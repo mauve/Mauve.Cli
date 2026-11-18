@@ -30,6 +30,8 @@ public sealed class OptionDefinition
     /// <param name="defaultValue">The constant used by <see cref="DefaultValuePolicy.Constant"/>.</param>
     /// <param name="defaultValueFactory">The factory used by <see cref="DefaultValuePolicy.Factory"/>.</param>
     /// <param name="validators">Ordered validators for available values.</param>
+    /// <param name="defaultDisplay">Explicit non-sensitive text allowed in generated help.</param>
+    /// <param name="displayGroup">Optional stable group metadata for generated help.</param>
     public OptionDefinition(
         string name,
         Type valueType,
@@ -48,7 +50,9 @@ public sealed class OptionDefinition
         DefaultValuePolicy defaultValuePolicy = DefaultValuePolicy.None,
         object? defaultValue = null,
         Func<object?>? defaultValueFactory = null,
-        IEnumerable<IValueValidator>? validators = null)
+        IEnumerable<IValueValidator>? validators = null,
+        string? defaultDisplay = null,
+        OptionDisplayGroup? displayGroup = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -69,6 +73,8 @@ public sealed class OptionDefinition
         DefaultValuePolicy = defaultValuePolicy;
         DefaultValue = defaultValue;
         DefaultValueFactory = defaultValueFactory;
+        DefaultDisplay = defaultDisplay;
+        DisplayGroup = displayGroup;
 
         List<OptionAlias> aliasCopy = aliases is null ? [] : [with(aliases)];
         if (aliasCopy.Exists(static alias => alias is null))
@@ -139,4 +145,24 @@ public sealed class OptionDefinition
 
     /// <summary>Gets the ordered validators for available values.</summary>
     public IReadOnlyList<IValueValidator> Validators => _validators;
+
+    /// <summary>Gets explicit display text for a declared default, when allowed.</summary>
+    public string? DefaultDisplay { get; }
+
+    /// <summary>Gets optional stable help-group metadata.</summary>
+    public OptionDisplayGroup? DisplayGroup { get; }
+
+    internal bool IsHelpOption { get; private init; }
+
+    internal static OptionDefinition CreateStandardHelp()
+    {
+        return new OptionDefinition(
+            "--help",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            aliases: [new OptionAlias("-h")])
+        {
+            IsHelpOption = true
+        };
+    }
 }

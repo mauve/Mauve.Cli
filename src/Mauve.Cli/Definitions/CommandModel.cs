@@ -9,10 +9,11 @@ namespace Mauve.Cli.Definitions;
 /// <summary>An immutable, validated snapshot of a command graph.</summary>
 public sealed class CommandModel
 {
-    private CommandModel(CommandDefinition root, CliLimits limits)
+    private CommandModel(CommandDefinition root, CliLimits limits, bool hasStandardHelp)
     {
         Root = root;
         Limits = limits;
+        HasStandardHelp = hasStandardHelp;
     }
 
     /// <summary>Gets the root command definition.</summary>
@@ -21,13 +22,20 @@ public sealed class CommandModel
     /// <summary>Gets the immutable limits used to validate and parse this model.</summary>
     public CliLimits Limits { get; }
 
+    /// <summary>Gets whether standard help was explicitly installed in this model.</summary>
+    public bool HasStandardHelp { get; }
+
     /// <summary>Creates and validates an immutable snapshot from a command graph.</summary>
     /// <param name="root">The root command builder.</param>
     /// <param name="limits">Optional positive model and parsing limits.</param>
+    /// <param name="includeStandardHelp">Whether to install <c>--help</c>/<c>-h</c> on each command.</param>
     /// <returns>A validated command model.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="root"/> is null.</exception>
     /// <exception cref="ArgumentException">The graph contains invalid or ambiguous definitions.</exception>
-    public static CommandModel Create(CommandBuilder root, CliLimits? limits = null)
+    public static CommandModel Create(
+        CommandBuilder root,
+        CliLimits? limits = null,
+        bool includeStandardHelp = false)
     {
         ArgumentNullException.ThrowIfNull(root);
         CliLimits effectiveLimits = limits ?? CliLimits.Default;
@@ -78,7 +86,8 @@ public sealed class CommandModel
                     $"The command graph exceeds the maximum depth of {effectiveLimits.MaximumCommandDepth}."));
             }
 
-            if (frame.Builder.OptionCount > effectiveLimits.MaximumOptionsPerCommand)
+            int addedHelpOption = includeStandardHelp ? 1 : 0;
+            if (frame.Builder.OptionCount + addedHelpOption > effectiveLimits.MaximumOptionsPerCommand)
             {
                 throw InvalidModel(string.Create(
                     CultureInfo.InvariantCulture,
@@ -88,6 +97,7 @@ public sealed class CommandModel
             long minimumRemainingNodes = modelNodeCount
                 + 1
                 + frame.Builder.OptionCount
+                + addedHelpOption
                 + frame.Builder.PositionalCount
                 + frame.Builder.ChildCount;
             if (minimumRemainingNodes > effectiveLimits.MaximumModelNodes)
@@ -99,7 +109,9 @@ public sealed class CommandModel
 
             CommandBuilder[] childrenSnapshot = frame.Builder.CopyChildren();
             string[] aliases = frame.Builder.CopyAliases();
-            OptionDefinition[] options = frame.Builder.CopyOptions();
+            OptionDefinition[] options = includeStandardHelp
+                ? [.. frame.Builder.CopyOptions(), OptionDefinition.CreateStandardHelp()]
+                : frame.Builder.CopyOptions();
             PositionalDefinition[] positionals = frame.Builder.CopyPositionals();
             CrossValueValidator[] crossValidators = frame.Builder.CopyCrossValidators();
             modelNodeCount += 1L + options.Length + positionals.Length;
@@ -131,7 +143,7 @@ public sealed class CommandModel
             }
         }
 
-        return new CommandModel(definitions[root], effectiveLimits);
+        return new CommandModel(definitions[root], effectiveLimits, includeStandardHelp);
     }
 
     private static void ValidateCommand(
@@ -164,6 +176,7 @@ with(StringComparer.Ordinal),             command.Name
         }
 
         HashSet<string> optionNames = [with(StringComparer.Ordinal)];
+        Dictionary<string, OptionDisplayGroup> displayGroups = new(StringComparer.Ordinal);
         foreach (OptionDefinition option in options)
         {
             ValidateOption(option);
@@ -178,6 +191,20 @@ with(StringComparer.Ordinal),             command.Name
                 {
                     throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Command '{command.Name}' has a duplicate option spelling '{alias.Name}'."));
                 }
+            }
+
+            if (option.DisplayGroup is OptionDisplayGroup displayGroup)
+            {
+                if (displayGroups.TryGetValue(displayGroup.Key, out OptionDisplayGroup? existingGroup)
+                    && (!string.Equals(existingGroup.Title, displayGroup.Title, StringComparison.Ordinal)
+                        || !string.Equals(existingGroup.Description, displayGroup.Description, StringComparison.Ordinal)))
+                {
+                    throw InvalidModel(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Command '{command.Name}' declares conflicting metadata for display group '{displayGroup.Key}'."));
+                }
+
+                _ = displayGroups.TryAdd(displayGroup.Key, displayGroup);
             }
         }
 

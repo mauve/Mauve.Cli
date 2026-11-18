@@ -113,6 +113,30 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             diagnostics,
             unmatched);
 
+        if (diagnostics.Count > 0)
+        {
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
+        }
+
+        ValidateHelpOptionOccurrences(inScopeOccurrences, selectedCommand, diagnostics);
+        if (diagnostics.Count > 0)
+        {
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
+        }
+
+        if (inScopeOccurrences.Exists(static occurrence =>
+            occurrence.Option.IsHelpOption && occurrence.BooleanValue == true))
+        {
+            return new ParseResult(
+                ParseOutcome.HelpRequested,
+                [.. selectedPath],
+                [],
+                [.. unmatched],
+                tokens,
+                []);
+        }
+
+        ValidateRequiredInputs(selectedCommand, inScopeOccurrences, positionalAssignments, diagnostics);
         if (diagnostics.Exists(static diagnostic => diagnostic.Code != ParseDiagnosticCode.MissingRequired))
         {
             return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
@@ -413,12 +437,59 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 }
             }
 
-            bool supplied = occurrencesForOption is { Count: > 0 };
-            if (option.IsRequired && !supplied)
+        }
+    }
+
+    private static void ValidateHelpOptionOccurrences(
+        List<OptionOccurrence> occurrences,
+        CommandDefinition selectedCommand,
+        DiagnosticBuffer diagnostics)
+    {
+        foreach (OptionOccurrence occurrence in occurrences)
+        {
+            if (occurrence.Option.IsHelpOption
+                && occurrence.Values.Count > 0
+                && occurrence.BooleanValue is null)
+            {
+                RawValue raw = occurrence.Values[0];
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+                    ParseDiagnosticCode.InvalidValue,
+                    occurrence.Option,
+                    selectedCommand,
+                    occurrence.OptionIndex,
+                    raw.TokenIndex,
+                    raw.ValueOffset,
+                    "boolean.invalid"));
+            }
+        }
+    }
+
+    private static void ValidateRequiredInputs(
+        CommandDefinition selectedCommand,
+        List<OptionOccurrence> optionOccurrences,
+        List<PositionalAssignment> positionalAssignments,
+        DiagnosticBuffer diagnostics)
+    {
+        foreach (OptionDefinition option in selectedCommand.Options)
+        {
+            if (option.IsRequired
+                && !optionOccurrences.Exists(occurrence => ReferenceEquals(occurrence.Option, option)))
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                     ParseDiagnosticCode.MissingRequired,
                     option,
+                    selectedCommand,
+                    null));
+            }
+        }
+
+        foreach (PositionalAssignment assignment in positionalAssignments)
+        {
+            if (assignment.Occurrences.Count < assignment.Definition.MinimumValues)
+            {
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForPositional(
+                    ParseDiagnosticCode.MissingRequired,
+                    assignment.Definition,
                     selectedCommand,
                     null));
             }
@@ -443,15 +514,6 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             for (int index = 0; index < count; index++)
             {
                 assigned.Add(occurrences[nextOccurrence++]);
-            }
-
-            if (assigned.Count < positional.MinimumValues)
-            {
-                AddDiagnostic(diagnostics, ParseDiagnostic.ForPositional(
-                    ParseDiagnosticCode.MissingRequired,
-                    positional,
-                    selectedCommand,
-                    null));
             }
 
             assignments.Add(new PositionalAssignment(positional, assigned));

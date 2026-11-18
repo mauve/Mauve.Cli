@@ -722,6 +722,94 @@ public sealed class CliParserTests
         Assert.AreEqual(5, bounded.Diagnostics[0].Suggestions.Count);
     }
 
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-004")]
+    public void Parse_HelpBypassesConversionAndRequirednessButNotStructuralErrors()
+    {
+        int converterCalls = 0;
+        int validatorCalls = 0;
+        int crossValidatorCalls = 0;
+        int defaultFactoryCalls = 0;
+        ConverterRegistry converters = new ConverterRegistryBuilder()
+            .Register<int>((_, _) =>
+            {
+                converterCalls++;
+                return ValueConversion.Failure<int>("integer.invalid");
+            })
+            .Build();
+        ValueValidator<int> validator = new((_, _) =>
+        {
+            validatorCalls++;
+            return ValueValidationOutcome.Success;
+        });
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("copy")
+                .AddOption(new OptionDefinition(
+                    "--count",
+                    typeof(int),
+                    OptionArity.RequiredScalar,
+                    isRequired: true,
+                    validators: [validator]))
+                .AddOption(new OptionDefinition(
+                    "--label",
+                    typeof(string),
+                    OptionArity.RequiredScalar,
+                    defaultValuePolicy: DefaultValuePolicy.Factory,
+                    defaultValueFactory: () =>
+                    {
+                        defaultFactoryCalls++;
+                        return "default";
+                    }))
+                .AddCrossValidator(_ =>
+                {
+                    crossValidatorCalls++;
+                    return ValueValidationOutcome.Success;
+                }));
+        CommandModel model = CommandModel.Create(root, includeStandardHelp: true);
+        CliParser parser = new(converters);
+
+        ParseResult help = parser.Parse(model, ["copy", "--count=bad", "--help"]);
+        ParseResult unknown = parser.Parse(model, ["copy", "--wat", "--help"]);
+        ParseResult missingValue = parser.Parse(model, ["copy", "--count", "--help"]);
+        ParseResult malformedHelp = parser.Parse(model, ["copy", "--help=maybe"]);
+        ParseResult falseHelp = parser.Parse(model, ["copy", "--help", "false"]);
+        ParseResult inlineFalseHelp = parser.Parse(model, ["copy", "--help=false"]);
+        ParseResult repeatedHelp = parser.Parse(model, ["copy", "--help", "-h"]);
+        ParseResult unknownCommand = parser.Parse(model, ["missing", "--help"]);
+
+        Assert.AreEqual(ParseOutcome.HelpRequested, help.Outcome);
+        CollectionAssert.AreEqual(new[] { "tool", "copy" }, help.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreEqual(0, help.Values.Count);
+        Assert.AreEqual(0, converterCalls);
+        Assert.AreEqual(0, validatorCalls);
+        Assert.AreEqual(0, crossValidatorCalls);
+        Assert.AreEqual(0, defaultFactoryCalls);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknown.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.MissingValue, missingValue.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, malformedHelp.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.MissingRequired, falseHelp.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.MissingRequired, inlineFalseHelp.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, repeatedHelp.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownCommand, unknownCommand.Diagnostics[0].Code);
+
+        CommandModel positionalModel = CommandModel.Create(
+            new CommandBuilder("tool").AddPositional(new PositionalDefinition(
+                "paths",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string))),
+            includeStandardHelp: true);
+        ParseResult afterEndMarker = parser.Parse(positionalModel, ["--", "--help"]);
+        Assert.AreEqual(ParseOutcome.Validated, afterEndMarker.Outcome);
+        Assert.IsTrue(afterEndMarker.TryGetPositionalValue(
+            positionalModel.Root,
+            positionalModel.Root.Positionals[0],
+            out IReadOnlyList<string>? paths));
+        CollectionAssert.AreEqual(new[] { "--help" }, paths!.ToArray());
+    }
+
     private static CommandModel CreateLeafModel()
     {
         return CommandModel.Create(new CommandBuilder("tool")

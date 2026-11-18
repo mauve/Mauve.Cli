@@ -16,8 +16,9 @@ All requirements listed here are **PLANNED**. The first two requirements of
 [FEAT-03](../FEAT-03-Token-Grammar.md) and all of
 [FEAT-04](../FEAT-04-Typed-Conversion.md),
 [FEAT-05](../FEAT-05-Cardinality-And-Special-Forms.md) and
-[FEAT-06](../FEAT-06-Defaults-And-Validation.md) and
-[FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md) are active; command path
+[FEAT-06](../FEAT-06-Defaults-And-Validation.md),
+[FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md), and
+[FEAT-08](../FEAT-08-Help-And-Usage.md) are active; command path
 selection and FEAT-03-003 remain planned. The source-generation-first direction and
 explicit-model equivalence are recorded in the
 [project boundaries decision](../../Architecture/ADR-001-Project-Boundaries.md);
@@ -26,19 +27,18 @@ Governance, not parser behavior.
 
 1. [FEAT-01 Command Selection](FEAT-01-Command-Model.md)
 2. [FEAT-03 Command and Option Ordering](FEAT-03-Token-Grammar.md)
-3. [FEAT-08 Help and Usage](FEAT-08-Help-And-Usage.md)
-4. [FEAT-09 Invocation Lifecycle](FEAT-09-Invocation-Lifecycle.md)
-5. [FEAT-10 Completion](FEAT-10-Completion.md)
-6. [FEAT-11 Declarative API and Generation](FEAT-11-Declarative-Api-And-Generation.md)
-7. [FEAT-12 Inherited and Global Options](FEAT-12-Inherited-And-Global-Options.md)
-8. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
-9. [FEAT-14 OptionPacks](FEAT-14-OptionPacks.md)
+3. [FEAT-09 Invocation Lifecycle](FEAT-09-Invocation-Lifecycle.md)
+4. [FEAT-10 Completion](FEAT-10-Completion.md)
+5. [FEAT-11 Declarative API and Generation](FEAT-11-Declarative-Api-And-Generation.md)
+6. [FEAT-12 Inherited and Global Options](FEAT-12-Inherited-And-Global-Options.md)
+7. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
+8. [FEAT-14 OptionPacks](FEAT-14-OptionPacks.md)
 
 ## Staging and decisions
 
 The implemented sequence covers the model and definitions, parsing and
-conversion, cardinality, defaults/validation, and parse results/diagnostics.
-Next implement help, invocation, completion, generation and
+conversion, cardinality, defaults/validation, parse results/diagnostics,
+and help. Next implement invocation, completion, generation and
 packs, inherited options, and trimming/NativeAOT scenarios as prerequisites
 permit. Dependencies are linked in each feature; this order is not evidence
 that a stage has passed its required gate.
