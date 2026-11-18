@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
@@ -45,5 +46,33 @@ public sealed class CommandInvocationContext
     {
         ArgumentNullException.ThrowIfNull(positional);
         return ParseResult.TryGetPositionalValue(Command, positional, out value);
+    }
+
+    /// <summary>Gets an option-pack view included by the selected command.</summary>
+    /// <param name="key">The top-level pack inclusion key.</param>
+    /// <returns>The invocation-local pack view.</returns>
+    public OptionPackContext GetOptionPack(string key)
+    {
+        return GetOptionPack(Command, key);
+    }
+
+    /// <summary>Gets an option-pack view included by a command on the selected path.</summary>
+    /// <param name="owner">The command that declared the inclusion.</param>
+    /// <param name="key">The top-level pack inclusion key.</param>
+    /// <returns>The invocation-local pack view.</returns>
+    public OptionPackContext GetOptionPack(CommandDefinition owner, string key)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(key);
+        if (!ParseResult.SelectedPath.Contains(owner))
+        {
+            throw new ArgumentException("The pack owner is not part of the selected command path.", nameof(owner));
+        }
+
+        OptionPackSnapshot? pack = owner.OptionPacks.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, key, StringComparison.Ordinal));
+        return pack is null
+            ? throw new ArgumentException("The pack key does not belong to the owning command.", nameof(key))
+            : new OptionPackContext(ParseResult, owner, pack);
     }
 }

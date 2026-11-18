@@ -89,15 +89,18 @@ public sealed class HelpDocument
             }
 
             OptionDisplayGroup? displayGroup = option.DisplayGroup;
-            string key = displayGroup?.Key ?? "@ungrouped";
+            bool hasPackGroup = ownedOption.Owner.TryGetPackGroup(option, out OptionPackGroupMetadata packGroup);
+            string key = displayGroup is not null
+                ? hasPackGroup ? string.Concat("@pack/", packGroup.InclusionPathKey, "#", displayGroup.Key) : displayGroup.Key
+                : hasPackGroup ? packGroup.GroupKey ?? "@ungrouped" : "@ungrouped";
             (CommandDefinition Owner, string Key) groupIdentity = (ownedOption.Owner, key);
             if (!groupsByKey.TryGetValue(groupIdentity, out HelpOptionGroupBuilder? group))
             {
                 group = new HelpOptionGroupBuilder(
                     [.. ownedOption.Owner.Path.Select(HelpTextSanitizer.SingleLine)],
                     key,
-                    HelpTextSanitizer.SingleLine(displayGroup?.Title ?? "Options"),
-                    HelpTextSanitizer.Description(displayGroup?.Description ?? string.Empty));
+                    HelpTextSanitizer.SingleLine(displayGroup?.Title ?? packGroup.Title ?? "Options"),
+                    HelpTextSanitizer.Description(displayGroup?.Description ?? packGroup.Description ?? string.Empty));
                 groupsByKey.Add(groupIdentity, group);
                 groups.Add(group);
             }

@@ -13,6 +13,7 @@ public sealed class CommandBuilder
     private readonly List<string> _aliases = [];
     private readonly List<CommandBuilder> _children = [];
     private readonly List<OptionDefinition> _options = [];
+    private readonly List<OptionPackInclusionBuilder> _packs = [];
     private readonly List<PositionalDefinition> _positionals = [];
     private readonly List<CrossValueValidator> _crossValidators = [];
     private CommandHandler? _handler;
@@ -64,6 +65,24 @@ public sealed class CommandBuilder
     {
         ArgumentNullException.ThrowIfNull(option);
         _options.Add(option);
+        return this;
+    }
+
+    /// <summary>Adds a reusable option pack with an explicit identity key.</summary>
+    /// <param name="key">The inclusion key, unique among this command's packs.</param>
+    /// <param name="pack">The pack builder.</param>
+    /// <param name="title">An optional help-group title.</param>
+    /// <param name="description">An optional help-group description.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder AddPack(
+        string key,
+        OptionPackBuilder pack,
+        string? title = null,
+        string? description = null)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(pack);
+        _packs.Add(new OptionPackInclusionBuilder(key, pack, title ?? string.Empty, description ?? string.Empty));
         return this;
     }
 
@@ -184,6 +203,8 @@ public sealed class CommandBuilder
 
     internal int OptionCount => _options.Count;
 
+    internal int PackCount => _packs.Count;
+
     internal int PositionalCount => _positionals.Count;
 
     internal CommandHandler? Handler => _handler;
@@ -201,6 +222,11 @@ public sealed class CommandBuilder
     internal OptionDefinition[] CopyOptions()
     {
         return [.. _options];
+    }
+
+    internal OptionPackInclusionBuilder[] CopyPacks()
+    {
+        return [.. _packs];
     }
 
     internal PositionalDefinition[] CopyPositionals()

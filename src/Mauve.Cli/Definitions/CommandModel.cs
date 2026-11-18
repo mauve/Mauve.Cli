@@ -67,7 +67,9 @@ public sealed class CommandModel
                     snapshot.Positionals,
                     snapshot.CrossValidators,
                     snapshot.Handler,
-                    paths[frame.Builder]));
+                    paths[frame.Builder],
+                    snapshot.Packs,
+                    snapshot.PackGroups));
                 continue;
             }
 
@@ -89,7 +91,14 @@ public sealed class CommandModel
             }
 
             int addedHelpOption = includeStandardHelp ? 1 : 0;
-            if (frame.Builder.OptionCount + addedHelpOption > effectiveLimits.MaximumOptionsPerCommand)
+            OptionPackSnapshot[] packs = SnapshotPacks(
+                frame.Builder.CopyPacks(),
+                effectiveLimits,
+                out OptionDefinition[] packedOptions,
+                out Dictionary<OptionDefinition, OptionPackGroupMetadata> packGroups,
+                out int packNodeCount);
+            int optionCount = frame.Builder.OptionCount + packedOptions.Length + addedHelpOption;
+            if (optionCount > effectiveLimits.MaximumOptionsPerCommand)
             {
                 throw InvalidModel(string.Create(
                     CultureInfo.InvariantCulture,
@@ -98,8 +107,8 @@ public sealed class CommandModel
 
             long minimumRemainingNodes = modelNodeCount
                 + 1
-                + frame.Builder.OptionCount
-                + addedHelpOption
+                + optionCount
+                + packNodeCount
                 + frame.Builder.PositionalCount
                 + frame.Builder.ChildCount;
             if (minimumRemainingNodes > effectiveLimits.MaximumModelNodes)
@@ -111,14 +120,15 @@ public sealed class CommandModel
 
             CommandBuilder[] childrenSnapshot = frame.Builder.CopyChildren();
             string[] aliases = frame.Builder.CopyAliases();
+            OptionDefinition[] directOptions = frame.Builder.CopyOptions();
             OptionDefinition[] options = includeStandardHelp
-                ? [.. frame.Builder.CopyOptions(), OptionDefinition.CreateStandardHelp()]
-                : frame.Builder.CopyOptions();
+                ? [.. directOptions, .. packedOptions, OptionDefinition.CreateStandardHelp()]
+                : [.. directOptions, .. packedOptions];
             PositionalDefinition[] positionals = frame.Builder.CopyPositionals();
             CrossValueValidator[] crossValidators = frame.Builder.CopyCrossValidators();
-            modelNodeCount += 1L + options.Length + positionals.Length;
+            modelNodeCount += 1L + options.Length + positionals.Length + packNodeCount;
 
-            ValidateCommand(frame.Builder, aliases, options, positionals, frame.Depth == 1);
+            ValidateCommand(frame.Builder, aliases, options, positionals, packGroups, frame.Depth == 1);
             ValidateChildren(childrenSnapshot);
             snapshots.Add(frame.Builder, new NodeSnapshot(
                 aliases,
@@ -126,7 +136,9 @@ public sealed class CommandModel
                 options,
                 positionals,
                 crossValidators,
-                frame.Builder.Handler));
+                frame.Builder.Handler,
+                packs,
+                packGroups));
             _ = active.Add(frame.Builder);
             traversal.Push(new TraversalFrame(frame.Builder, frame.Depth, true));
 
@@ -173,6 +185,135 @@ public sealed class CommandModel
         }
 
         return options;
+    }
+
+    private static OptionPackSnapshot[] SnapshotPacks(
+        OptionPackInclusionBuilder[] inclusions,
+        CliLimits limits,
+        out OptionDefinition[] options,
+        out Dictionary<OptionDefinition, OptionPackGroupMetadata> groups,
+        out int packNodeCount)
+    {
+        List<OptionDefinition> flattenedOptions = [];
+        groups = new Dictionary<OptionDefinition, OptionPackGroupMetadata>(ReferenceEqualityComparer.Instance);
+        HashSet<OptionPackBuilder> active = new(ReferenceEqualityComparer.Instance);
+        packNodeCount = 0;
+        OptionPackSnapshot[] snapshots = SnapshotPackInclusions(
+            inclusions,
+            limits,
+            active,
+            [],
+            null,
+            1,
+            flattenedOptions,
+            groups,
+            ref packNodeCount);
+        options = [.. flattenedOptions];
+        return snapshots;
+    }
+
+    private static OptionPackSnapshot[] SnapshotPackInclusions(
+        OptionPackInclusionBuilder[] inclusions,
+        CliLimits limits,
+        HashSet<OptionPackBuilder> active,
+        string[] parentPath,
+        OptionPackGroupMetadata? inheritedGroup,
+        int depth,
+        List<OptionDefinition> flattenedOptions,
+        Dictionary<OptionDefinition, OptionPackGroupMetadata> groups,
+        ref int packNodeCount)
+    {
+        if (inclusions.Length == 0)
+        {
+            return [];
+        }
+
+        if (depth > limits.MaximumCommandDepth)
+        {
+            throw InvalidModel("The option-pack graph exceeds the configured nesting limit.");
+        }
+
+        HashSet<string> siblingKeys = new(StringComparer.Ordinal);
+        List<OptionPackSnapshot> snapshots = [];
+        foreach (OptionPackInclusionBuilder inclusion in inclusions)
+        {
+            ValidatePackKey(inclusion.Key);
+            if (!siblingKeys.Add(inclusion.Key))
+            {
+                throw InvalidModel("Sibling option-pack inclusion keys must be unique.");
+            }
+
+            if (!active.Add(inclusion.Pack))
+            {
+                throw InvalidModel("The option-pack graph contains a cycle.");
+            }
+
+            packNodeCount++;
+            long minimumPackNodes = (long)flattenedOptions.Count
+                + packNodeCount
+                + inclusion.Pack.OptionCount
+                + inclusion.Pack.PackCount;
+            if (minimumPackNodes > limits.MaximumModelNodes)
+            {
+                throw InvalidModel("The option-pack graph exceeds the configured model-node limit.");
+            }
+
+            string[] inclusionPath = [.. parentPath, inclusion.Key];
+            string inclusionPathKey = string.Join('/', inclusionPath);
+            string groupPathKey = string.Concat("@pack/", inclusionPathKey);
+            OptionPackGroupMetadata? currentGroup = inclusion.Title.Length > 0
+                ? new OptionPackGroupMetadata(
+                    inclusionPathKey,
+                    groupPathKey,
+                    inclusion.Title,
+                    inclusion.Description)
+                : inheritedGroup;
+            OptionPackSnapshot[] nestedPacks = SnapshotPackInclusions(
+                inclusion.Pack.CopyPacks(),
+                limits,
+                active,
+                inclusionPath,
+                currentGroup,
+                depth + 1,
+                flattenedOptions,
+                groups,
+                ref packNodeCount);
+            OptionDefinition[] ownOptions = inclusion.Pack.CopyOptions();
+            foreach (OptionDefinition option in ownOptions)
+            {
+                flattenedOptions.Add(option);
+                if (!groups.TryAdd(
+                    option,
+                    new OptionPackGroupMetadata(
+                        inclusionPathKey,
+                        currentGroup?.GroupKey,
+                        currentGroup?.Title,
+                        currentGroup?.Description)))
+                {
+                    throw InvalidModel("An option definition cannot be included more than once in one command.");
+                }
+            }
+
+            _ = active.Remove(inclusion.Pack);
+            snapshots.Add(new OptionPackSnapshot(
+                inclusion.Key,
+                ownOptions,
+                nestedPacks,
+                inclusion.Title.Length > 0 ? inclusion.Title : null,
+                inclusion.Description));
+        }
+
+        return [.. snapshots];
+    }
+
+    private static void ValidatePackKey(string key)
+    {
+        if (key.Length is 0 or > 128
+            || key.Any(static character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-')))
+        {
+            throw InvalidModel("An option-pack inclusion key must be 1 to 128 ASCII letters, digits, dots, underscores or hyphens.");
+        }
     }
 
     internal IReadOnlyList<CommandDefinition> GetPath(CommandDefinition command)
@@ -251,6 +392,7 @@ public sealed class CommandModel
         string[] aliases,
         OptionDefinition[] options,
         PositionalDefinition[] positionals,
+        Dictionary<OptionDefinition, OptionPackGroupMetadata> packGroups,
         bool isRoot)
     {
         if (isRoot)
@@ -276,7 +418,7 @@ with(StringComparer.Ordinal),             command.Name
         }
 
         HashSet<string> optionNames = [with(StringComparer.Ordinal)];
-        Dictionary<string, OptionDisplayGroup> displayGroups = new(StringComparer.Ordinal);
+        Dictionary<string, (string Title, string Description)> displayGroups = new(StringComparer.Ordinal);
         foreach (OptionDefinition option in options)
         {
             ValidateOption(option);
@@ -293,18 +435,24 @@ with(StringComparer.Ordinal),             command.Name
                 }
             }
 
-            if (option.DisplayGroup is OptionDisplayGroup displayGroup)
+            bool hasPackGroup = packGroups.TryGetValue(option, out OptionPackGroupMetadata packGroup);
+            string? groupKey = option.DisplayGroup is OptionDisplayGroup explicitGroup
+                ? hasPackGroup ? string.Concat("@pack/", packGroup.InclusionPathKey, "#", explicitGroup.Key) : explicitGroup.Key
+                : packGroup.GroupKey;
+            string? groupTitle = option.DisplayGroup?.Title ?? packGroup.Title;
+            string groupDescription = option.DisplayGroup?.Description ?? packGroup.Description ?? string.Empty;
+            if (groupKey is not null)
             {
-                if (displayGroups.TryGetValue(displayGroup.Key, out OptionDisplayGroup? existingGroup)
-                    && (!string.Equals(existingGroup.Title, displayGroup.Title, StringComparison.Ordinal)
-                        || !string.Equals(existingGroup.Description, displayGroup.Description, StringComparison.Ordinal)))
+                if (displayGroups.TryGetValue(groupKey, out (string Title, string Description) existingGroup)
+                    && (!string.Equals(existingGroup.Title, groupTitle, StringComparison.Ordinal)
+                        || !string.Equals(existingGroup.Description, groupDescription, StringComparison.Ordinal)))
                 {
                     throw InvalidModel(string.Create(
                         CultureInfo.InvariantCulture,
-                        $"Command '{command.Name}' declares conflicting metadata for display group '{displayGroup.Key}'."));
+                        $"Command '{command.Name}' declares conflicting metadata for a help group."));
                 }
 
-                _ = displayGroups.TryAdd(displayGroup.Key, displayGroup);
+                _ = displayGroups.TryAdd(groupKey, (groupTitle ?? string.Empty, groupDescription));
             }
         }
 
@@ -699,7 +847,9 @@ with(StringComparer.Ordinal),             option.Name
         OptionDefinition[] Options,
         PositionalDefinition[] Positionals,
         CrossValueValidator[] CrossValidators,
-        CommandHandler? Handler);
+        CommandHandler? Handler,
+        OptionPackSnapshot[] Packs,
+        Dictionary<OptionDefinition, OptionPackGroupMetadata> PackGroups);
 
     private readonly record struct TraversalFrame(CommandBuilder Builder, int Depth, bool IsExit);
 }

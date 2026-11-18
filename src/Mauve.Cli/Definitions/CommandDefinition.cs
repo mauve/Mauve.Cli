@@ -14,9 +14,11 @@ public sealed class CommandDefinition
     private readonly ReadOnlyCollection<CommandDefinition> _children;
     private readonly ReadOnlyCollection<OptionDefinition> _options;
     private readonly ReadOnlyCollection<PositionalDefinition> _positionals;
+    private readonly ReadOnlyCollection<OptionPackSnapshot> _optionPacks;
     private readonly ReadOnlyCollection<CrossValueValidator> _crossValidators;
     private readonly ReadOnlyCollection<string> _path;
     private readonly Dictionary<string, OptionDefinition> _optionsByName;
+    private readonly Dictionary<OptionDefinition, OptionPackGroupMetadata> _packGroups;
 
     internal CommandDefinition(
         CommandBuilder builder,
@@ -26,7 +28,9 @@ public sealed class CommandDefinition
         PositionalDefinition[] positionals,
         CrossValueValidator[] crossValidators,
         CommandHandler? handler,
-        string[] path)
+        string[] path,
+        OptionPackSnapshot[] optionPacks,
+        Dictionary<OptionDefinition, OptionPackGroupMetadata> packGroups)
     {
         Name = builder.Name;
         Description = builder.Description ?? string.Empty;
@@ -36,7 +40,9 @@ public sealed class CommandDefinition
         _children = Array.AsReadOnly(children);
         _options = Array.AsReadOnly(options);
         _positionals = Array.AsReadOnly(positionals);
+        _optionPacks = Array.AsReadOnly(optionPacks);
         _crossValidators = Array.AsReadOnly(crossValidators);
+        _packGroups = packGroups;
         Handler = handler;
         _path = Array.AsReadOnly(path);
         _optionsByName = [with(StringComparer.Ordinal)];
@@ -74,10 +80,18 @@ public sealed class CommandDefinition
     /// <summary>Gets the ordered positional arguments.</summary>
     public IReadOnlyList<PositionalDefinition> Positionals => _positionals;
 
+    /// <summary>Gets the ordered option-pack inclusions owned by this command.</summary>
+    internal IReadOnlyList<OptionPackSnapshot> OptionPacks => _optionPacks;
+
     /// <summary>Gets the ordered cross-value validators for this command.</summary>
     public IReadOnlyList<CrossValueValidator> CrossValidators => _crossValidators;
 
     internal CommandHandler? Handler { get; }
+
+    internal bool TryGetPackGroup(OptionDefinition option, out OptionPackGroupMetadata group)
+    {
+        return _packGroups.TryGetValue(option, out group);
+    }
 
     /// <summary>Gets the canonical path components from the root to this command.</summary>
     public IReadOnlyList<string> Path => _path;

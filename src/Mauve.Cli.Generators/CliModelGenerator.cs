@@ -312,16 +312,18 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         {
             int minimum = GetNamedInt(attribute, "MinimumValues", 1);
             int maximum = GetNamedInt(attribute, "MaximumValues", 1);
-            if (minimum < 0
-                || (maximum != -1 && maximum < minimum)
-                || (maximum != 1 && !TryGetCollectionElementType(property.Type, out _))
-                || (maximum == 1 && TryGetCollectionElementType(property.Type, out _)))
+            bool isRest = maximum == -1;
+            bool isScalar = maximum == 1;
+            bool typeMismatch = isRest
+                ? !TryGetCollectionElementType(property.Type, out _)
+                : isScalar && TryGetCollectionElementType(property.Type, out _);
+            if (minimum is < 0 or > 1 || (!isRest && !isScalar) || typeMismatch)
             {
                 Report(context, InvalidMember, GetLocation(attribute, property), "Single-value arguments require a scalar property; multi-value arguments require an IReadOnlyList<T> property.");
                 return false;
             }
 
-            if (minimum == 0 && !IsNullable(property.Type) && maximum == 1)
+            if (minimum == 0 && !IsNullable(property.Type) && isScalar)
             {
                 Report(context, InvalidMember, GetLocation(attribute, property), "An optional single-value argument requires a nullable property type.");
                 return false;
