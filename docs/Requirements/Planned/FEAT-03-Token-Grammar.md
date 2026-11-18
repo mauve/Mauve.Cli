@@ -15,25 +15,10 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md) and
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs`.
 
 ## Requirements
-### FEAT-03-001 - Argument vector boundary
-The parser must consume caller-provided tokens without reinterpreting shell quoting or splitting embedded spaces.
-**Acceptance:** One token `a b` remains one value; an empty token is preserved, and an empty vector selects the root.
-**Security:** Never execute tokens or invoke a shell; quoting and escaping before argv construction are the caller's responsibility.
-
-### FEAT-03-002 - Option forms and values
-Recognize declared long and short aliases in space-separated and equals forms, and report a missing required value without consuming the end marker.
-**Acceptance:** `--count=2`, `--count 2` and `-c 2` bind alike; `--count --` reports missing value; unknown `--wat` is not silently accepted.
-**Security:** Preserve token boundaries and reject malformed input instead of guessing a value for an unrelated option.
-
 ### FEAT-03-003 - Command and option ordering
 Track consumed token positions when resolving the command path and binding inputs, so equal text elsewhere is not mistaken for a command.
 **Acceptance:** For child `copy`, `copy --name copy` keeps the second `copy` as the option value; an option before a child consumes its required value only once.
 **Security:** Selection must not change based on duplicate text in a value or skip validation of an unconsumed token.
-
-### FEAT-03-004 - Dash and end marker
-Treat `--` as the end of option and command recognition; subsequent tokens are positional, including dash-prefixed literals.
-**Acceptance:** `-- -file` binds literal `-file`; a required numeric option accepts `--count=-2`; an unrecognized dash token before `--` is reported.
-**Security:** Do not reinterpret a literal after `--` as an option or command; report excess positionals.
 
 ## Design
 #### Input and state

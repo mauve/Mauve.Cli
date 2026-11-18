@@ -11,27 +11,28 @@ This file is not manifest-owned and may be adapted to the repository.
 ## Planned parser backlog
 
 All requirements listed here are **PLANNED**. The first two requirements of
-[FEAT-01](../FEAT-01-Command-Model.md) and all of
-[FEAT-02](../FEAT-02-Options-And-Arguments.md) are active; command path
-selection remains planned. The source-generation-first direction and
+[FEAT-01](../FEAT-01-Command-Model.md), all of
+[FEAT-02](../FEAT-02-Options-And-Arguments.md), selected requirements in
+[FEAT-03](../FEAT-03-Token-Grammar.md) and all of
+[FEAT-04](../FEAT-04-Typed-Conversion.md) are active; command path
+selection and FEAT-03-003 remain planned. The source-generation-first direction and
 explicit-model equivalence are recorded in the
 [project boundaries decision](../../Architecture/ADR-001-Project-Boundaries.md);
 [enrollment](../../Architecture/ADR-002-Governance-Enrollment.md) describes
 Governance, not parser behavior.
 
 1. [FEAT-01 Command Selection](FEAT-01-Command-Model.md)
-2. [FEAT-03 Token Grammar](FEAT-03-Token-Grammar.md)
-3. [FEAT-04 Typed Conversion](FEAT-04-Typed-Conversion.md)
-4. [FEAT-05 Cardinality and Special Forms](FEAT-05-Cardinality-And-Special-Forms.md)
-5. [FEAT-06 Defaults and Validation](FEAT-06-Defaults-And-Validation.md)
-6. [FEAT-07 Parse Results and Diagnostics](FEAT-07-Parse-Results-And-Diagnostics.md)
-7. [FEAT-08 Help and Usage](FEAT-08-Help-And-Usage.md)
-8. [FEAT-09 Invocation Lifecycle](FEAT-09-Invocation-Lifecycle.md)
-9. [FEAT-10 Completion](FEAT-10-Completion.md)
-10. [FEAT-11 Declarative API and Generation](FEAT-11-Declarative-Api-And-Generation.md)
-11. [FEAT-12 Inherited and Global Options](FEAT-12-Inherited-And-Global-Options.md)
-12. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
-13. [FEAT-14 OptionPacks](FEAT-14-OptionPacks.md)
+2. [FEAT-03 Command and Option Ordering](FEAT-03-Token-Grammar.md)
+3. [FEAT-05 Cardinality and Special Forms](FEAT-05-Cardinality-And-Special-Forms.md)
+4. [FEAT-06 Defaults and Validation](FEAT-06-Defaults-And-Validation.md)
+5. [FEAT-07 Parse Results and Diagnostics](FEAT-07-Parse-Results-And-Diagnostics.md)
+6. [FEAT-08 Help and Usage](FEAT-08-Help-And-Usage.md)
+7. [FEAT-09 Invocation Lifecycle](FEAT-09-Invocation-Lifecycle.md)
+8. [FEAT-10 Completion](FEAT-10-Completion.md)
+9. [FEAT-11 Declarative API and Generation](FEAT-11-Declarative-Api-And-Generation.md)
+10. [FEAT-12 Inherited and Global Options](FEAT-12-Inherited-And-Global-Options.md)
+11. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
+12. [FEAT-14 OptionPacks](FEAT-14-OptionPacks.md)
 
 ## Staging and decisions
 

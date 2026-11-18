@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Mauve.Cli.Definitions;
 
@@ -73,7 +74,7 @@ public sealed class CommandDefinition
     /// <param name="name">The exact option spelling.</param>
     /// <param name="option">The matching option, if found.</param>
     /// <returns><see langword="true"/> when a matching option exists.</returns>
-    public bool TryGetOption(string name, out OptionDefinition? option)
+    public bool TryGetOption(string name, [NotNullWhen(true)] out OptionDefinition? option)
     {
         ArgumentNullException.ThrowIfNull(name);
         return _optionsByName.TryGetValue(name, out option);

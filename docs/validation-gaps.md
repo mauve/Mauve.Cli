@@ -8,11 +8,18 @@ and the installed [policy](../governance.md).
 
 ## Current baseline
 
-FEAT-01-001, FEAT-01-002 and FEAT-02-001 through FEAT-02-004 are active.
+FEAT-01-001, FEAT-01-002, FEAT-02-001 through FEAT-02-004, FEAT-03-001,
+FEAT-03-002, FEAT-03-004 and FEAT-04-001 through FEAT-04-004 are active.
 Portable test methods are declared for each, but this implementation has no
 observed product test-run evidence yet. All other parser requirements remain
 in `Requirements/Planned/`; they are not passing coverage and do not receive
 active ledger rows.
+
+The attempted product test run stopped during restore with `NU1301` because
+the configured `artifacts/governance-feed` directory is absent; no product
+test methods executed. A disposable package-free .NET 11 harness compiled the
+parser sources and invoked the declared parser scenarios, but this is not
+MSTest or Governance acceptance evidence.
 
 The standalone runner/analyzer/TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
@@ -38,6 +45,15 @@ or protected hosted provenance.
 | FEAT-02-002 | portable automated | `CommandModelTests.Create_PreservesPositionalDeclarationOrder`; `CommandModelTests.Create_RejectsDuplicatePositionalNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; run evidence is not yet recorded. |
 | FEAT-02-003 | portable automated | `CommandModelTests.Create_RejectsDuplicateOptionSpellingsButAllowsCaseDifferences` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
 | FEAT-02-004 | portable automated | `CommandModelTests.Create_ValidatesArityAndOptionalBarePolicies` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-03-001 | portable automated | `CliParserTests.Parse_PreservesArgumentBoundariesAndEmptyRestValues` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-03-002 | portable automated | `CliParserTests.Parse_ReportsMissingValuesWithoutConsumingTheEndMarker` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-03-004 | portable automated | `CliParserTests.Parse_TreatsDashTokensAsOptionsUntilTheEndMarker` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-04-001 | portable automated | `CliParserTests.Parse_ConvertsBuiltInsAndExplicitEnumMaps` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-04-002 | portable automated | `CliParserTests.Parse_UsesInvariantNumbersByDefaultAndSelectedDecimalSeparator` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-04-003 | portable automated | `CliParserTests.Parse_UsesRegisteredConvertersAndRejectsDuplicateRegistrations` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-04-003 | portable automated | `CliParserTests.Parse_RunsConvertersInInputTokenOrder` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-04-003 | portable automated | `CliParserTests.Parse_PropagatesConverterFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-04-004 | portable automated | `CliParserTests.Parse_ReportsSafeConversionFailuresWithoutPartialValues` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

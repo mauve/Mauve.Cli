@@ -1,7 +1,7 @@
 # FEAT-04: Typed Conversion
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Convert input values to declared types through predictable built-in or
@@ -10,7 +10,9 @@ explicitly registered conversion.
 ## Context
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md) and
 [FEAT-03](FEAT-03-Token-Grammar.md). Results and error presentation belong
-to [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Reference:
+to [FEAT-07](Planned/FEAT-07-Parse-Results-And-Diagnostics.md). Reference:
+the accepted pipeline in
+[ADR-004](../Architecture/ADR-004-Parser-And-Conversion-Pipeline.md),
 `../maz/Console/Cli/Parsing/CliParser.cs` and
 `../maz/specs/CLI Parser Specification.md`.
 
@@ -135,17 +137,19 @@ Maz provides strings/bools/int/long/double/Guid/Uri/enums and nullable
 unwrapping. It also uses reflection for static Parse, ambient numeric culture
 and broad exception catches; those are not adopted. Its description-mapped
 enum tokens can be expressed by an explicit token map/converter here.
-Approve the precise built-in set, styles, enum rules and precedence above
-before implementation. Public delegate/type names remain a separate API
-choice, not a reason to consult maz.
+The built-in set, styles, enum rules and registry precedence above are the
+accepted behavior. Public delegate/type names are implementation choices.
 
 ## Metrics Impact
-**Instruments:** none - no planned conversion metrics are being added.
+**Instruments:** none - conversion adds no runtime instrumentation.
 
 ## Verification
-Future tests cover locale changes, min/max and overflow, enum invalid values,
-nullable absence, registration conflicts and converter failures; no
-conversion test evidence exists yet.
+Portable behavior tests are declared in
+[`CliParserTests`](../../tests/Mauve.Cli.Tests/Parsing/CliParserTests.cs)
+for built-in and explicit enum conversion, numeric culture, converter
+registration, callback faults and safe conversion diagnostics. No product
+test-run evidence has been recorded yet; see the
+[validation ledger](../validation-gaps.md).
 
 ## Diagrams
 
