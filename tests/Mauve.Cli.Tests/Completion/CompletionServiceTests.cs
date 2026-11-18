@@ -97,7 +97,8 @@ public sealed class CompletionServiceTests
             .AddOption(target));
         CompletionProviderRegistry providers = new CompletionProviderRegistryBuilder()
             .Register(target, (context, _) => SingleValue(
-                context.TryGetOptionValue(verbose, out bool? value) ? value!.Value.ToString() : "missing"))
+                context.TryGetOptionValue(verbose, out bool? value) ? value!.Value.ToString() : "missing"),
+                CompletionDependency.ForOption(verbose))
             .Build();
         CompletionService service = new();
 
