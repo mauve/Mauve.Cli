@@ -9,7 +9,7 @@ real generated and explicit applications by publishing and running them.
 
 ## Context
 Depends on [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-09](FEAT-09-Invocation-Lifecycle.md) and
+[FEAT-09](../FEAT-09-Invocation-Lifecycle.md) and
 [FEAT-11](FEAT-11-Declarative-Api-And-Generation.md). The build-time/runtime
 separation is in [ADR-001](../../Architecture/ADR-001-Project-Boundaries.md).
 Full integrated acceptance also requires results [FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md),

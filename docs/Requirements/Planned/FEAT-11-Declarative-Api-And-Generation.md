@@ -49,7 +49,7 @@ supported semantic surface is deliberately bounded:
 | Hierarchy | Explicit ordered inclusion of child declaration types in a root registration, not discovery of every class by name/inheritance/namespace. |
 | Option/argument | Annotated accessible partial get-only instance property; generate typed read access from the current binding. No writable/static/indexer/ref-return members. |
 | Pack | Explicit typed pack inclusion with stable member/key identity; generate composition and safe binding descriptors per FEAT-14. |
-| Handler | At most one explicit method, signature from FEAT-09 (no parameters or one CancellationToken); generate a direct instance call using bound properties. |
+| Handler | At most one explicit method, signature from [FEAT-09](../FEAT-09-Invocation-Lifecycle.md) (no parameters or one CancellationToken); generate a direct instance call using bound properties. |
 | Converter/provider/default factory | Explicit statically addressable method/delegate/factory reference; validate signature/accessibility at compile time. Never emit Activator/reflection lookup. |
 | Manual extension | Explicit registration of immutable definitions, appended at a defined point and validated with generated definitions before parsing. |
 

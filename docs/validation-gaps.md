@@ -10,7 +10,7 @@ and the installed [policy](../governance.md).
 
 FEAT-01-001, FEAT-01-002, FEAT-02-001 through FEAT-02-004, FEAT-03-001,
 FEAT-03-002, FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
-FEAT-05, FEAT-06, FEAT-07 and FEAT-08 are active. Portable test methods are
+FEAT-05, FEAT-06, FEAT-07, FEAT-08 and FEAT-09 are active. Portable test methods are
 declared for each, but this implementation has no observed product test-run
 evidence yet.
 Remaining parser requirements are in `Requirements/Planned/`; they are not
@@ -78,6 +78,12 @@ or protected hosted provenance.
 | FEAT-08-003 | portable automated | `HelpDocumentTests.Write_PreservesGroupOrderAndUsesCustomRendererAndSink` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-08-004 | portable automated | `CliParserTests.Parse_HelpBypassesConversionAndRequirednessButNotStructuralErrors` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-08-004 | portable automated | `CommandModelTests.Create_RejectsStandardHelpOptionCollisions` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-09-001 | portable automated | `CliInvokerTests.InvokeAsync_DispatchesOnlyTheSelectedValidatedHandler` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-09-001 | portable automated | `CliInvokerTests.InvokeAsync_NeverDispatchesInvalidOrHelpResultsAndReportsNoHandler` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-09-002 | portable automated | `CliInvokerTests.InvokeAsync_NormalizesSupportedHandlerReturnShapes` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-09-003 | portable automated | `CliInvokerTests.InvokeAsync_HonorsPreCancellationAndStopsBetweenParserCallbacks` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-09-003 | portable automated | `CliInvokerTests.InvokeAsync_ReportsCooperativeCancellationButPreservesCompletedExitCode` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-09-004 | portable automated | `CliInvokerTests.InvokeAsync_PropagatesHandlerFaultsAndIsolatesInvocations` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

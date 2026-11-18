@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
@@ -65,6 +66,7 @@ public sealed class CommandModel
                     snapshot.Options,
                     snapshot.Positionals,
                     snapshot.CrossValidators,
+                    snapshot.Handler,
                     paths[frame.Builder]));
                 continue;
             }
@@ -118,7 +120,13 @@ public sealed class CommandModel
 
             ValidateCommand(frame.Builder, aliases, options, positionals, frame.Depth == 1);
             ValidateChildren(childrenSnapshot);
-            snapshots.Add(frame.Builder, new NodeSnapshot(aliases, childrenSnapshot, options, positionals, crossValidators));
+            snapshots.Add(frame.Builder, new NodeSnapshot(
+                aliases,
+                childrenSnapshot,
+                options,
+                positionals,
+                crossValidators,
+                frame.Builder.Handler));
             _ = active.Add(frame.Builder);
             traversal.Push(new TraversalFrame(frame.Builder, frame.Depth, true));
 
@@ -593,7 +601,8 @@ with(StringComparer.Ordinal),             option.Name
         CommandBuilder[] Children,
         OptionDefinition[] Options,
         PositionalDefinition[] Positionals,
-        CrossValueValidator[] CrossValidators);
+        CrossValueValidator[] CrossValidators,
+        CommandHandler? Handler);
 
     private readonly record struct TraversalFrame(CommandBuilder Builder, int Depth, bool IsExit);
 }

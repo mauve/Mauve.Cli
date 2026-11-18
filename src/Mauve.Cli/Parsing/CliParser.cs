@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Validation;
@@ -25,8 +26,25 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     /// <exception cref="ArgumentException">The vector has an invalid shape.</exception>
     public ParseResult Parse(CommandModel model, IReadOnlyList<string> arguments)
     {
+        return ParseCore(model, arguments, CancellationToken.None);
+    }
+
+    internal ParseResult ParseForInvocation(
+        CommandModel model,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        return ParseCore(model, arguments, cancellationToken);
+    }
+
+    private ParseResult ParseCore(
+        CommandModel model,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
+        cancellationToken.ThrowIfCancellationRequested();
 
         string[] tokens = CopyAndValidateArguments(arguments, model.Limits, out ParseDiagnostic? inputLimit);
         if (inputLimit is not null)
@@ -51,6 +69,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         bool endOfOptions = false;
         for (int index = 0; index < tokens.Length; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string token = tokens[index];
             if (!endOfOptions && token == "--")
             {
@@ -93,6 +112,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         List<OptionOccurrence> inScopeOccurrences = [];
         foreach (OptionOccurrence occurrence in optionOccurrences)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!ReferenceEquals(occurrence.Owner, selectedCommand))
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
@@ -146,20 +166,21 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             selectedCommand,
             inScopeOccurrences,
             positionalAssignments,
-            diagnostics);
+            diagnostics,
+            cancellationToken);
         if (diagnostics.Count == 0)
         {
-            ApplyAbsentDefaults(selectedCommand, values, diagnostics);
+            ApplyAbsentDefaults(selectedCommand, values, diagnostics, cancellationToken);
         }
 
         if (diagnostics.Count == 0)
         {
-            RunValueValidators(selectedCommand, values, diagnostics);
+            RunValueValidators(selectedCommand, values, diagnostics, cancellationToken);
         }
 
         if (diagnostics.Count == 0)
         {
-            RunCrossValidators(selectedCommand, values, diagnostics);
+            RunCrossValidators(selectedCommand, values, diagnostics, cancellationToken);
         }
 
         return diagnostics.Count > 0
@@ -536,13 +557,15 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         CommandDefinition selectedCommand,
         List<OptionOccurrence> occurrences,
         List<PositionalAssignment> positionals,
-        DiagnosticBuffer diagnostics)
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken)
     {
         Dictionary<int, ConversionAttempt> convertedByTokenIndex = ConvertTokensInOrder(
             selectedCommand,
             occurrences,
             positionals,
-            diagnostics);
+            diagnostics,
+            cancellationToken);
         ValidateBooleanOccurrences(selectedCommand, occurrences, diagnostics);
         if (diagnostics.Count > 0)
         {
@@ -552,6 +575,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         List<ParsedValue> values = [];
         foreach (OptionDefinition option in selectedCommand.Options)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             List<OptionOccurrence> optionOccurrences = [.. occurrences
                 .Where(occurrence => ReferenceEquals(occurrence.Owner, selectedCommand)
                     && ReferenceEquals(occurrence.Option, option))];
@@ -608,7 +632,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 {
                     BareValuePolicy.Null => null,
                     BareValuePolicy.Constant => option.BareValue,
-                    BareValuePolicy.Factory => option.BareValueFactory!(),
+                    BareValuePolicy.Factory => InvokeFactory(option.BareValueFactory!, cancellationToken),
                     BareValuePolicy.Unspecified => throw new NotImplementedException(),
                     _ => throw new InvalidOperationException("The model contains an invalid optional-value policy.")
                 };
@@ -665,9 +689,17 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 continue;
             }
 
-            object? value = IsCollection(option.Arity)
-                ? CreateCollection(option.ElementType!, convertedValues)
-                : convertedValues[0];
+            object? value;
+            if (IsCollection(option.Arity))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                value = CreateCollection(option.ElementType!, convertedValues);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            else
+            {
+                value = convertedValues[0];
+            }
             values.Add(new ParsedValue(
                 selectedCommand,
                 option,
@@ -753,10 +785,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private void ApplyAbsentDefaults(
         CommandDefinition selectedCommand,
         List<ParsedValue> values,
-        DiagnosticBuffer diagnostics)
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken)
     {
         for (int index = 0; index < values.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ParsedValue entry = values[index];
             if (entry.IsAvailable
                 || entry.Origin != ValueOrigin.Absent
@@ -777,8 +811,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 DefaultValuePolicy.Constant => entry.Option?.DefaultValue ?? entry.Positional?.DefaultValue,
                 DefaultValuePolicy.Factory => entry.Option?.DefaultValueFactory is Func<object?> optionFactory
-                    ? optionFactory()
-                    : entry.Positional!.DefaultValueFactory!(),
+                    ? InvokeFactory(optionFactory, cancellationToken)
+                    : InvokeFactory(entry.Positional!.DefaultValueFactory!, cancellationToken),
                 DefaultValuePolicy.None => throw new InvalidOperationException("The model contains an invalid default-value policy."),
                 _ => throw new InvalidOperationException("The model contains an invalid default-value policy.")
             };
@@ -797,6 +831,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 bool compatibleElements = true;
                 foreach (object? element in sequence)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (!IsValueCompatible(elementType, element, allowsNull))
                     {
                         compatibleElements = false;
@@ -812,7 +847,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     continue;
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 defaultValue = ValueConverterEngine.CreateReadOnlyCollection(elementType, elements, _converters);
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
             if (!IsValueCompatible(targetType, defaultValue, allowsNull))
@@ -856,11 +893,13 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void RunValueValidators(
         CommandDefinition selectedCommand,
         List<ParsedValue> values,
-        DiagnosticBuffer diagnostics)
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken)
     {
         ValidationContext context = new(selectedCommand, [.. values]);
         foreach (ParsedValue entry in values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!entry.IsAvailable)
             {
                 continue;
@@ -870,7 +909,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 ?? entry.Positional!.Validators;
             foreach (IValueValidator validator in validators)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 ValueValidationOutcome outcome = validator.Validate(entry.Value, context);
+                cancellationToken.ThrowIfCancellationRequested();
                 string? failureCode = GetValidationFailureCode(outcome);
                 if (failureCode is null)
                 {
@@ -900,12 +941,15 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void RunCrossValidators(
         CommandDefinition selectedCommand,
         List<ParsedValue> values,
-        DiagnosticBuffer diagnostics)
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken)
     {
         ValidationContext context = new(selectedCommand, [.. values]);
         foreach (CrossValueValidator validator in selectedCommand.CrossValidators)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValueValidationOutcome outcome = validator(context);
+            cancellationToken.ThrowIfCancellationRequested();
             string? failureCode = GetValidationFailureCode(outcome);
             if (failureCode is not null)
             {
@@ -929,7 +973,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         CommandDefinition selectedCommand,
         List<OptionOccurrence> occurrences,
         List<PositionalAssignment> positionals,
-        DiagnosticBuffer diagnostics)
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken)
     {
         List<ConversionRequest> requests = [];
         foreach (OptionOccurrence occurrence in occurrences)
@@ -977,6 +1022,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         Dictionary<int, ConversionAttempt> convertedByTokenIndex = [];
         foreach (ConversionRequest request in requests.OrderBy(static request => request.TokenIndex))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ConversionContext context = new(
                 request.TargetType,
                 request.DefinitionName,
@@ -990,6 +1036,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 _converters,
                 out object? converted,
                 out string failureCode);
+            cancellationToken.ThrowIfCancellationRequested();
             bool succeeded = conversionSucceeded
                 && IsValueCompatible(
                     request.TargetType,
@@ -1031,6 +1078,14 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private object CreateCollection(Type elementType, List<object?> values)
     {
         return ValueConverterEngine.CreateReadOnlyCollection(elementType, values, _converters);
+    }
+
+    private static object? InvokeFactory(Func<object?> factory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        object? value = factory();
+        cancellationToken.ThrowIfCancellationRequested();
+        return value;
     }
 
     private static bool IsValueCompatible(Type type, object? value, bool allowsNull)

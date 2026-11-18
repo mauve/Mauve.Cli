@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
@@ -12,6 +15,7 @@ public sealed class CommandBuilder
     private readonly List<OptionDefinition> _options = [];
     private readonly List<PositionalDefinition> _positionals = [];
     private readonly List<CrossValueValidator> _crossValidators = [];
+    private CommandHandler? _handler;
 
     /// <summary>Creates a command builder.</summary>
     /// <param name="name">The canonical name or root display label.</param>
@@ -83,11 +87,106 @@ public sealed class CommandBuilder
         return this;
     }
 
+    /// <summary>Registers a synchronous handler with no application exit code.</summary>
+    /// <param name="handler">The handler to invoke after successful validation.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder SetHandler(Action<CommandInvocationContext, CancellationToken> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        SetHandlerCore((context, cancellationToken) =>
+        {
+            handler(context, cancellationToken);
+            return new ValueTask<int>(0);
+        });
+        return this;
+    }
+
+    /// <summary>Registers a synchronous handler that returns an application exit code.</summary>
+    /// <param name="handler">The handler to invoke after successful validation.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder SetHandler(Func<CommandInvocationContext, CancellationToken, int> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        SetHandlerCore((context, cancellationToken) =>
+            new ValueTask<int>(handler(context, cancellationToken)));
+        return this;
+    }
+
+    /// <summary>Registers an asynchronous handler with no application exit code.</summary>
+    /// <param name="handler">The handler to invoke after successful validation.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder SetTaskHandler(Func<CommandInvocationContext, CancellationToken, Task> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        SetHandlerCore(async (context, cancellationToken) =>
+        {
+            Task task = handler(context, cancellationToken)
+                ?? throw new InvalidOperationException("The asynchronous handler returned a null task.");
+            await task.ConfigureAwait(false);
+            return 0;
+        });
+        return this;
+    }
+
+    /// <summary>Registers an asynchronous task handler that returns an application exit code.</summary>
+    /// <param name="handler">The handler to invoke after successful validation.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder SetTaskHandlerWithExitCode(
+        Func<CommandInvocationContext, CancellationToken, Task<int>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        SetHandlerCore(async (context, cancellationToken) =>
+        {
+            Task<int> task = handler(context, cancellationToken)
+                ?? throw new InvalidOperationException("The asynchronous handler returned a null task.");
+            return await task.ConfigureAwait(false);
+        });
+        return this;
+    }
+
+    /// <summary>Registers an asynchronous value-task handler with no application exit code.</summary>
+    /// <param name="handler">The handler to invoke after successful validation.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder SetValueTaskHandler(
+        Func<CommandInvocationContext, CancellationToken, ValueTask> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        SetHandlerCore(async (context, cancellationToken) =>
+        {
+            await handler(context, cancellationToken).ConfigureAwait(false);
+            return 0;
+        });
+        return this;
+    }
+
+    /// <summary>Registers an asynchronous value-task handler that returns an application exit code.</summary>
+    /// <param name="handler">The handler to invoke after successful validation.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder SetValueTaskHandlerWithExitCode(
+        Func<CommandInvocationContext, CancellationToken, ValueTask<int>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        SetHandlerCore((context, cancellationToken) => handler(context, cancellationToken));
+        return this;
+    }
+
+    private void SetHandlerCore(CommandHandler handler)
+    {
+        if (_handler is not null)
+        {
+            throw new InvalidOperationException("A command can have only one handler.");
+        }
+
+        _handler = handler;
+    }
+
     internal int ChildCount => _children.Count;
 
     internal int OptionCount => _options.Count;
 
     internal int PositionalCount => _positionals.Count;
+
+    internal CommandHandler? Handler => _handler;
 
     internal string[] CopyAliases()
     {

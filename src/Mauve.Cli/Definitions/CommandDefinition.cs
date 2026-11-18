@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
@@ -24,6 +25,7 @@ public sealed class CommandDefinition
         OptionDefinition[] options,
         PositionalDefinition[] positionals,
         CrossValueValidator[] crossValidators,
+        CommandHandler? handler,
         string[] path)
     {
         Name = builder.Name;
@@ -35,6 +37,7 @@ public sealed class CommandDefinition
         _options = Array.AsReadOnly(options);
         _positionals = Array.AsReadOnly(positionals);
         _crossValidators = Array.AsReadOnly(crossValidators);
+        Handler = handler;
         _path = Array.AsReadOnly(path);
         _optionsByName = [with(StringComparer.Ordinal)];
         foreach (OptionDefinition option in options)
@@ -73,6 +76,8 @@ public sealed class CommandDefinition
 
     /// <summary>Gets the ordered cross-value validators for this command.</summary>
     public IReadOnlyList<CrossValueValidator> CrossValidators => _crossValidators;
+
+    internal CommandHandler? Handler { get; }
 
     /// <summary>Gets the canonical path components from the root to this command.</summary>
     public IReadOnlyList<string> Path => _path;
