@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted bootstrap direction. Public parser APIs and behavior remain planned.
+Accepted project boundary for the implemented parser and source generator.
 
 ## Context
 
@@ -14,9 +14,9 @@ NativeAOT and deterministic validation.
 
 ## Decision
 
-- `Mauve.Cli` targets .NET 11 and owns the future explicit command model,
-  parsing, diagnostics and invocation contracts.
-- `Mauve.Cli.Generators` is a Roslyn incremental-generator scaffold targeting
+- `Mauve.Cli` targets .NET 11 and owns the explicit command model, parsing,
+  diagnostics, invocation and shell-independent completion contracts.
+- `Mauve.Cli.Generators` is a Roslyn incremental generator targeting
   `netstandard2.0` for compiler-host compatibility. It is an analyzer
   project reference, never a runtime application dependency.
 - The primary user experience is declarative, generated registration and
@@ -27,25 +27,25 @@ NativeAOT and deterministic validation.
   Governance tooling changes the product's .NET 11 requirement.
 - OptionPacks own reusable typed composition. Inherited/global visibility
   is separate. Pack values must be isolated between parses/invocations.
-- The examples began as honest bootstrap scaffolds. The runtime parser now
-  exists, but those examples still establish only compiler/toolchain wiring
-  until they exercise real generated and explicit parser behavior.
+- The examples exercise generated and explicit parser behavior. Trimmed and
+  NativeAOT publish/run support remains unverified.
 - Product assemblies are not publishable packages yet (`IsPackable=false`).
   Distribution/package layout is future work, not an accidental empty NuGet
   package contract.
 
 ## Consequences
 
-There is no implementation/API compatibility promise in this bootstrap.
-Avoid speculative interfaces and failing/skipped placeholder tests. Resolve
-documented grammar/API blockers with the owner before implementing affected
-requirements. Future AOT checks must retain and exercise actual generated
-and explicit-model code; an empty runtime reference can be trimmed away.
+The implemented API is governed by its active feature specifications and
+architecture decisions. Avoid speculative interfaces and failing/skipped
+placeholder tests. Future AOT checks must retain and exercise actual
+generated and explicit-model code; an empty runtime reference can be trimmed
+away.
 
 Affected requirements include
 [FEAT-01](../Requirements/FEAT-01-Command-Model.md),
 [FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md),
-[FEAT-11](../Requirements/Planned/FEAT-11-Declarative-Api-And-Generation.md),
+[FEAT-10](../Requirements/FEAT-10-Completion.md),
+[FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md),
 [FEAT-12](../Requirements/FEAT-12-Inherited-And-Global-Options.md),
 [FEAT-13](../Requirements/Planned/FEAT-13-NativeAot-And-Trimming.md) and
-[FEAT-14](../Requirements/Planned/FEAT-14-OptionPacks.md).
+[FEAT-14](../Requirements/FEAT-14-OptionPacks.md).

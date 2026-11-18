@@ -10,10 +10,11 @@ Both use the same parser and invocation pipeline.
 - Typed conversion, defaults, validation, and structured parse errors.
 - Help documents and asynchronous command handlers.
 - Reusable nested option packs with invocation-local values.
+- Shell-independent command, option, enum, and provider-based completion.
 - Generated command models with no runtime generator dependency.
 - Bounded model and input processing.
 
-Completion and end-to-end NativeAOT verification are still planned.
+Shell adapters and end-to-end NativeAOT verification are not yet supported.
 
 ## Explicit model
 

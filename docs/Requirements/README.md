@@ -16,11 +16,12 @@ FEAT-03-002, FEAT-03-003, FEAT-03-004 and all requirements of
 [FEAT-06](FEAT-06-Defaults-And-Validation.md), and all of
 [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md),
 [FEAT-08](FEAT-08-Help-And-Usage.md), and
-[FEAT-09](FEAT-09-Invocation-Lifecycle.md), and
+[FEAT-09](FEAT-09-Invocation-Lifecycle.md),
+[FEAT-10](FEAT-10-Completion.md), and
 [FEAT-11](FEAT-11-Declarative-Api-And-Generation.md), and
 [FEAT-12](FEAT-12-Inherited-And-Global-Options.md), and
 [FEAT-14](FEAT-14-OptionPacks.md) have active implementation owners.
-The remaining features stay in the [planned index](Planned/README.md). Focused tests are
+FEAT-13 remains in the [planned index](Planned/README.md). Focused tests are
 declared for the active requirements, but no product test-run evidence has
 yet been recorded for this implementation.
 

@@ -1,21 +1,20 @@
 # FEAT-10: Completion
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Offer shell-independent command, option and value suggestions with
 asynchronous contextual providers.
 
 ## Context
-Depends on [FEAT-01](../FEAT-01-Command-Model.md),
+Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
-[FEAT-03](../FEAT-03-Token-Grammar.md),
-[FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md) and
-[FEAT-08](../FEAT-08-Help-And-Usage.md). Pack access is owned by
-[FEAT-14](FEAT-14-OptionPacks.md). Evidence:
-`../maz/Console/Cli/CliCompletionProvider.cs` and
-`../maz/CliGenerator.Tests/CompletionTreeGeneratorTests.cs`.
+[FEAT-03](FEAT-03-Token-Grammar.md),
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md) and
+[FEAT-08](FEAT-08-Help-And-Usage.md). Pack definitions are resolved by
+identity through the shared model. Cursor and provider boundaries are recorded
+in [ADR-012](../Architecture/ADR-012-Completion-API.md).
 
 ## Requirements
 ### FEAT-10-001 - Contextual candidates
@@ -39,7 +38,7 @@ Keep core candidates separate from shell-specific quoting and adapter behavior, 
 **Security:** Adapters must not evaluate candidate text as shell code.
 
 ## Design
-#### Proposed shell-independent request
+#### Shell-independent request
 
 The core receives already-decoded logical tokens, a cursor token index,
 UTF-16 character offset within that token, the validated model and cancellation.
@@ -63,7 +62,7 @@ negating aliases after equals produce no value candidates and no provider
 call. Null vectors/elements and invalid cursor coordinates are API argument
 errors, not successful empty completion.
 
-Proposed candidate fields: insertion text (one logical value), safe display
+Candidates carry insertion text (one logical value), sanitized display
 text, optional description, kind (command/option/value/positional), definition
 identity and replacement coordinates. Results distinguish Completed,
 Cancelled, ContextFailed, ProviderFailed and LimitReached. An empty Completed result means
@@ -97,21 +96,17 @@ invocation. The active incomplete token is not itself an unknown-option error.
   option/command filtering, and the registered value provider's documented
   value comparison policy.
 
-Provider lookup is keyed by `(model, selected canonical path, declaring owner
-inclusion path, definition identity)`, not a global
-alias string. Siblings may both use `--name` with different providers.
-Applications explicitly register typed delegates/factories; no Activator,
-reflection field walk, global mutable registry or implicit credential/network
-lookup is permitted. A provider receives the prefix, selected path and
-read-only successfully converted prior non-sensitive values from its explicit
-dependency-handle list (empty by default), never arbitrary values in scope.
-Reject unknown/ambiguous targets/dependencies and hidden/sensitive or
-cross-branch dependency registrations at model validation; scope visibility
-must hold everywhere the provider applies. A currently missing, duplicate
-or conversion-invalid dependency stays unavailable, not a guessed value.
-Built-in conversion is permitted; custom converters must
-explicitly opt in as completion-safe. No absent factory is called to invent
-context. Missing/invalid/redacted context is unavailable, not a default value.
+Provider lookup uses definition identity within the selected command path, not
+a global alias string. Siblings may both use `--name` with different
+providers. Applications explicitly register asynchronous delegates; no
+Activator, reflection field walk, global mutable registry or implicit
+credential/network lookup is permitted. A provider receives the prefix,
+selected path and only successfully converted, prior, non-sensitive values
+from its explicit dependency-handle list (empty by default), never arbitrary
+values in scope. A dependency must be visible on the selected path; an
+unavailable value stays unavailable. Built-in conversions and enum maps are
+safe; custom converters must use `RegisterCompletionSafe` before completion
+will invoke them. No absent factory or validator is called to invent context.
 
 Pack lookup uses FEAT-14 inclusion identity and safe data views, not arbitrary
 application helper invocation or a first-match search of the root tree.
@@ -121,7 +116,7 @@ no raw prior argv or secret strings are automatically logged.
 
 #### Bounds, failures and adapter matrix
 
-Proposed bounds: FEAT-07 input/model bounds; inspect at most 512 returned
+Use FEAT-07 input/model bounds; inspect at most 512 returned
 candidates, emit at most 128, and accept at most 1024 UTF-16 code units per
 candidate. Candidate duplication uses exact ordinal insertion text and
 replacement range; retain first occurrence. Preserve declared/provider order
@@ -160,7 +155,7 @@ exception-text rendering. Await/dispose fully before reporting an outcome.
 | --- | --- |
 | Core logical-token completion | Required by this feature. |
 | Explicit static/asynchronous providers and typed safe context | Required by this feature. |
-| Bash, Zsh, Fish, PowerShell adapters | Not yet selected; unsupported until per-shell lexing/escaping tests and protocol are specified. |
+| Bash, Zsh, Fish, PowerShell adapters | Unsupported. The API reports `UnsupportedShell`; hosts must perform lexing and escaping themselves. |
 | Raw command-line tokenization / shell execution | Not part of the core API. |
 
 Acceptance fixtures include `fi|`, `file --co|`, `file --mode=fa|st`,
@@ -174,22 +169,22 @@ Add `--mo|de=fast`, `--mode|=fast`, `--mode=|fast`, `-m|=fast`,
 513 duplicate/nonmatching results, an oversized display field, provider
 dependency leakage, and cancelled-vs-finalized-result race fixtures.
 
-#### Extraction and pending approval
-
-Maz combines a generated static tree, alias-keyed registries, simplified
-double-quote tokenization and reflection-based pack search. Some paths swallow
-provider faults as no output. This proposal keeps static/dynamic metadata but
-replaces those boundaries with typed scope, logical-token cursor ranges and
-explicit failure. Approve cursor representation, converter opt-in, limits and
-future shell choices before implementation; no maz reading is needed.
+The implementation keeps static metadata and explicitly registered dynamic
+providers while using typed scope, logical-token cursor ranges and explicit
+failure outcomes. Shell adapters remain unsupported until separate
+per-shell lexing and escaping contracts are approved.
 
 ## Metrics Impact
-**Instruments:** none - planned completion introduces no runtime metrics.
+**Instruments:** none - completion adds no runtime metrics.
 
 ## Verification
-Future tests cover incomplete paths, value context, cancellation, provider
-exceptions, candidate limits, hidden metadata and shell escaping per approved
-adapter. No shell support or test result is claimed today.
+Focused tests cover command and option candidates, cursor replacement ranges,
+inline and pending values, optional/boolean/end-marker behavior, explicit enum
+maps, negative numeric values, negating aliases, dependency isolation,
+sensitive-target suppression, provider faults, cancellation, candidate bounds
+and unsupported shells. The package-free harness passed these scenarios;
+product MSTest and Governance evidence remains blocked by the missing trusted
+local Governance package feed. No shell adapter is claimed.
 
 ## Diagrams
 

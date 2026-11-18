@@ -5,8 +5,8 @@ Read [the feature lifecycle](Requirements/README.md), the
 and [POL-01](Policies/POL-01-Strict-Dotnet-And-Aot.md) before implementation.
 This repository contains an implemented parser, invocation API, source
 generator and explicit and generated OptionPacks. Check the active feature
-documents for supported behavior; completion and end-to-end NativeAOT
-verification remain planned.
+documents for supported behavior; shell adapters and end-to-end NativeAOT
+verification remain unsupported or planned as specified.
 
 Use .NET 11/C# 15, with a source-generation-first declarative API and an
 equivalent explicit model. Keep the Roslyn component build-time-only and

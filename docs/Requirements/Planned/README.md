@@ -18,8 +18,9 @@ All requirements listed here are **PLANNED**. All requirements of
 [FEAT-05](../FEAT-05-Cardinality-And-Special-Forms.md) and
 [FEAT-06](../FEAT-06-Defaults-And-Validation.md),
 [FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md), and
-[FEAT-08](../FEAT-08-Help-And-Usage.md), and
-[FEAT-09](../FEAT-09-Invocation-Lifecycle.md), and
+[FEAT-08](../FEAT-08-Help-And-Usage.md),
+[FEAT-09](../FEAT-09-Invocation-Lifecycle.md),
+[FEAT-10](../FEAT-10-Completion.md),
 [FEAT-11](../FEAT-11-Declarative-Api-And-Generation.md), and
 [FEAT-12](../FEAT-12-Inherited-And-Global-Options.md) and
 [FEAT-14](../FEAT-14-OptionPacks.md) are active. The source-generation-first direction and
@@ -28,16 +29,15 @@ explicit-model equivalence are recorded in the
 [enrollment](../../Architecture/ADR-002-Governance-Enrollment.md) describes
 Governance, not parser behavior.
 
-1. [FEAT-10 Completion](FEAT-10-Completion.md)
-2. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
+1. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
 
 ## Staging and decisions
 
 The implemented sequence covers the model and definitions, parsing and
 conversion, cardinality, defaults/validation, parse results/diagnostics,
-help, invocation, command-path routing and inherited option scope. Next
-implement completion and trimming/NativeAOT scenarios as prerequisites
-permit. Dependencies are linked in each feature; this order is not evidence
+help, invocation, command-path routing, inherited option scope and
+shell-independent completion. Next implement trimming/NativeAOT scenarios as
+prerequisites permit. Dependencies are linked in each feature; this order is not evidence
 that a stage has passed its required gate.
 
 The documents record the approved behavior baselines, including name
@@ -56,9 +56,9 @@ documents in this repository, not a requirement to reproduce maz's quirks.
 Each Design section explicitly records intentional differences.
 
 Public API naming is accepted for generation by
-[ADR-010](../../Architecture/ADR-010-Declarative-Generation.md). Remaining API
-choices for completion and packs must be recorded before those features are
-implemented.
+[ADR-010](../../Architecture/ADR-010-Declarative-Generation.md). Completion
+and pack choices are recorded in [ADR-012](../../Architecture/ADR-012-Completion-API.md)
+and [ADR-011](../../Architecture/ADR-011-OptionPack-Composition.md).
 
 | Decision group | Approved behavior baseline / owning features |
 | --- | --- |
@@ -68,7 +68,7 @@ implemented.
 | Values/defaults | Defined invariant built-in conversions, explicit converter precedence, independent absent/bare policies, no silent fault/default fallback (04/06). |
 | Results/safety | Typed outcome/provenance/coordinate semantics, proposed numeric bounds, deterministic errors and advisory suggestions (07). |
 | Help/invocation | Opt-in help helper with structural-error precedence, explicit non-dispatch outcomes, host-owned exceptions/process exit (08/09). |
-| Completion | Logical-token cursor API, scope-safe provider/context lookup, explicit bounded failures, Bash, Zsh, Fish and PowerShell adapters (10). |
+| Completion | Logical-token cursor API, scope-safe provider/context lookup and explicit bounded failures; no shell adapters are currently supported (10; ADR-012). |
 | Generation | Partial-class/property declarations, explicit semantic order metadata, instance-scoped binding, direct handlers and explicit-model parity (11; ADR-010). |
 | Packs | Inclusion-key identity, child-first flattening, nearest-title grouping, invocation-local views and generated parity (14; ADR-011/ADR-010). |
 | Compatibility | Real generated/explicit trimming/AOT scenarios; Linux ARM64 as first proposed product-verification row, other RIDs unverified (13). |

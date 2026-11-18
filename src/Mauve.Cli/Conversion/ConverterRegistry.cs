@@ -8,6 +8,8 @@ namespace Mauve.Cli.Conversion;
 public sealed class ConverterRegistryBuilder
 {
     private readonly Dictionary<Type, IRegisteredConverter> _converters = [];
+    private readonly HashSet<Type> _completionSafe = [];
+    private readonly Dictionary<Type, string[]> _enumNames = [];
 
     /// <summary>Registers one converter for an exact target type.</summary>
     /// <typeparam name="T">The converter target type.</typeparam>
@@ -23,6 +25,17 @@ public sealed class ConverterRegistryBuilder
             : this;
     }
 
+    /// <summary>Registers a converter whose callback is safe to invoke while resolving completion context.</summary>
+    /// <typeparam name="T">The converter target type.</typeparam>
+    /// <param name="converter">The converter callback.</param>
+    /// <returns>This builder.</returns>
+    public ConverterRegistryBuilder RegisterCompletionSafe<T>(ValueConverter<T> converter)
+    {
+        Register(converter);
+        _ = _completionSafe.Add(typeof(T));
+        return this;
+    }
+
     /// <summary>Registers an explicit ordinal name map for an enum type.</summary>
     /// <typeparam name="TEnum">The enum type.</typeparam>
     /// <param name="values">The exact accepted names and values.</param>
@@ -32,26 +45,37 @@ public sealed class ConverterRegistryBuilder
     {
         ArgumentNullException.ThrowIfNull(values);
         Dictionary<string, TEnum> map = [with(StringComparer.Ordinal)];
+        List<string> names = [];
         foreach (KeyValuePair<string, TEnum> entry in values)
         {
             if (string.IsNullOrEmpty(entry.Key) || !map.TryAdd(entry.Key, entry.Value))
             {
                 throw new ArgumentException("Enum names must be nonempty and unique under ordinal comparison.", nameof(values));
             }
+
+            names.Add(entry.Key);
         }
 
-        return map.Count == 0
-            ? throw new ArgumentException("An enum map must contain at least one name.", nameof(values))
-            : Register((value, _) => map.TryGetValue(value, out TEnum result)
+        if (map.Count == 0)
+        {
+            throw new ArgumentException("An enum map must contain at least one name.", nameof(values));
+        }
+
+        RegisterCompletionSafe<TEnum>((value, _) => map.TryGetValue(value, out TEnum result)
             ? ValueConversion.FromValue(result)
             : ValueConversion.Failure<TEnum>("enum.unknown"));
+        _enumNames.Add(typeof(TEnum), [.. names]);
+        return this;
     }
 
     /// <summary>Creates an immutable registry snapshot.</summary>
     /// <returns>A converter registry.</returns>
     public ConverterRegistry Build()
     {
-        return new ConverterRegistry([with(_converters)]);
+        return new ConverterRegistry(
+            [with(_converters)],
+            [with(_completionSafe)],
+            [with(_enumNames)]);
     }
 }
 
@@ -59,17 +83,36 @@ public sealed class ConverterRegistryBuilder
 public sealed class ConverterRegistry
 {
     private readonly ReadOnlyDictionary<Type, IRegisteredConverter> _converters;
+    private readonly HashSet<Type> _completionSafe;
+    private readonly ReadOnlyDictionary<Type, string[]> _enumNames;
 
-    internal ConverterRegistry(Dictionary<Type, IRegisteredConverter> converters)
+    internal ConverterRegistry(
+        Dictionary<Type, IRegisteredConverter> converters,
+        HashSet<Type> completionSafe,
+        Dictionary<Type, string[]> enumNames)
     {
         _converters = new ReadOnlyDictionary<Type, IRegisteredConverter>(converters);
+        _completionSafe = completionSafe;
+        _enumNames = new ReadOnlyDictionary<Type, string[]>(enumNames);
     }
 
     /// <summary>Creates an empty converter registry.</summary>
     /// <returns>An empty registry.</returns>
     public static ConverterRegistry Empty()
     {
-        return new ConverterRegistry([]);
+        return new ConverterRegistry([], [], []);
+    }
+
+    internal bool IsCompletionSafe(Type targetType)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        return _completionSafe.Contains(targetType) || _completionSafe.Contains(effectiveType);
+    }
+
+    internal IReadOnlyList<string> GetEnumNames(Type targetType)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        return _enumNames.TryGetValue(effectiveType, out string[]? names) ? names : [];
     }
 
     internal bool TryConvert(
