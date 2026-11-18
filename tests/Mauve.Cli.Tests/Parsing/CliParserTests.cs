@@ -5,6 +5,7 @@ using System.Linq;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Parsing;
+using Mauve.Cli.Validation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -201,6 +202,332 @@ public sealed class CliParserTests
             () => new CliParser(converters).Parse(model, ["--mode=read"]));
 
         Assert.AreEqual("converter fault", exception.Message);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-001")]
+    public void Parse_HandlesBooleanFormsAndExplicitNegation()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--verbose",
+                typeof(bool),
+                OptionArity.BooleanFlag,
+                aliases: [new OptionAlias("--no-verbose", OptionAliasKind.Negating)])));
+
+        ParseResult enabled = new CliParser().Parse(model, ["--verbose"]);
+        ParseResult disabled = new CliParser().Parse(model, ["--no-verbose"]);
+        ParseResult spaceFalse = new CliParser().Parse(model, ["--verbose", "false"]);
+        ParseResult invalid = new CliParser().Parse(model, ["--verbose=maybe"]);
+        ParseResult repeated = new CliParser().Parse(model, ["--verbose", "--no-verbose"]);
+
+        Assert.IsTrue(enabled.TryGetOptionValue(model.Root, model.Root.Options[0], out bool trueValue));
+        Assert.IsTrue(trueValue);
+        Assert.IsTrue(disabled.TryGetOptionValue(model.Root, model.Root.Options[0], out bool falseValue));
+        Assert.IsFalse(falseValue);
+        Assert.IsTrue(spaceFalse.TryGetOptionValue(model.Root, model.Root.Options[0], out bool spaceFalseValue));
+        Assert.IsFalse(spaceFalseValue);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalid.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, repeated.Diagnostics[0].Code);
+
+        CommandBuilder collidingNames = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--verbose",
+                typeof(bool),
+                OptionArity.BooleanFlag,
+                aliases: [new OptionAlias("--no-verbose", OptionAliasKind.Negating)]))
+            .AddOption(new OptionDefinition("--no-verbose", typeof(bool), OptionArity.BooleanFlag));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(collidingNames));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-002")]
+    public void Parse_LeavesFollowingTokensForPositionalBindingAfterBareOptional()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--filter",
+                typeof(string),
+                OptionArity.OptionalScalar,
+                allowsNull: true,
+                bareValuePolicy: BareValuePolicy.Null))
+            .AddPositional(new PositionalDefinition("name", typeof(string))));
+
+        ParseResult result = new CliParser().Parse(model, ["--filter", "child"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, result.Outcome);
+        Assert.IsTrue(result.TryGetOptionValue(model.Root, model.Root.Options[0], out string? filter));
+        Assert.IsNull(filter);
+        Assert.IsTrue(result.TryGetPositionalValue(model.Root, model.Root.Positionals[0], out string? name));
+        Assert.AreEqual("child", name);
+        Assert.AreEqual(ValuePresence.Bare, result.Values[0].Presence);
+        Assert.AreEqual(ValueOrigin.Explicit, result.Values[0].Origin);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-003")]
+    public void Parse_AccumulatesCollectionOccurrencesAndRejectsScalarDuplicates()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--tag",
+                typeof(IReadOnlyList<string>),
+                OptionArity.RepeatedSingleCollection,
+                elementType: typeof(string)))
+            .AddOption(new OptionDefinition("--count", typeof(int), OptionArity.RequiredScalar)));
+
+        ParseResult collection = new CliParser().Parse(model, ["--tag=a", "--tag=b"]);
+        ParseResult duplicate = new CliParser().Parse(model, ["--count=1", "--count=2"]);
+
+        Assert.IsTrue(collection.TryGetOptionValue(
+            model.Root,
+            model.Root.Options[0],
+            out IReadOnlyList<string>? tags));
+        CollectionAssert.AreEqual(new[] { "a", "b" }, tags!.ToArray());
+        IList<string> readOnlyTags = (IList<string>)tags!;
+        Assert.IsTrue(readOnlyTags.IsReadOnly);
+        Assert.ThrowsExactly<NotSupportedException>(() => readOnlyTags[0] = "changed");
+        Assert.AreEqual("a", tags![0]);
+        Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, duplicate.Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-003")]
+    public void Parse_ConsumesGreedyCollectionsUntilTheNextOptionBoundary()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--tag",
+                typeof(IReadOnlyList<string>),
+                OptionArity.GreedyCollection,
+                elementType: typeof(string)))
+            .AddPositional(new PositionalDefinition(
+                "paths",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string))));
+
+        ParseResult values = new CliParser().Parse(model, ["--tag", "a", "b", "--", "-file"]);
+        ParseResult missing = new CliParser().Parse(model, ["--tag", "--"]);
+
+        Assert.IsTrue(values.TryGetOptionValue(
+            model.Root,
+            model.Root.Options[0],
+            out IReadOnlyList<string>? tags));
+        CollectionAssert.AreEqual(new[] { "a", "b" }, tags!.ToArray());
+        Assert.IsTrue(values.TryGetPositionalValue(
+            model.Root,
+            model.Root.Positionals[0],
+            out IReadOnlyList<string>? paths));
+        CollectionAssert.AreEqual(new[] { "-file" }, paths!.ToArray());
+        Assert.AreEqual(ParseDiagnosticCode.MissingValue, missing.Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-004")]
+    public void Parse_BindsRestValuesAndRejectsShortClusters()
+    {
+        CommandModel model = CreateLeafModel();
+
+        ParseResult rest = new CliParser().Parse(model, ["--", "a", "-b", "c"]);
+        ParseResult cluster = new CliParser().Parse(model, ["-ab"]);
+
+        Assert.IsTrue(rest.TryGetPositionalValue(
+            model.Root,
+            model.Root.Positionals[0],
+            out IReadOnlyList<string>? paths));
+        CollectionAssert.AreEqual(new[] { "a", "-b", "c" }, paths!.ToArray());
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, cluster.Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-001")]
+    public void Parse_DistinguishesExplicitAndDefaultValuesAndKeepsRequiredDefaultsInert()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--count",
+                typeof(int),
+                OptionArity.RequiredScalar,
+                defaultValuePolicy: DefaultValuePolicy.Constant,
+                defaultValue: 0)));
+        int factoryCalls = 0;
+        CommandModel required = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--required",
+                typeof(int),
+                OptionArity.RequiredScalar,
+                isRequired: true,
+                defaultValuePolicy: DefaultValuePolicy.Factory,
+                defaultValueFactory: () =>
+                {
+                    factoryCalls++;
+                    return 4;
+                })));
+
+        ParseResult defaulted = new CliParser().Parse(model, []);
+        ParseResult explicitResult = new CliParser().Parse(model, ["--count=0"]);
+        ParseResult missing = new CliParser().Parse(required, []);
+
+        Assert.IsTrue(defaulted.TryGetOptionValue(model.Root, model.Root.Options[0], out int defaultValue));
+        Assert.IsTrue(explicitResult.TryGetOptionValue(model.Root, model.Root.Options[0], out int explicitValue));
+        Assert.AreEqual(0, defaultValue);
+        Assert.AreEqual(0, explicitValue);
+        Assert.AreEqual(ValueOrigin.Default, defaulted.Values[0].Origin);
+        Assert.AreEqual(ValueOrigin.Explicit, explicitResult.Values[0].Origin);
+        Assert.AreEqual(ParseDiagnosticCode.MissingRequired, missing.Diagnostics[0].Code);
+        Assert.AreEqual(0, factoryCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-002")]
+    public void Parse_InvokesAbsentFactoriesOncePerParseAndNotAfterInvalidInput()
+    {
+        int factoryCalls = 0;
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--items",
+                typeof(IReadOnlyList<string>),
+                OptionArity.RepeatedSingleCollection,
+                elementType: typeof(string),
+                defaultValuePolicy: DefaultValuePolicy.Factory,
+                defaultValueFactory: () =>
+                {
+                    factoryCalls++;
+                    return new List<string>();
+                }))
+            .AddOption(new OptionDefinition("--count", typeof(int), OptionArity.RequiredScalar)));
+        CliParser parser = new();
+
+        ParseResult first = parser.Parse(model, []);
+        ParseResult second = parser.Parse(model, []);
+        ParseResult invalid = parser.Parse(model, ["--count=bad"]);
+
+        Assert.AreEqual(2, factoryCalls);
+        Assert.IsTrue(first.TryGetOptionValue(
+            model.Root,
+            model.Root.Options[0],
+            out IReadOnlyList<string>? firstItems));
+        Assert.IsTrue(second.TryGetOptionValue(
+            model.Root,
+            model.Root.Options[0],
+            out IReadOnlyList<string>? secondItems));
+        Assert.AreNotSame(firstItems, secondItems);
+        Assert.AreEqual(ParseOutcome.Invalid, invalid.Outcome);
+        Assert.AreEqual(2, factoryCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-003")]
+    public void Parse_RunsValueValidatorsOnAvailableValuesAndSkipsFailedConversions()
+    {
+        int validationCalls = 0;
+        ValueValidator<int> validator = new((value, _) =>
+        {
+            validationCalls++;
+            return value <= 10
+                ? ValueValidationOutcome.Success
+                : ValueValidationOutcome.Failure("range.invalid");
+        });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--count",
+                typeof(int),
+                OptionArity.RequiredScalar,
+                defaultValuePolicy: DefaultValuePolicy.Constant,
+                defaultValue: 20,
+                validators: [validator])));
+        CliParser parser = new();
+
+        ParseResult rejectedDefault = parser.Parse(model, []);
+        int callsAfterDefault = validationCalls;
+        ParseResult invalidConversion = parser.Parse(model, ["--count=bad"]);
+        int callsAfterInvalidConversion = validationCalls;
+        ParseResult valid = parser.Parse(model, ["--count=10"]);
+
+        Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, rejectedDefault.Diagnostics[0].Code);
+        Assert.AreEqual(1, callsAfterDefault);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalidConversion.Diagnostics[0].Code);
+        Assert.AreEqual(1, callsAfterInvalidConversion);
+        Assert.AreEqual(ParseOutcome.Validated, valid.Outcome);
+        Assert.AreEqual(2, validationCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-004")]
+    public void Parse_RunsCrossValidationOnlyAfterValueValidation()
+    {
+        int crossCalls = 0;
+        ValueValidator<bool> leftValidator = new((value, _) => value
+            ? ValueValidationOutcome.Failure("value.invalid")
+            : ValueValidationOutcome.Success);
+        OptionDefinition left = new("--left", typeof(bool), OptionArity.RequiredScalar, validators: [leftValidator]);
+        OptionDefinition right = new("--right", typeof(bool), OptionArity.RequiredScalar);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(left)
+            .AddOption(right)
+            .AddCrossValidator(context =>
+            {
+                crossCalls++;
+                return context.WasProvided(left) && context.WasProvided(right)
+                    ? ValueValidationOutcome.Failure("exclusive.conflict")
+                    : ValueValidationOutcome.Success;
+            }));
+        CliParser parser = new();
+
+        ParseResult conflict = parser.Parse(model, ["--left=false", "--right=false"]);
+        ParseResult invalidValue = parser.Parse(model, ["--left=maybe"]);
+        ParseResult valueRejected = parser.Parse(model, ["--left=true"]);
+        ParseResult single = parser.Parse(model, ["--left=false"]);
+
+        Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, conflict.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalidValue.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, valueRejected.Diagnostics[0].Code);
+        Assert.AreEqual(ParseOutcome.Validated, single.Outcome);
+        Assert.AreEqual(2, crossCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-003")]
+    public void Parse_PropagatesValidatorFaults()
+    {
+        ValueValidator<int> validator = new(static (_, _) => throw new InvalidOperationException("validator fault"));
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--count",
+                typeof(int),
+                OptionArity.RequiredScalar,
+                validators: [validator])));
+
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
+            () => new CliParser().Parse(model, ["--count=1"]));
+
+        Assert.AreEqual("validator fault", exception.Message);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-004")]
+    public void Parse_PropagatesCrossValidatorFaults()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddCrossValidator(static _ => throw new InvalidOperationException("cross-validator fault")));
+
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
+            () => new CliParser().Parse(model, []));
+
+        Assert.AreEqual("cross-validator fault", exception.Message);
     }
 
     private static CommandModel CreateLeafModel()

@@ -43,5 +43,6 @@ its own explicit scope model; parser routing does not infer inheritance.
 Affected requirements:
 [FEAT-03](../Requirements/FEAT-03-Token-Grammar.md),
 [FEAT-04](../Requirements/FEAT-04-Typed-Conversion.md),
-[FEAT-05](../Requirements/Planned/FEAT-05-Cardinality-And-Special-Forms.md),
+[FEAT-05](../Requirements/FEAT-05-Cardinality-And-Special-Forms.md),
+[FEAT-06](../Requirements/FEAT-06-Defaults-And-Validation.md),
 and [FEAT-07](../Requirements/Planned/FEAT-07-Parse-Results-And-Diagnostics.md).

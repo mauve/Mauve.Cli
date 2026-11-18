@@ -11,11 +11,13 @@ It is not manifest-owned; updates do not replace it.
 The first two requirements of [FEAT-01](FEAT-01-Command-Model.md), all four
 requirements of [FEAT-02](FEAT-02-Options-And-Arguments.md), FEAT-03-001,
 FEAT-03-002, FEAT-03-004 and all requirements of
-[FEAT-04](FEAT-04-Typed-Conversion.md) have active implementation owners.
-FEAT-01 command-path selection, FEAT-03-003 and the remaining features stay
-in the [planned index](Planned/README.md). Focused tests are declared for the
-active requirements, but no product test-run evidence has yet been recorded
-for this implementation.
+[FEAT-04](FEAT-04-Typed-Conversion.md),
+[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md) and
+[FEAT-06](FEAT-06-Defaults-And-Validation.md) have active implementation
+owners. FEAT-01 command-path selection, FEAT-03-003 and the remaining
+features stay in the [planned index](Planned/README.md). Focused tests are
+declared for the active requirements, but no product test-run evidence has
+yet been recorded for this implementation.
 
 Keep implemented and partially implemented features in
 `docs/Requirements/FEAT-<id>-<name>.md`. Each document records Status,

@@ -9,7 +9,7 @@ exit/exception responsibilities.
 
 ## Context
 Depends on [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md); validation
-is owned by [FEAT-06](FEAT-06-Defaults-And-Validation.md). Reference:
+is owned by [FEAT-06](../FEAT-06-Defaults-And-Validation.md). Reference:
 `../maz/Console/Cli/CommandDef.cs`. Application-specific confirmation
 and exception formatting are not inherited from maz.
 

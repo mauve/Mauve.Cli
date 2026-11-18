@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
 
@@ -8,6 +9,7 @@ namespace Mauve.Cli.Definitions;
 public sealed class OptionDefinition
 {
     private readonly ReadOnlyCollection<OptionAlias> _aliases;
+    private readonly ReadOnlyCollection<IValueValidator> _validators;
 
     /// <summary>Creates an immutable option definition.</summary>
     /// <param name="name">The canonical long option name.</param>
@@ -24,6 +26,10 @@ public sealed class OptionDefinition
     /// <param name="bareValuePolicy">The behavior for an optional option used bare.</param>
     /// <param name="bareValue">The constant used by <see cref="BareValuePolicy.Constant"/>.</param>
     /// <param name="bareValueFactory">The factory used by <see cref="BareValuePolicy.Factory"/>.</param>
+    /// <param name="defaultValuePolicy">The behavior when this option is absent.</param>
+    /// <param name="defaultValue">The constant used by <see cref="DefaultValuePolicy.Constant"/>.</param>
+    /// <param name="defaultValueFactory">The factory used by <see cref="DefaultValuePolicy.Factory"/>.</param>
+    /// <param name="validators">Ordered validators for available values.</param>
     public OptionDefinition(
         string name,
         Type valueType,
@@ -38,7 +44,11 @@ public sealed class OptionDefinition
         bool isSensitive = false,
         BareValuePolicy bareValuePolicy = BareValuePolicy.Unspecified,
         object? bareValue = null,
-        Func<object?>? bareValueFactory = null)
+        Func<object?>? bareValueFactory = null,
+        DefaultValuePolicy defaultValuePolicy = DefaultValuePolicy.None,
+        object? defaultValue = null,
+        Func<object?>? defaultValueFactory = null,
+        IEnumerable<IValueValidator>? validators = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -56,6 +66,9 @@ public sealed class OptionDefinition
         BareValuePolicy = bareValuePolicy;
         BareValue = bareValue;
         BareValueFactory = bareValueFactory;
+        DefaultValuePolicy = defaultValuePolicy;
+        DefaultValue = defaultValue;
+        DefaultValueFactory = defaultValueFactory;
 
         List<OptionAlias> aliasCopy = aliases is null ? [] : [with(aliases)];
         if (aliasCopy.Exists(static alias => alias is null))
@@ -64,6 +77,13 @@ public sealed class OptionDefinition
         }
 
         _aliases = aliasCopy.AsReadOnly();
+        List<IValueValidator> validatorCopy = validators is null ? [] : [with(validators)];
+        if (validatorCopy.Exists(static validator => validator is null))
+        {
+            throw new ArgumentException("Option validators cannot contain null entries.", nameof(validators));
+        }
+
+        _validators = validatorCopy.AsReadOnly();
     }
 
     /// <summary>Gets the canonical long option name.</summary>
@@ -107,4 +127,16 @@ public sealed class OptionDefinition
 
     /// <summary>Gets the factory used by <see cref="BareValuePolicy.Factory"/>.</summary>
     public Func<object?>? BareValueFactory { get; }
+
+    /// <summary>Gets the behavior when this option is absent.</summary>
+    public DefaultValuePolicy DefaultValuePolicy { get; }
+
+    /// <summary>Gets the constant used by <see cref="DefaultValuePolicy.Constant"/>.</summary>
+    public object? DefaultValue { get; }
+
+    /// <summary>Gets the factory used by <see cref="DefaultValuePolicy.Factory"/>.</summary>
+    public Func<object?>? DefaultValueFactory { get; }
+
+    /// <summary>Gets the ordered validators for available values.</summary>
+    public IReadOnlyList<IValueValidator> Validators => _validators;
 }

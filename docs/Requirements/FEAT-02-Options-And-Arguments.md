@@ -10,7 +10,7 @@ validate definitions before parsing.
 ## Context
 Depends on [FEAT-01](FEAT-01-Command-Model.md). Syntax belongs to
 [FEAT-03](Planned/FEAT-03-Token-Grammar.md), cardinality to
-[FEAT-05](Planned/FEAT-05-Cardinality-And-Special-Forms.md). The approved
+[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md). The approved
 schema and validation boundary are recorded in
 [ADR-003](../Architecture/ADR-003-Definition-Model.md).
 
@@ -98,9 +98,8 @@ Collection option declarations distinguish repeated single-value occurrences
 from greedy multi-value occurrences. A scalar cannot declare a collection
 element converter; a collection must have a supported element converter and
 fresh result storage. Do not equate any arbitrary `IEnumerable<T>` with a
-constructible mutable collection. The initial proposed public result shape
-is a read-only sequence of typed elements; user-specific collection
-construction needs an explicit binder.
+constructible mutable collection. The public result shape is `IReadOnlyList<T>`; mutable arrays and
+user-specific collection construction need an explicit binder.
 
 Freeze definitions before parsing. Validate names, arities, converter
 availability, duplicate defaults, incompatible flag/negation modes and

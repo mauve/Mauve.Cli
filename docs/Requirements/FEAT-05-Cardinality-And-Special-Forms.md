@@ -1,7 +1,7 @@
 # FEAT-05: Cardinality and Special Forms
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Support flags, optional and repeated values, collections and rest positionals
@@ -9,8 +9,10 @@ with explicit consumption and duplication semantics.
 
 ## Context
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
-[FEAT-03](FEAT-03-Token-Grammar.md), and
-[FEAT-04](FEAT-04-Typed-Conversion.md). Maz examples and alternatives are
+[FEAT-03](FEAT-03-Token-Grammar.md),
+[FEAT-04](FEAT-04-Typed-Conversion.md), and
+[FEAT-06](FEAT-06-Defaults-And-Validation.md). Results and diagnostics belong
+to [FEAT-07](Planned/FEAT-07-Parse-Results-And-Diagnostics.md). Maz examples and alternatives are
 in `../maz/specs/CLI Parser Specification.md` and
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs`.
 
@@ -22,21 +24,21 @@ Boolean options must support a bare flag and explicit true/false values; any neg
 
 ### FEAT-05-002 - Optional values
 An option declared with an optional value must distinguish a bare occurrence from an explicit value and define how following tokens are consumed.
-**Acceptance:** Under the proposal, `--filter=x` supplies `x`, while `--filter child` leaves `child` for command/positional interpretation; bare and absent remain distinguishable.
+**Acceptance:** `--filter=x` supplies `x`, while `--filter child` leaves `child` for command/positional interpretation; bare and absent remain distinguishable.
 **Security:** Do not consume a potential command or filename as an optional value without the approved rule.
 
 ### FEAT-05-003 - Repetition and collections
 Define scalar repetition, collection accumulation and per-occurrence value boundaries deterministically.
-**Acceptance:** Under the proposal, repeated `--tag=a --tag=b` accumulates in order; repeated scalar `--count=1 --count=2` is an error; zero values on a required collection occurrence fails.
+**Acceptance:** Repeated `--tag=a --tag=b` accumulates in order; repeated scalar `--count=1 --count=2` is an error; zero values on a required collection occurrence fails.
 **Security:** Bound resource consumption and reject malformed repeated input rather than silently overriding security-sensitive options.
 
 ### FEAT-05-004 - Rest positionals and short forms
-A rest positional consumes the remaining positional values in order and must be last; the proposed baseline rejects short-alias grouping.
-**Acceptance:** `a -- -b c` binds `a`, `-b`, `c` to a sole rest positional; a rest followed by another positional is rejected; proposed `-ab` is not split into `-a -b`.
+A rest positional consumes the remaining positional values in order and must be last; short-alias grouping is rejected.
+**Acceptance:** `a -- -b c` binds `a`, `-b`, `c` to a sole rest positional; a rest followed by another positional is rejected; `-ab` is not split into `-a -b`.
 **Security:** Reject unknown clusters rather than executing an unintended combination of flags.
 
 ## Design
-#### Proposed arity modes
+#### Arity modes
 
 | Mode | Token consumption | Value / occurrence semantics |
 | --- | --- | --- |
@@ -51,7 +53,7 @@ Every definition selects one compatible mode. Boolean flag/negating aliases
 and optional-value mode are scalar; no nullable inference or stackable-count
 mode is implied. Negating aliases target the same boolean identity, so a
 positive plus negated occurrence counts as repetition of one scalar.
-Propose rejecting all repeated scalars, even repeated equal values. This
+Reject all repeated scalars, even repeated equal values. This
 avoids declaration-order/last-wins surprises. Boolean collections use explicit
 true/false element values, not bare flag semantics.
 Flag literals are intrinsically true/false, never application-converted.
@@ -61,7 +63,7 @@ FEAT-08 bypass. An ordinary invalid flag literal blocks normal validation
 but is bypassed by an otherwise valid true help request, just like other
 ordinary value failures.
 
-There are no short clusters or count stacking in the initial proposal:
+The initial grammar has no short clusters or count stacking:
 `-ab`, `-vv` and `-v3` are unknown options. Applications wanting verbosity
 counts can use `--verbosity=3` or a future separately designed counting mode.
 Neither long nor short aliases get repetition semantics from their spelling.
@@ -106,7 +108,7 @@ Fixture: inherited `--verbose` boolean/`-v`, explicitly negating
 `--no-verbose`, optional nullable string `--filter`, scalar `--count`,
 multi-value string `--tag` and numeric `--number`; child `copy` has rest paths.
 
-| argv | Proposed outcome |
+| argv | Expected outcome |
 | --- | --- |
 | `["--verbose","false","copy"]` | Verbose explicitly false; select copy. |
 | `["--verbose=maybe"]` | Invalid boolean; never true by fallback. |
@@ -132,16 +134,18 @@ Maz supports automatic `--no-X`, optional following values, mutable list
 accumulation and repeated identical short characters as an integer count.
 Those are useful inventory, not hidden requirements here. Explicit negation,
 equals-only optional values, duplicate-scalar rejection, atomic collection
-conversion and no stacking are deliberate proposed choices requiring
-approval. This table is the full initial grammar; maz need not be inspected.
+conversion and no stacking are accepted choices recorded in this contract.
+This table is the full initial grammar; maz need not be inspected.
 
 ## Metrics Impact
-**Instruments:** none - no runtime cardinality metrics are introduced.
+**Instruments:** none - cardinality adds no runtime instrumentation.
 
 ## Verification
-Future tests include bare versus absent, optional-value command ambiguity,
-duplicate scalars, negation collisions, collection boundaries, `--`, rest-last
-and short clusters. They are not existing acceptance evidence.
+Portable behavior tests are declared in
+[`CliParserTests`](../../tests/Mauve.Cli.Tests/Parsing/CliParserTests.cs)
+for boolean forms, optional values, repeated and greedy collections, rest
+positionals and rejected short clusters. No product test-run evidence has
+been recorded yet; see the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

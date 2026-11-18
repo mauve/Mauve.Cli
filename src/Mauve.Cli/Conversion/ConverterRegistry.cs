@@ -107,11 +107,37 @@ public sealed class ConverterRegistry
     {
         return _converters.ContainsKey(targetType);
     }
+
+    internal bool TryCreateReadOnlyCollection(
+        Type elementType,
+        IReadOnlyList<object?> values,
+        out object? collection)
+    {
+        bool useNullableElement = false;
+        Type registeredType = elementType;
+        if (!_converters.ContainsKey(registeredType)
+            && Nullable.GetUnderlyingType(elementType) is Type underlyingType)
+        {
+            registeredType = underlyingType;
+            useNullableElement = true;
+        }
+
+        if (_converters.TryGetValue(registeredType, out IRegisteredConverter? converter))
+        {
+            collection = converter.CreateReadOnlyCollection(values, useNullableElement);
+            return true;
+        }
+
+        collection = null;
+        return false;
+    }
 }
 
 internal interface IRegisteredConverter
 {
     RegisteredOutcome Convert(string value, ConversionContext context);
+
+    object CreateReadOnlyCollection(IReadOnlyList<object?> values, bool useNullableElement);
 }
 
 internal sealed class RegisteredConverter<T>(ValueConverter<T> converter) : IRegisteredConverter
@@ -125,6 +151,44 @@ internal sealed class RegisteredConverter<T>(ValueConverter<T> converter) : IReg
             : !result.Succeeded && !ConversionFailureCode.IsValid(result.FailureCode)
                 ? throw new InvalidOperationException("A converter returned an invalid failure result.")
                 : new RegisteredOutcome(result.Succeeded, result.Value, result.FailureCode);
+    }
+
+    public object CreateReadOnlyCollection(IReadOnlyList<object?> values, bool useNullableElement)
+    {
+        return useNullableElement
+            ? (object)CreateNullableReadOnlyCollection(values)
+            : CreateTypedReadOnlyCollection(values);
+    }
+
+    private static ReadOnlyCollection<T> CreateTypedReadOnlyCollection(IReadOnlyList<object?> values)
+    {
+        List<T> typedValues = [];
+        foreach (object? value in values)
+        {
+            typedValues.Add(CastValue(value));
+        }
+
+        return typedValues.AsReadOnly();
+    }
+
+    private static ReadOnlyCollection<T?> CreateNullableReadOnlyCollection(IReadOnlyList<object?> values)
+    {
+        List<T?> typedValues = [];
+        foreach (object? value in values)
+        {
+            typedValues.Add(value is null ? default : CastValue(value));
+        }
+
+        return typedValues.AsReadOnly();
+    }
+
+    private static T CastValue(object? value)
+    {
+        return value is T typedValue
+                ? typedValue
+                : value is null && default(T) is null
+                    ? default!
+                : throw new InvalidOperationException("A converted collection element has the wrong type.");
     }
 }
 

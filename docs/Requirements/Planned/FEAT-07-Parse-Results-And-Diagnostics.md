@@ -12,8 +12,8 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-03](FEAT-03-Token-Grammar.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md) and
-[FEAT-06](FEAT-06-Defaults-And-Validation.md). Evidence:
+[FEAT-05](../FEAT-05-Cardinality-And-Special-Forms.md) and
+[FEAT-06](../FEAT-06-Defaults-And-Validation.md). Evidence:
 `../maz/Console/Cli/Parsing/CliParser.cs` and
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs`.
 
@@ -81,9 +81,10 @@ Proposed semantic categories (not allocated numeric diagnostic IDs):
 | DuplicateOption | A repeated scalar; repeated occurrence plus first-occurrence reference. |
 | InvalidValue | Conversion failure; supplied value's index, owning option index when separate, and optional inline offset. |
 | MissingRequired | Required option/argument absent; definition identity without a fabricated token index. |
-| ValidationFailed | Per-value or cross-value returned failure; involved definition identities and available occurrence indices. |
 | InputLimitExceeded / DiagnosticLimitExceeded | Explicit bound exceeded; do not silently truncate into success. |
 
+`ValidationFailed` is defined by active FEAT-06; this feature specifies
+additional result coordinates and deterministic ordering for diagnostics.
 Coordinates are zero-based argv indices, excluding the executable/root name.
 For `--count=x`, both option/value index are that token and the value offset
 is the UTF-16 code-unit index after its first `=`. Defaults have no token coordinates.

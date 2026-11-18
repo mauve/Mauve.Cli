@@ -10,7 +10,7 @@ command paths, option forms and the end-of-options marker.
 ## Context
 Depends on [FEAT-01](FEAT-01-Command-Model.md) and
 [FEAT-02](FEAT-02-Options-And-Arguments.md); value cardinality belongs to
-[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md). Reference:
+[FEAT-05](../FEAT-05-Cardinality-And-Special-Forms.md). Reference:
 `../maz/Console/Cli/Parsing/CliParser.cs` and
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs`.
 

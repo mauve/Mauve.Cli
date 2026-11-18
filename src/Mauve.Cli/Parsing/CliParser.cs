@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Parsing;
 
@@ -125,6 +127,21 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             inScopeOccurrences,
             positionalAssignments,
             diagnostics);
+        if (diagnostics.Count == 0)
+        {
+            ApplyAbsentDefaults(selectedCommand, values, diagnostics);
+        }
+
+        if (diagnostics.Count == 0)
+        {
+            RunValueValidators(selectedCommand, values, diagnostics);
+        }
+
+        if (diagnostics.Count == 0)
+        {
+            RunCrossValidators(selectedCommand, values, diagnostics);
+        }
+
         return diagnostics.Count > 0
             ? InvalidResult(tokens, [.. selectedPath], diagnostics, unmatched)
             : new ParseResult(
@@ -466,6 +483,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             occurrences,
             positionals,
             diagnostics);
+        ValidateBooleanOccurrences(selectedCommand, occurrences, diagnostics);
+        if (diagnostics.Count > 0)
+        {
+            return [];
+        }
+
         List<ParsedValue> values = [];
         foreach (OptionDefinition option in selectedCommand.Options)
         {
@@ -505,34 +528,11 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             if (option.Arity == OptionArity.BooleanFlag)
             {
                 OptionOccurrence flag = optionOccurrences[0];
-                object flagValue;
-                if (flag.Values.Count == 0)
-                {
-                    flagValue = flag.BooleanValue ?? true;
-                }
-                else if (flag.BooleanValue is bool explicitBoolean)
-                {
-                    flagValue = explicitBoolean;
-                }
-                else
-                {
-                    RawValue raw = flag.Values[0];
-                    AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
-                        ParseDiagnosticCode.InvalidValue,
-                        option,
-                        selectedCommand,
-                        flag.OptionIndex,
-                        raw.TokenIndex,
-                        raw.ValueOffset,
-                        "boolean.invalid"));
-                    continue;
-                }
-
                 values.Add(new ParsedValue(
                     selectedCommand,
                     option,
                     null,
-                    flagValue,
+                    flag.BooleanValue ?? true,
                     true,
                     flag.Presence,
                     ValueOrigin.Explicit,
@@ -555,11 +555,11 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 if (!IsValueCompatible(option.ValueType, bareValue, option.AllowsNull))
                 {
                     AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
-                        ParseDiagnosticCode.InvalidValue,
+                        ParseDiagnosticCode.ValidationFailed,
                         option,
                         selectedCommand,
                         bareOccurrence.OptionIndex,
-                        failureCode: "conversion.invalid"));
+                        failureCode: "default.invalid"));
                     continue;
                 }
 
@@ -570,7 +570,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     bareValue,
                     true,
                     ValuePresence.Bare,
-                    ValueOrigin.Default,
+                    ValueOrigin.Explicit,
                     bareOccurrence.GetTokenIndices()));
                 continue;
             }
@@ -664,6 +664,205 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         return values;
+    }
+
+    private static void ValidateBooleanOccurrences(
+        CommandDefinition selectedCommand,
+        List<OptionOccurrence> occurrences,
+        List<ParseDiagnostic> diagnostics)
+    {
+        foreach (OptionOccurrence occurrence in occurrences)
+        {
+            if (occurrence.Option.Arity == OptionArity.BooleanFlag
+                && occurrence.Values.Count > 0
+                && occurrence.BooleanValue is null)
+            {
+                RawValue raw = occurrence.Values[0];
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+                    ParseDiagnosticCode.InvalidValue,
+                    occurrence.Option,
+                    selectedCommand,
+                    occurrence.OptionIndex,
+                    raw.TokenIndex,
+                    raw.ValueOffset,
+                    "boolean.invalid"));
+            }
+        }
+    }
+
+    private void ApplyAbsentDefaults(
+        CommandDefinition selectedCommand,
+        List<ParsedValue> values,
+        List<ParseDiagnostic> diagnostics)
+    {
+        for (int index = 0; index < values.Count; index++)
+        {
+            ParsedValue entry = values[index];
+            if (entry.IsAvailable
+                || entry.Origin != ValueOrigin.Absent
+                || entry.Option?.IsRequired == true
+                || entry.Positional?.MinimumValues > 0)
+            {
+                continue;
+            }
+
+            DefaultValuePolicy policy = entry.Option?.DefaultValuePolicy
+                ?? entry.Positional!.DefaultValuePolicy;
+            if (policy == DefaultValuePolicy.None)
+            {
+                continue;
+            }
+
+            object? defaultValue = policy switch
+            {
+                DefaultValuePolicy.Constant => entry.Option?.DefaultValue ?? entry.Positional?.DefaultValue,
+                DefaultValuePolicy.Factory => entry.Option?.DefaultValueFactory is Func<object?> optionFactory
+                    ? optionFactory()
+                    : entry.Positional!.DefaultValueFactory!(),
+                DefaultValuePolicy.None => throw new InvalidOperationException("The model contains an invalid default-value policy."),
+                _ => throw new InvalidOperationException("The model contains an invalid default-value policy.")
+            };
+            Type targetType = entry.Option?.ValueType ?? entry.Positional!.ValueType;
+            bool allowsNull = entry.Option?.AllowsNull ?? entry.Positional!.AllowsNull;
+            Type? elementType = entry.Option?.ElementType ?? entry.Positional?.ElementType;
+            if (elementType is not null)
+            {
+                if (defaultValue is not IEnumerable sequence)
+                {
+                    AddInvalidDefaultDiagnostic(selectedCommand, entry, diagnostics);
+                    continue;
+                }
+
+                List<object?> elements = [];
+                bool compatibleElements = true;
+                foreach (object? element in sequence)
+                {
+                    if (!IsValueCompatible(elementType, element, allowsNull))
+                    {
+                        compatibleElements = false;
+                        break;
+                    }
+
+                    elements.Add(element);
+                }
+
+                if (!compatibleElements)
+                {
+                    AddInvalidDefaultDiagnostic(selectedCommand, entry, diagnostics);
+                    continue;
+                }
+
+                defaultValue = ValueConverterEngine.CreateReadOnlyCollection(elementType, elements, _converters);
+            }
+
+            if (!IsValueCompatible(targetType, defaultValue, allowsNull))
+            {
+                AddInvalidDefaultDiagnostic(selectedCommand, entry, diagnostics);
+                continue;
+            }
+
+            values[index] = new ParsedValue(
+                selectedCommand,
+                entry.Option,
+                entry.Positional,
+                defaultValue,
+                true,
+                ValuePresence.Absent,
+                ValueOrigin.Default,
+                []);
+        }
+    }
+
+    private static void AddInvalidDefaultDiagnostic(
+        CommandDefinition selectedCommand,
+        ParsedValue entry,
+        List<ParseDiagnostic> diagnostics)
+    {
+        AddDiagnostic(diagnostics, entry.Option is not null
+            ? ParseDiagnostic.ForOption(
+                ParseDiagnosticCode.ValidationFailed,
+                entry.Option,
+                selectedCommand,
+                null,
+                failureCode: "default.invalid")
+            : ParseDiagnostic.ForPositional(
+                ParseDiagnosticCode.ValidationFailed,
+                entry.Positional!,
+                selectedCommand,
+                null,
+                failureCode: "default.invalid"));
+    }
+
+    private static void RunValueValidators(
+        CommandDefinition selectedCommand,
+        List<ParsedValue> values,
+        List<ParseDiagnostic> diagnostics)
+    {
+        ValidationContext context = new(selectedCommand, [.. values]);
+        foreach (ParsedValue entry in values)
+        {
+            if (!entry.IsAvailable)
+            {
+                continue;
+            }
+
+            IReadOnlyList<IValueValidator> validators = entry.Option?.Validators
+                ?? entry.Positional!.Validators;
+            foreach (IValueValidator validator in validators)
+            {
+                ValueValidationOutcome outcome = validator.Validate(entry.Value, context);
+                string? failureCode = GetValidationFailureCode(outcome);
+                if (failureCode is null)
+                {
+                    continue;
+                }
+
+                int? tokenIndex = entry.TokenIndices.Count == 0 ? null : entry.TokenIndices[0];
+                AddDiagnostic(diagnostics, entry.Option is not null
+                    ? ParseDiagnostic.ForOption(
+                        ParseDiagnosticCode.ValidationFailed,
+                        entry.Option,
+                        selectedCommand,
+                        tokenIndex,
+                        tokenIndex,
+                        failureCode: failureCode)
+                    : ParseDiagnostic.ForPositional(
+                        ParseDiagnosticCode.ValidationFailed,
+                        entry.Positional!,
+                        selectedCommand,
+                        tokenIndex,
+                        tokenIndex,
+                        failureCode: failureCode));
+            }
+        }
+    }
+
+    private static void RunCrossValidators(
+        CommandDefinition selectedCommand,
+        List<ParsedValue> values,
+        List<ParseDiagnostic> diagnostics)
+    {
+        ValidationContext context = new(selectedCommand, [.. values]);
+        foreach (CrossValueValidator validator in selectedCommand.CrossValidators)
+        {
+            ValueValidationOutcome outcome = validator(context);
+            string? failureCode = GetValidationFailureCode(outcome);
+            if (failureCode is not null)
+            {
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForCrossValidation(selectedCommand, failureCode));
+            }
+        }
+    }
+
+    private static string? GetValidationFailureCode(ValueValidationOutcome outcome)
+    {
+        return outcome.Succeeded
+            ? outcome.FailureCode is null
+                ? null
+                : throw new InvalidOperationException("A successful validator returned a failure code.")
+            : ValidationFailureCode.IsValid(outcome.FailureCode ?? string.Empty)
+                ? outcome.FailureCode
+                : throw new InvalidOperationException("A validator returned an invalid failure code.");
     }
 
     private Dictionary<int, ConversionAttempt> ConvertTokensInOrder(
@@ -769,15 +968,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return convertedByTokenIndex;
     }
 
-    private static Array CreateCollection(Type elementType, List<object?> values)
+    private object CreateCollection(Type elementType, List<object?> values)
     {
-        Array collection = Array.CreateInstance(elementType, values.Count);
-        for (int index = 0; index < values.Count; index++)
-        {
-            collection.SetValue(values[index], index);
-        }
-
-        return collection;
+        return ValueConverterEngine.CreateReadOnlyCollection(elementType, values, _converters);
     }
 
     private static bool IsValueCompatible(Type type, object? value, bool allowsNull)

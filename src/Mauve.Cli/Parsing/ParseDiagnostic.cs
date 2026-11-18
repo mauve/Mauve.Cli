@@ -71,6 +71,7 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.UnexpectedValue => $"Option '{name}' does not accept that value form.",
             ParseDiagnosticCode.DuplicateOption => $"Option '{name}' cannot be repeated.",
             ParseDiagnosticCode.InvalidValue => $"The value for option '{name}' is invalid.",
+            ParseDiagnosticCode.ValidationFailed => $"The value for option '{name}' failed validation.",
             ParseDiagnosticCode.MissingRequired => $"Required option '{name}' is missing.",
             ParseDiagnosticCode.OptionOutOfScope => $"Option '{name}' is not available for the selected command.",
             ParseDiagnosticCode.UnknownCommand => "The token does not name a child command.",
@@ -97,6 +98,7 @@ public sealed class ParseDiagnostic
         {
             ParseDiagnosticCode.InvalidModel => $"Argument definition '{name}' is invalid.",
             ParseDiagnosticCode.InvalidValue => $"The value for argument '{name}' is invalid.",
+            ParseDiagnosticCode.ValidationFailed => $"The value for argument '{name}' failed validation.",
             ParseDiagnosticCode.MissingRequired => $"Required argument '{name}' is missing.",
             ParseDiagnosticCode.MissingValue => $"Argument '{name}' requires a value.",
             ParseDiagnosticCode.UnexpectedValue => $"Argument '{name}' does not accept that value form.",
@@ -115,8 +117,25 @@ public sealed class ParseDiagnostic
     internal static ParseDiagnostic ForInput(
         ParseDiagnosticCode code,
         string message,
-        int? tokenIndex = null)
+        int? tokenIndex = null,
+        string? failureCode = null)
     {
-        return new ParseDiagnostic(code, message, tokenIndex, null, null, string.Empty, [], null);
+        return new ParseDiagnostic(code, message, tokenIndex, null, null, string.Empty, [], failureCode);
+    }
+
+    internal static ParseDiagnostic ForCrossValidation(
+        CommandDefinition command,
+        string failureCode)
+    {
+        string name = command.IsHidden ? "hidden command" : command.Name;
+        return new ParseDiagnostic(
+            ParseDiagnosticCode.ValidationFailed,
+            $"Values for command '{name}' failed validation.",
+            null,
+            null,
+            null,
+            name,
+            [.. command.Path],
+            failureCode);
     }
 }

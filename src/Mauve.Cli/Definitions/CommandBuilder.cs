@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
 
@@ -10,6 +11,7 @@ public sealed class CommandBuilder
     private readonly List<CommandBuilder> _children = [];
     private readonly List<OptionDefinition> _options = [];
     private readonly List<PositionalDefinition> _positionals = [];
+    private readonly List<CrossValueValidator> _crossValidators = [];
 
     /// <summary>Creates a command builder.</summary>
     /// <param name="name">The canonical name or root display label.</param>
@@ -71,6 +73,16 @@ public sealed class CommandBuilder
         return this;
     }
 
+    /// <summary>Adds an ordered cross-value validator for this command.</summary>
+    /// <param name="validator">The validator callback.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder AddCrossValidator(CrossValueValidator validator)
+    {
+        ArgumentNullException.ThrowIfNull(validator);
+        _crossValidators.Add(validator);
+        return this;
+    }
+
     internal string[] CopyAliases()
     {
         return [.. _aliases];
@@ -89,5 +101,10 @@ public sealed class CommandBuilder
     internal PositionalDefinition[] CopyPositionals()
     {
         return [.. _positionals];
+    }
+
+    internal CrossValueValidator[] CopyCrossValidators()
+    {
+        return [.. _crossValidators];
     }
 }

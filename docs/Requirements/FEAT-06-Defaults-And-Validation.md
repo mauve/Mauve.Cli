@@ -1,7 +1,7 @@
 # FEAT-06: Defaults and Validation
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Distinguish supplied values from absence, apply declared defaults, and
@@ -9,8 +9,9 @@ validate individual and related values before invocation.
 
 ## Context
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
-[FEAT-04](FEAT-04-Typed-Conversion.md), and
-[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md). Evidence:
+[FEAT-04](FEAT-04-Typed-Conversion.md),
+[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md), and
+[FEAT-07](Planned/FEAT-07-Parse-Results-And-Diagnostics.md). Evidence:
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs` and
 `../maz/specs/CLI Parser Specification.md`. Environment and configuration
 providers are outside this feature.
@@ -18,8 +19,8 @@ providers are outside this feature.
 ## Requirements
 ### FEAT-06-001 - Presence and requiredness
 Track explicit occurrence independently of the resulting value and validate requiredness against a documented presence policy.
-**Acceptance:** Explicit `--count=0` is supplied even if zero is the default; an absent required option fails under the proposed explicit-presence rule.
-**Security:** A default must not silently satisfy an explicit-input requirement without the approved policy.
+**Acceptance:** Explicit `--count=0` is supplied even if zero is the default; an absent required option fails under the explicit-presence rule.
+**Security:** A default must not silently satisfy an explicit-input requirement.
 
 ### FEAT-06-002 - Defaults and factories
 Apply declared defaults only when the policy calls for them, once per parse, without overwriting explicit values.
@@ -39,7 +40,7 @@ Validate declared relationships after values/defaults are assembled and before i
 ## Design
 #### Value states and defaults
 
-Proposed baseline: track occurrence (`Absent`, `Bare`, `WithValue`) separately
+Accepted baseline: track occurrence (`Absent`, `Bare`, `WithValue`) separately
 from origin (`Absent`, `Default`, `Explicit`) and effective-value availability.
 Zero, false, empty string and null are values, not evidence of absence.
 A successful bare occurrence has explicit origin even when a bare factory
@@ -143,16 +144,19 @@ nullability/initializers and retain values on reusable option objects.
 This plan instead separates absent/bare behavior, rejects competing defaults
 and allocates parse-local state. There is no environment/configuration
 fallback or application service lookup in these requirements.
-Approve presence, default and callback-order policy before implementation;
-the complete proposed behavior is captured here, not delegated to maz.
+Presence, default and callback-order policy follow this accepted contract;
+the complete behavior is captured here, not delegated to maz.
 
 ## Metrics Impact
-**Instruments:** none - planned validation adds no runtime metrics.
+**Instruments:** none - validation adds no runtime instrumentation.
+**Diagnostics:** `ValidationFailed`
 
 ## Verification
-Future tests cover explicit zero, missing required/default conflict, factory
-failure and isolation, validation boundaries and handler non-invocation.
-No product tests are claimed.
+Portable behavior tests are declared in
+[`CliParserTests`](../../tests/Mauve.Cli.Tests/Parsing/CliParserTests.cs)
+for presence, required defaults, factory isolation, value validation,
+cross-value validation and callback faults. No product test-run evidence has
+been recorded yet; see the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

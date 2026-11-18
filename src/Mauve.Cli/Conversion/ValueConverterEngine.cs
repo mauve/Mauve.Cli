@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 
 namespace Mauve.Cli.Conversion;
@@ -66,6 +68,49 @@ internal static class ValueConverterEngine
             || effectiveType == typeof(float)
             || effectiveType == typeof(double)
             || effectiveType == typeof(decimal);
+    }
+
+    public static object CreateReadOnlyCollection(
+        Type elementType,
+        IReadOnlyList<object?> values,
+        ConverterRegistry registry)
+    {
+        return registry.TryCreateReadOnlyCollection(elementType, values, out object? registeredCollection)
+            ? registeredCollection!
+            : CreateBuiltInReadOnlyCollection(elementType, values);
+    }
+
+    private static object CreateBuiltInReadOnlyCollection(Type elementType, IReadOnlyList<object?> values)
+    {
+        return elementType == typeof(string) ? CreateTypedReadOnlyCollection<string>(values)
+            : elementType == typeof(bool) ? CreateTypedReadOnlyCollection<bool>(values)
+            : elementType == typeof(bool?) ? CreateTypedReadOnlyCollection<bool?>(values)
+            : elementType == typeof(sbyte) ? CreateTypedReadOnlyCollection<sbyte>(values)
+            : elementType == typeof(sbyte?) ? CreateTypedReadOnlyCollection<sbyte?>(values)
+            : elementType == typeof(byte) ? CreateTypedReadOnlyCollection<byte>(values)
+            : elementType == typeof(byte?) ? CreateTypedReadOnlyCollection<byte?>(values)
+            : elementType == typeof(short) ? CreateTypedReadOnlyCollection<short>(values)
+            : elementType == typeof(short?) ? CreateTypedReadOnlyCollection<short?>(values)
+            : elementType == typeof(ushort) ? CreateTypedReadOnlyCollection<ushort>(values)
+            : elementType == typeof(ushort?) ? CreateTypedReadOnlyCollection<ushort?>(values)
+            : elementType == typeof(int) ? CreateTypedReadOnlyCollection<int>(values)
+            : elementType == typeof(int?) ? CreateTypedReadOnlyCollection<int?>(values)
+            : elementType == typeof(uint) ? CreateTypedReadOnlyCollection<uint>(values)
+            : elementType == typeof(uint?) ? CreateTypedReadOnlyCollection<uint?>(values)
+            : elementType == typeof(long) ? CreateTypedReadOnlyCollection<long>(values)
+            : elementType == typeof(long?) ? CreateTypedReadOnlyCollection<long?>(values)
+            : elementType == typeof(ulong) ? CreateTypedReadOnlyCollection<ulong>(values)
+            : elementType == typeof(ulong?) ? CreateTypedReadOnlyCollection<ulong?>(values)
+            : elementType == typeof(float) ? CreateTypedReadOnlyCollection<float>(values)
+            : elementType == typeof(float?) ? CreateTypedReadOnlyCollection<float?>(values)
+            : elementType == typeof(double) ? CreateTypedReadOnlyCollection<double>(values)
+            : elementType == typeof(double?) ? CreateTypedReadOnlyCollection<double?>(values)
+            : elementType == typeof(decimal) ? CreateTypedReadOnlyCollection<decimal>(values)
+            : elementType == typeof(decimal?) ? CreateTypedReadOnlyCollection<decimal?>(values)
+            : elementType == typeof(Guid) ? CreateTypedReadOnlyCollection<Guid>(values)
+            : elementType == typeof(Guid?) ? CreateTypedReadOnlyCollection<Guid?>(values)
+            : elementType == typeof(Uri) ? CreateTypedReadOnlyCollection<Uri>(values)
+            : throw new InvalidOperationException("The model contains an unsupported collection element type.");
     }
 
     private static bool TryRegistered(
@@ -351,6 +396,21 @@ internal static class ValueConverterEngine
             || type == typeof(decimal)
             || type == typeof(Guid)
             || type == typeof(Uri);
+    }
+
+    private static ReadOnlyCollection<T> CreateTypedReadOnlyCollection<T>(IReadOnlyList<object?> values)
+    {
+        List<T> typedValues = [];
+        foreach (object? value in values)
+        {
+            typedValues.Add(value is T typedValue
+                ? typedValue
+                : value is null && default(T) is null
+                    ? default!
+                    : throw new InvalidOperationException("A converted collection element has the wrong type."));
+        }
+
+        return typedValues.AsReadOnly();
     }
 
     private static bool IsAsciiLetter(char character)

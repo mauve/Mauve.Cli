@@ -27,6 +27,9 @@ public enum ParseDiagnosticCode
     /// <summary>A supplied value could not be converted.</summary>
     InvalidValue,
 
+    /// <summary>A declared default or validation rule rejected a value.</summary>
+    ValidationFailed,
+
     /// <summary>A required option or positional argument was absent.</summary>
     MissingRequired,
 

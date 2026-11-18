@@ -237,5 +237,13 @@ public sealed class CommandModelTests
                 OptionArity.RepeatedSingleCollection,
                 elementType: typeof(string)));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(invalidCollection));
+
+        CommandBuilder mutableArrayCollection = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--values",
+                typeof(int[]),
+                OptionArity.RepeatedSingleCollection,
+                elementType: typeof(int)));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(mutableArrayCollection));
     }
 }

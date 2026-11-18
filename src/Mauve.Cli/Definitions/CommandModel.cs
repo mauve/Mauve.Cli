@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
 
@@ -52,6 +53,7 @@ public sealed class CommandModel
                     children,
                     snapshot.Options,
                     snapshot.Positionals,
+                    snapshot.CrossValidators,
                     paths[frame.Builder]));
                 continue;
             }
@@ -75,6 +77,7 @@ public sealed class CommandModel
             string[] aliases = frame.Builder.CopyAliases();
             OptionDefinition[] options = frame.Builder.CopyOptions();
             PositionalDefinition[] positionals = frame.Builder.CopyPositionals();
+            CrossValueValidator[] crossValidators = frame.Builder.CopyCrossValidators();
             definitionCount += 1 + aliases.Length + options.Length + positionals.Length;
             foreach (OptionDefinition option in options)
             {
@@ -88,7 +91,7 @@ public sealed class CommandModel
 
             ValidateCommand(frame.Builder, aliases, options, positionals, frame.Depth == 1);
             ValidateChildren(childrenSnapshot);
-            snapshots.Add(frame.Builder, new NodeSnapshot(aliases, childrenSnapshot, options, positionals));
+            snapshots.Add(frame.Builder, new NodeSnapshot(aliases, childrenSnapshot, options, positionals, crossValidators));
             _ = active.Add(frame.Builder);
             traversal.Push(new TraversalFrame(frame.Builder, frame.Depth, true));
 
@@ -226,6 +229,21 @@ with(StringComparer.Ordinal),             command.Name
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Option '{option.Name}' allows null but its value type cannot represent null."));
         }
 
+        ValidateDefaultValue(
+            option.Name,
+            option.ValueType,
+            option.AllowsNull,
+            option.DefaultValuePolicy,
+            option.DefaultValue,
+            option.DefaultValueFactory);
+        foreach (IValueValidator validator in option.Validators)
+        {
+            if (validator.ValueType != option.ValueType)
+            {
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Validator for option '{option.Name}' has the wrong value type."));
+            }
+        }
+
         HashSet<string> names =
         [
 with(StringComparer.Ordinal),             option.Name
@@ -259,12 +277,17 @@ with(StringComparer.Ordinal),             option.Name
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Boolean flag '{option.Name}' must have a Boolean value type."));
         }
 
+        if (option.Arity == OptionArity.BooleanFlag && option.DefaultValuePolicy != DefaultValuePolicy.None)
+        {
+            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Boolean flag '{option.Name}' has an intrinsic absent value and cannot declare another default."));
+        }
+
         bool isCollection = option.Arity is OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection;
         if (isCollection)
         {
             if (option.ElementType is null || !HasCollectionValueType(option.ValueType, option.ElementType))
             {
-                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Collection option '{option.Name}' must use an array or IReadOnlyList<T> matching its element type."));
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Collection option '{option.Name}' must use IReadOnlyList<T> matching its element type."));
             }
         }
         else if (option.ElementType is not null)
@@ -294,6 +317,13 @@ with(StringComparer.Ordinal),             option.Name
                 && !IsCompatibleValue(option.ValueType, option.BareValue))
             {
                 throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Optional option '{option.Name}' has a bare constant of the wrong type."));
+            }
+
+            if (option.BareValuePolicy == BareValuePolicy.Constant
+                && option.BareValue is not null
+                && !IsImmutableDefault(option.BareValue))
+            {
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Optional option '{option.Name}' must use a factory for mutable bare values."));
             }
 
             if (option.BareValuePolicy == BareValuePolicy.Factory && option.BareValueFactory is null)
@@ -337,6 +367,21 @@ with(StringComparer.Ordinal),             option.Name
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Positional '{positional.Name}' allows null but its value type cannot represent null."));
         }
 
+        ValidateDefaultValue(
+            positional.Name,
+            positional.ValueType,
+            positional.AllowsNull,
+            positional.DefaultValuePolicy,
+            positional.DefaultValue,
+            positional.DefaultValueFactory);
+        foreach (IValueValidator validator in positional.Validators)
+        {
+            if (validator.ValueType != positional.ValueType)
+            {
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Validator for positional '{positional.Name}' has the wrong value type."));
+            }
+        }
+
         if (positional.MinimumValues is < 0 or > 1)
         {
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Positional '{positional.Name}' must have a minimum arity of zero or one."));
@@ -356,15 +401,18 @@ with(StringComparer.Ordinal),             option.Name
         }
         else if (positional.ElementType is null || !HasCollectionValueType(positional.ValueType, positional.ElementType))
         {
-            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Rest positional '{positional.Name}' must use an array or IReadOnlyList<T> matching its element type."));
+            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Rest positional '{positional.Name}' must use IReadOnlyList<T> matching its element type."));
+        }
+
+        if (positional.MaximumValues is null && positional.DefaultValuePolicy != DefaultValuePolicy.None)
+        {
+            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Rest positional '{positional.Name}' uses its built-in empty-sequence default."));
         }
     }
 
     private static bool HasCollectionValueType(Type valueType, Type elementType)
     {
-        return valueType.IsArray
-            ? valueType.GetElementType() == elementType
-            : valueType.IsGenericType
+        return valueType.IsGenericType
             && valueType.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
             && valueType.GetGenericArguments()[0] == elementType;
     }
@@ -372,6 +420,57 @@ with(StringComparer.Ordinal),             option.Name
     private static bool CanRepresentNull(Type valueType)
     {
         return !valueType.IsValueType || Nullable.GetUnderlyingType(valueType) is not null;
+    }
+
+    private static void ValidateDefaultValue(
+        string name,
+        Type valueType,
+        bool allowsNull,
+        DefaultValuePolicy policy,
+        object? value,
+        Func<object?>? factory)
+    {
+        if (!Enum.IsDefined(policy))
+        {
+            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Definition '{name}' has an unsupported default policy."));
+        }
+
+        if (policy == DefaultValuePolicy.None)
+        {
+            if (value is not null || factory is not null)
+            {
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Definition '{name}' declares a default with no default policy."));
+            }
+
+            return;
+        }
+
+        if (policy == DefaultValuePolicy.Constant)
+        {
+            if (factory is not null
+                || (value is null && !allowsNull)
+                || (value is not null && !IsCompatibleValue(valueType, value)))
+            {
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Definition '{name}' has an invalid default constant."));
+            }
+
+            if (value is not null && !IsImmutableDefault(value))
+            {
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Definition '{name}' must use a factory for mutable reference defaults."));
+            }
+
+            return;
+        }
+
+        if (value is not null || factory is null)
+        {
+            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Definition '{name}' must declare exactly one default factory."));
+        }
+    }
+
+    private static bool IsImmutableDefault(object value)
+    {
+        return value.GetType().IsValueType || value is string or Uri;
     }
 
     private static bool IsCompatibleValue(Type valueType, object value)
@@ -451,7 +550,8 @@ with(StringComparer.Ordinal),             option.Name
         string[] Aliases,
         CommandBuilder[] Children,
         OptionDefinition[] Options,
-        PositionalDefinition[] Positionals);
+        PositionalDefinition[] Positionals,
+        CrossValueValidator[] CrossValidators);
 
     private readonly record struct TraversalFrame(CommandBuilder Builder, int Depth, bool IsExit);
 }
