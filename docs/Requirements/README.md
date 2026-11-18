@@ -8,10 +8,12 @@ It is not manifest-owned; updates do not replace it.
 
 ## Active features
 
-There are **zero active parser requirements and zero parser test-run
-evidence** in this bootstrap. The [planned index](Planned/README.md) lists
-proposals, not implemented behavior. Empty test scaffolds and source-only
-traceability are not evidence of parser coverage.
+The first two requirements of [FEAT-01](FEAT-01-Command-Model.md) and all
+four requirements of [FEAT-02](FEAT-02-Options-And-Arguments.md) now have
+active implementation owners. FEAT-01 command-path selection and the
+remaining features stay in the [planned index](Planned/README.md). Focused
+tests are declared for the active requirements, but no product test-run
+evidence has yet been recorded for this implementation.
 
 Keep implemented and partially implemented features in
 `docs/Requirements/FEAT-<id>-<name>.md`. Each document records Status,

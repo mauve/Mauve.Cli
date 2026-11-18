@@ -1,0 +1,110 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+
+namespace Mauve.Cli.Definitions;
+
+/// <summary>Describes one option independently of any parse invocation.</summary>
+public sealed class OptionDefinition
+{
+    private readonly ReadOnlyCollection<OptionAlias> _aliases;
+
+    /// <summary>Creates an immutable option definition.</summary>
+    /// <param name="name">The canonical long option name.</param>
+    /// <param name="valueType">The type of the option value.</param>
+    /// <param name="arity">The option's token and repetition mode.</param>
+    /// <param name="aliases">Optional ordered aliases.</param>
+    /// <param name="elementType">The element type for collection options.</param>
+    /// <param name="allowsNull">Whether this definition permits a null value.</param>
+    /// <param name="isRequired">Whether an occurrence is required.</param>
+    /// <param name="description">Optional display description.</param>
+    /// <param name="valueLabel">Optional display label for a value.</param>
+    /// <param name="isHidden">Whether ordinary help and completion hide this option.</param>
+    /// <param name="isSensitive">Whether values must be treated as sensitive.</param>
+    /// <param name="bareValuePolicy">The behavior for an optional option used bare.</param>
+    /// <param name="bareValue">The constant used by <see cref="BareValuePolicy.Constant"/>.</param>
+    /// <param name="bareValueFactory">The factory used by <see cref="BareValuePolicy.Factory"/>.</param>
+    public OptionDefinition(
+        string name,
+        Type valueType,
+        OptionArity arity,
+        IEnumerable<OptionAlias>? aliases = null,
+        Type? elementType = null,
+        bool allowsNull = false,
+        bool isRequired = false,
+        string? description = null,
+        string? valueLabel = null,
+        bool isHidden = false,
+        bool isSensitive = false,
+        BareValuePolicy bareValuePolicy = BareValuePolicy.Unspecified,
+        object? bareValue = null,
+        Func<object?>? bareValueFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(valueType);
+
+        Name = name;
+        ValueType = valueType;
+        Arity = arity;
+        ElementType = elementType;
+        AllowsNull = allowsNull;
+        IsRequired = isRequired;
+        Description = description ?? string.Empty;
+        ValueLabel = valueLabel ?? string.Empty;
+        IsHidden = isHidden;
+        IsSensitive = isSensitive;
+        BareValuePolicy = bareValuePolicy;
+        BareValue = bareValue;
+        BareValueFactory = bareValueFactory;
+
+        List<OptionAlias> aliasCopy = aliases is null ? [] : [with(aliases)];
+        if (aliasCopy.Exists(static alias => alias is null))
+        {
+            throw new ArgumentException("Option aliases cannot contain null entries.", nameof(aliases));
+        }
+
+        _aliases = aliasCopy.AsReadOnly();
+    }
+
+    /// <summary>Gets the canonical long option name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the type of the option value.</summary>
+    public Type ValueType { get; }
+
+    /// <summary>Gets the option's token and repetition mode.</summary>
+    public OptionArity Arity { get; }
+
+    /// <summary>Gets the ordered aliases.</summary>
+    public IReadOnlyList<OptionAlias> Aliases => _aliases;
+
+    /// <summary>Gets the collection element type, when applicable.</summary>
+    public Type? ElementType { get; }
+
+    /// <summary>Gets whether this definition permits a null value.</summary>
+    public bool AllowsNull { get; }
+
+    /// <summary>Gets whether an occurrence is required.</summary>
+    public bool IsRequired { get; }
+
+    /// <summary>Gets the display description.</summary>
+    public string Description { get; }
+
+    /// <summary>Gets the display label for a value.</summary>
+    public string ValueLabel { get; }
+
+    /// <summary>Gets whether ordinary help and completion hide this option.</summary>
+    public bool IsHidden { get; }
+
+    /// <summary>Gets whether values must be treated as sensitive.</summary>
+    public bool IsSensitive { get; }
+
+    /// <summary>Gets the behavior for an optional option used bare.</summary>
+    public BareValuePolicy BareValuePolicy { get; }
+
+    /// <summary>Gets the constant used by <see cref="BareValuePolicy.Constant"/>.</summary>
+    public object? BareValue { get; }
+
+    /// <summary>Gets the factory used by <see cref="BareValuePolicy.Factory"/>.</summary>
+    public Func<object?>? BareValueFactory { get; }
+}

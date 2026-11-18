@@ -8,24 +8,12 @@ Represent a tree of commands with names, aliases and descriptive metadata,
 and select one deterministic command path.
 
 ## Context
-This is the foundation for [definitions](FEAT-02-Options-And-Arguments.md)
-and [grammar](FEAT-03-Token-Grammar.md). Project boundaries are in
-[ADR-001](../../Architecture/ADR-001-Project-Boundaries.md). Reference
-evidence: `../maz/Console/Cli/CommandDef.cs` and
-`../maz/Console/Cli/Parsing/CliParser.cs`; their behavior is not a
-compatibility mandate.
+The [active command model](../FEAT-01-Command-Model.md) owns hierarchy and
+definition integrity. This remaining requirement covers argv path selection.
+Grammar is specified in [FEAT-03](FEAT-03-Token-Grammar.md). Project
+boundaries are in [ADR-001](../../Architecture/ADR-001-Project-Boundaries.md).
 
 ## Requirements
-### FEAT-01-001 - Hierarchy and metadata
-A model must represent a root, ordered children, names, aliases and descriptions.
-**Acceptance:** A root with `file` and its child `copy` preserves their metadata and hierarchy; an empty child list is valid.
-**Security:** Metadata is untrusted display data, not executable markup or authority.
-
-### FEAT-01-002 - Definition integrity
-The model must reject empty names, cycles and sibling name/alias collisions under its selected comparison rule before parsing.
-**Acceptance:** Sibling `copy` and alias `copy`, a self-child, and an empty name fail model validation; unrelated branches may reuse a name.
-**Security:** Reject ambiguous or cyclic graphs without unbounded traversal or selecting an arbitrary handler.
-
 ### FEAT-01-003 - Deterministic path selection
 For valid input select a root-to-command path using declared names or aliases; preserve the canonical selected command regardless of spelling.
 **Acceptance:** `file cp` selects `root/file/copy` when `cp` aliases `copy`; a missing child does not silently select a different sibling.

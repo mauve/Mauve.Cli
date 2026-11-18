@@ -50,5 +50,6 @@ this schema through their owning requirements and must reuse its validation
 invariants.
 
 Affected requirements:
-[FEAT-01](../Requirements/Planned/FEAT-01-Command-Model.md) and
-[FEAT-02](../Requirements/Planned/FEAT-02-Options-And-Arguments.md).
+[FEAT-01 active definitions](../Requirements/FEAT-01-Command-Model.md),
+[FEAT-01 planned command selection](../Requirements/Planned/FEAT-01-Command-Model.md),
+and [FEAT-02](../Requirements/FEAT-02-Options-And-Arguments.md).

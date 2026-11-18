@@ -6,11 +6,13 @@ It is not manifest-owned and updates must not overwrite your evidence. See the
 [original Mauve.Governance Policy](https://github.com/mauve/Mauve.Governance/blob/main/src/templates/docs/governance.md)
 and the installed [policy](../governance.md).
 
-## Bootstrap baseline
+## Current baseline
 
-There are **zero active parser requirements and zero product tests**.
-All parser requirements are in `Requirements/Planned/`; they are not passing
-coverage and do not receive fabricated active ledger rows.
+FEAT-01-001, FEAT-01-002 and FEAT-02-001 through FEAT-02-004 are active.
+Portable test methods are declared for each, but this implementation has no
+observed product test-run evidence yet. All other parser requirements remain
+in `Requirements/Planned/`; they are not passing coverage and do not receive
+active ledger rows.
 
 The standalone runner/analyzer/TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
@@ -19,19 +21,23 @@ verify scaffold/toolchain compatibility only. See
 [POL-01](Policies/POL-01-Strict-Dotnet-And-Aot.md) for executable local gates.
 Hosted/protected CI and real parser acceptance evidence remain unavailable.
 
-The bootstrap's complete local `bash scripts/verify.sh` gate has been executed:
-strict Governance validation, locked restore, zero-warning Release build,
-format verification, one passing isolated infrastructure observation, expected
-MGTEST001/IDE0161 rejections, and both native scaffold executions succeeded.
-This observation is limited to Linux ARM64/.NET 11 with the .NET 10 tooling
-runtime alongside it. Local logs are in `artifacts/verification.log`; the
-infra TRX/import are under `artifacts/obj/governance-probe/`. These are not
-active parser requirement evidence or protected hosted provenance.
+The repository bootstrap previously completed its local
+`bash scripts/verify.sh` gate on Linux ARM64. That result covered only empty
+scaffolds and infrastructure probes; it is historical bootstrap evidence, not
+verification of the active parser model or its tests. The standalone
+runner/analyzer/TRX probe and scaffold runs do not establish parser coverage
+or protected hosted provenance.
 
 ## Active requirement methods
 
 | Requirement | Validation method | Evidence or procedure | Owner | Environment / prerequisites | Gap or waiver details |
 | --- | --- | --- | --- | --- | --- |
+| FEAT-01-001 | portable automated | `CommandModelTests.Create_PreservesOrderedHierarchyMetadataAndCanonicalPaths`; `CommandModelTests.Create_AllowsACommandWithoutChildren` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; run evidence is not yet recorded. |
+| FEAT-01-002 | portable automated | `CommandModelTests.Create_RejectsSiblingNameAndAliasCollisions`; `CommandModelTests.Create_AllowsSameNamesOnDisjointBranches`; `CommandModelTests.Create_RejectsEmptyOrMalformedCommandNames`; `CommandModelTests.Create_RejectsCommandCycles`; `CommandModelTests.Create_RejectsCommandNodesWithMultipleParents` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; run evidence is not yet recorded. |
+| FEAT-02-001 | portable automated | `CommandModelTests.Create_PreservesOptionAliasesVisibilityAndTypeMetadata` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-02-002 | portable automated | `CommandModelTests.Create_PreservesPositionalDeclarationOrder`; `CommandModelTests.Create_RejectsDuplicatePositionalNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; run evidence is not yet recorded. |
+| FEAT-02-003 | portable automated | `CommandModelTests.Create_RejectsDuplicateOptionSpellingsButAllowsCaseDifferences` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
+| FEAT-02-004 | portable automated | `CommandModelTests.Create_ValidatesArityAndOptionalBarePolicies` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

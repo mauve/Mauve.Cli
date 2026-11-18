@@ -1,7 +1,7 @@
 # FEAT-02: Options and Arguments
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Define named options and ordered positional arguments with metadata and
@@ -9,9 +9,10 @@ validate definitions before parsing.
 
 ## Context
 Depends on [FEAT-01](FEAT-01-Command-Model.md). Syntax belongs to
-[FEAT-03](FEAT-03-Token-Grammar.md), cardinality to
-[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md). Reference evidence:
-`../maz/Console/Cli/CommandDef.cs` and `../maz/specs/CLI Parser Specification.md`.
+[FEAT-03](Planned/FEAT-03-Token-Grammar.md), cardinality to
+[FEAT-05](Planned/FEAT-05-Cardinality-And-Special-Forms.md). The approved
+schema and validation boundary are recorded in
+[ADR-003](../Architecture/ADR-003-Definition-Model.md).
 
 ## Requirements
 ### FEAT-02-001 - Option definitions
@@ -37,7 +38,7 @@ Definition validation must reject positional orderings and type/cardinality comb
 ## Design
 #### Definition schema
 
-The proposed semantic schema is independent of builder/attribute names:
+The semantic schema is independent of builder/attribute names:
 
 | Definition | Required information |
 | --- | --- |
@@ -45,7 +46,7 @@ The proposed semantic schema is independent of builder/attribute names:
 | Positional | Owner identity; unique display name; declaration index; value/element type; minimum/maximum token count; converter; default/validators; visibility/sensitivity; description; optional static/provider completion metadata. |
 | Display-only metadata | Safe default text and allowed-value labels; these do not supply a default, enforce validation, or read an environment variable. |
 
-Propose a canonical long option name matching
+Use a canonical long option name matching
 `--[A-Za-z][A-Za-z0-9-]*`. Aliases use that grammar or one ASCII letter
 after a single dash, such as `-o`; names are at most 128 characters including
 dashes. Reject `--`, `-`, embedded whitespace/`=`, repeated aliases,
@@ -127,18 +128,20 @@ keeps immutable definitions and per-parse values, and uses the same typed
 conversion pipeline for options and positionals. Maz's environment-variable
 display metadata does not establish a generic config-provider feature.
 
-Approve name syntax, positional ordering and collection result shape before
-implementation; exact builder/attribute spelling remains an API design
-decision. FEAT-11 must lower declarations to this schema without adding
-different inference rules. No maz source is needed to implement this contract.
+The approved name syntax, positional ordering, and collection result shape are
+implemented in the explicit definitions. FEAT-11 must lower declarations to
+this schema without adding different inference rules. No maz source is needed
+to implement this contract.
 
 ## Metrics Impact
-**Instruments:** none - planned definitions do not add runtime metrics.
+**Instruments:** none - immutable option definitions do not add runtime metrics.
 
 ## Verification
-Future definition tests cover aliases, malformed names, duplicate and
-case-boundary names, ordering, hidden metadata and invalid rest positions.
-No tests have yet established product behavior.
+Portable tests in `tests/Mauve.Cli.Tests/Definitions/CommandModelTests.cs`
+cover option and positional metadata, declaration order, alias collisions,
+case-sensitive comparison, optional-value policy, arity, and rest positions.
+Test-run evidence is recorded separately in the
+[validation ledger](../validation-gaps.md).
 
 ## Diagrams
 
