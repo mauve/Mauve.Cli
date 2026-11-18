@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Parsing;
@@ -528,6 +529,197 @@ public sealed class CliParserTests
             () => new CliParser().Parse(model, []));
 
         Assert.AreEqual("cross-validator fault", exception.Message);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-001")]
+    public void Parse_PreservesProvenanceAndIsolatesResultsAcrossParses()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--count",
+                typeof(int),
+                OptionArity.RequiredScalar,
+                defaultValuePolicy: DefaultValuePolicy.Constant,
+                defaultValue: 0)));
+        CliParser parser = new();
+        string[] arguments = ["--count=0"];
+
+        ParseResult explicitResult = parser.Parse(model, arguments);
+        arguments[0] = "--count=8";
+        ParseResult defaultResult = parser.Parse(model, []);
+
+        Assert.AreEqual("--count=0", explicitResult.Arguments[0]);
+        Assert.IsTrue(explicitResult.TryGetOptionValue(model.Root, model.Root.Options[0], out int explicitValue));
+        Assert.IsTrue(defaultResult.TryGetOptionValue(model.Root, model.Root.Options[0], out int defaultValue));
+        Assert.AreEqual(0, explicitValue);
+        Assert.AreEqual(0, defaultValue);
+        Assert.AreEqual(ValueOrigin.Explicit, explicitResult.Values[0].Origin);
+        Assert.AreEqual(ValueOrigin.Default, defaultResult.Values[0].Origin);
+        Assert.AreNotSame(explicitResult.Values, defaultResult.Values);
+
+        ParseResult? firstConcurrent = null;
+        ParseResult? secondConcurrent = null;
+        Parallel.Invoke(
+            () => firstConcurrent = parser.Parse(model, ["--count=1"]),
+            () => secondConcurrent = parser.Parse(model, ["--count=2"]));
+        Assert.IsTrue(firstConcurrent!.TryGetOptionValue(model.Root, model.Root.Options[0], out int firstValue));
+        Assert.IsTrue(secondConcurrent!.TryGetOptionValue(model.Root, model.Root.Options[0], out int secondValue));
+        Assert.AreEqual(1, firstValue);
+        Assert.AreEqual(2, secondValue);
+
+        CommandModel otherModel = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--count", typeof(int), OptionArity.RequiredScalar)));
+        Assert.ThrowsExactly<ArgumentException>(() => explicitResult.TryGetOptionValue<int>(
+            otherModel.Root,
+            otherModel.Root.Options[0],
+            out _));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Parse_ReportsStableCategoriesAndCoordinates()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--count", typeof(int), OptionArity.RequiredScalar)));
+        CliParser parser = new();
+
+        ParseResult invalidValue = parser.Parse(model, ["--count=bad"]);
+        ParseResult missingValue = parser.Parse(model, ["--count"]);
+        ParseResult repeatedInvalidValue = parser.Parse(model, ["--count=bad"]);
+
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalidValue.Diagnostics[0].Code);
+        Assert.AreEqual(0, invalidValue.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(0, invalidValue.Diagnostics[0].ValueTokenIndex);
+        Assert.AreEqual(8, invalidValue.Diagnostics[0].ValueOffset);
+        Assert.IsFalse(invalidValue.Diagnostics[0].Message.Contains("bad", StringComparison.Ordinal));
+        Assert.AreEqual(ParseDiagnosticCode.MissingValue, missingValue.Diagnostics[0].Code);
+        Assert.AreEqual(invalidValue.Diagnostics[0].Code, repeatedInvalidValue.Diagnostics[0].Code);
+        Assert.AreEqual(invalidValue.Diagnostics[0].TokenIndex, repeatedInvalidValue.Diagnostics[0].TokenIndex);
+
+        CommandModel missingAndInvalid = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--required",
+                typeof(string),
+                OptionArity.RequiredScalar,
+                isRequired: true))
+            .AddOption(new OptionDefinition("--count", typeof(int), OptionArity.RequiredScalar)));
+        ParseResult ordered = parser.Parse(missingAndInvalid, ["--count=bad"]);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, ordered.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.MissingRequired, ordered.Diagnostics[1].Code);
+        Assert.AreEqual(0, ordered.Diagnostics[0].ValueTokenIndex);
+        Assert.IsNull(ordered.Diagnostics[1].TokenIndex);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Parse_ReportsUnsupportedModelsWithoutSelectingACommand()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--date", typeof(DateTime), OptionArity.RequiredScalar)));
+
+        ParseResult result = new CliParser().Parse(model, []);
+
+        Assert.AreEqual(ParseOutcome.Invalid, result.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidModel, result.Diagnostics[0].Code);
+        Assert.AreEqual(0, result.SelectedPath.Count);
+        Assert.IsNull(result.Diagnostics[0].TokenIndex);
+        Assert.AreEqual("--date", result.Diagnostics[0].DefinitionName);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Parse_EnforcesConfiguredInputAndDiagnosticLimits()
+    {
+        CommandModel countLimitedModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumArgumentCount: 1));
+        ParseResult tooManyArguments = new CliParser().Parse(countLimitedModel, ["one", "two"]);
+        Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, tooManyArguments.Diagnostics[0].Code);
+        Assert.AreEqual(1, tooManyArguments.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(0, tooManyArguments.SelectedPath.Count);
+
+        CommandModel tokenLimitedModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumTokenLength: 3));
+        ParseResult longToken = new CliParser().Parse(tokenLimitedModel, ["long"]);
+        Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, longToken.Diagnostics[0].Code);
+        Assert.AreEqual(0, longToken.Diagnostics[0].TokenIndex);
+
+        CommandModel totalLimitedModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumTotalCodeUnits: 3));
+        ParseResult longVector = new CliParser().Parse(totalLimitedModel, ["ab", "cd"]);
+        Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, longVector.Diagnostics[0].Code);
+        Assert.AreEqual(1, longVector.Diagnostics[0].TokenIndex);
+
+        CommandModel diagnosticLimitedModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumDiagnostics: 2));
+        ParseResult manyErrors = new CliParser().Parse(diagnosticLimitedModel, ["--bad", "--worse", "--worst"]);
+        Assert.AreEqual(2, manyErrors.Diagnostics.Count);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, manyErrors.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.DiagnosticLimitExceeded, manyErrors.Diagnostics[1].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-003")]
+    public void Parse_FailsOnUnknownAndExcessInputButExposesItForInspection()
+    {
+        CommandModel optionModel = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar)));
+        ParseResult unknownOption = new CliParser().Parse(optionModel, ["--wat"]);
+        Assert.AreEqual(ParseOutcome.Invalid, unknownOption.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknownOption.Diagnostics[0].Code);
+        Assert.AreEqual("--wat", unknownOption.UnmatchedTokens[0].Value);
+        Assert.IsFalse(unknownOption.Diagnostics[0].Message.Contains("--wat", StringComparison.Ordinal));
+
+        CommandModel positionalModel = CommandModel.Create(new CommandBuilder("tool")
+            .AddPositional(new PositionalDefinition("name", typeof(string))));
+        ParseResult excess = new CliParser().Parse(positionalModel, ["first", "secret"]);
+        Assert.AreEqual(ParseDiagnosticCode.UnexpectedArgument, excess.Diagnostics[0].Code);
+        Assert.AreEqual("secret", excess.UnmatchedTokens[0].Value);
+        Assert.IsFalse(excess.Diagnostics[0].Message.Contains("secret", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-004")]
+    public void Parse_SuggestsBoundedVisibleCanonicalNames()
+    {
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("copy").AddAlias("cp"))
+            .AddChild(new CommandBuilder("hidden") { IsHidden = true })
+            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar))
+            .AddOption(new OptionDefinition("--secret", typeof(string), OptionArity.RequiredScalar, isHidden: true));
+
+        ParseResult commandTypo = new CliParser().Parse(CommandModel.Create(root), ["copi"]);
+        ParseResult optionTypo = new CliParser().Parse(CommandModel.Create(root), ["--ouptut"]);
+        ParseResult hiddenTypo = new CliParser().Parse(CommandModel.Create(root), ["--secrett"]);
+        string longName = string.Concat("--", new string('x', 130));
+        ParseResult overlongTypo = new CliParser().Parse(CommandModel.Create(root), [longName]);
+
+        CollectionAssert.AreEqual(new[] { "copy" }, commandTypo.Diagnostics[0].Suggestions.ToArray());
+        CollectionAssert.AreEqual(new[] { "--output" }, optionTypo.Diagnostics[0].Suggestions.ToArray());
+        Assert.AreEqual(0, hiddenTypo.Diagnostics[0].Suggestions.Count);
+        Assert.AreEqual(0, overlongTypo.Diagnostics[0].Suggestions.Count);
+
+        CommandBuilder options = new("tool");
+        for (int index = 0; index < 8; index++)
+        {
+            options.AddOption(new OptionDefinition(
+                string.Create(CultureInfo.InvariantCulture, $"--option-{index}"),
+                typeof(string),
+                OptionArity.RequiredScalar));
+        }
+
+        ParseResult bounded = new CliParser().Parse(CommandModel.Create(options), ["--option-"]);
+        Assert.AreEqual(5, bounded.Diagnostics[0].Suggestions.Count);
     }
 
     private static CommandModel CreateLeafModel()

@@ -10,7 +10,7 @@ application-owned helper methods, independently of inherited/global scope.
 ## Context
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md) and
+[FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md) and
 [FEAT-11](FEAT-11-Declarative-Api-And-Generation.md). Integrates with
 [help](FEAT-08-Help-And-Usage.md),
 [completion](FEAT-10-Completion.md), and

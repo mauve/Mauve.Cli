@@ -43,7 +43,7 @@ and explicit-model code; an empty runtime reference can be trimmed away.
 
 Affected requirements include
 [FEAT-01](../Requirements/Planned/FEAT-01-Command-Model.md),
-[FEAT-07](../Requirements/Planned/FEAT-07-Parse-Results-And-Diagnostics.md),
+[FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md),
 [FEAT-11](../Requirements/Planned/FEAT-11-Declarative-Api-And-Generation.md),
 [FEAT-12](../Requirements/Planned/FEAT-12-Inherited-And-Global-Options.md),
 [FEAT-13](../Requirements/Planned/FEAT-13-NativeAot-And-Trimming.md) and

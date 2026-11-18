@@ -14,11 +14,6 @@ namespace Mauve.Cli.Parsing;
 /// <param name="numericCulture">The optional culture whose decimal separator is used for numeric conversion.</param>
 public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo? numericCulture = null)
 {
-    private const int _maximumArguments = 4096;
-    private const int _maximumTokenLength = 16384;
-    private const long _maximumTotalLength = 1048576;
-    private const int _maximumDiagnostics = 64;
-
     private readonly ConverterRegistry _converters = converters ?? ConverterRegistry.Empty();
     private readonly CultureInfo _numericCulture = ValueConverterEngine.CreateNumericCulture(numericCulture);
 
@@ -33,7 +28,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
 
-        string[] tokens = CopyAndValidateArguments(arguments, out ParseDiagnostic? inputLimit);
+        string[] tokens = CopyAndValidateArguments(arguments, model.Limits, out ParseDiagnostic? inputLimit);
         if (inputLimit is not null)
         {
             return InvalidResult(tokens, inputLimit);
@@ -45,7 +40,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             return InvalidResult(tokens, unsupportedDefinition);
         }
 
-        List<ParseDiagnostic> diagnostics = [];
+        DiagnosticBuffer diagnostics = new(model.Limits.MaximumDiagnostics);
         List<UnmatchedToken> unmatched = [];
         List<CommandDefinition> selectedPath = [model.Root];
         List<OptionOccurrence> optionOccurrences = [];
@@ -83,7 +78,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                     ParseDiagnosticCode.UnknownCommand,
                     "The token does not name a child command.",
-                    index));
+                    index,
+                    suggestions: SuggestCommands(current, token)));
                 unmatched.Add(new UnmatchedToken(index, token));
                 commandSelectionOpen = false;
                 continue;
@@ -119,7 +115,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
         if (diagnostics.Exists(static diagnostic => diagnostic.Code != ParseDiagnosticCode.MissingRequired))
         {
-            return InvalidResult(tokens, [.. selectedPath], diagnostics, unmatched);
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
         }
 
         List<ParsedValue> values = ConvertValues(
@@ -143,7 +139,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         return diagnostics.Count > 0
-            ? InvalidResult(tokens, [.. selectedPath], diagnostics, unmatched)
+            ? InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched)
             : new ParseResult(
             ParseOutcome.Validated,
             [.. selectedPath],
@@ -155,6 +151,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private static string[] CopyAndValidateArguments(
         IReadOnlyList<string> arguments,
+        CliLimits limits,
         out ParseDiagnostic? diagnostic)
     {
         diagnostic = null;
@@ -164,12 +161,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             throw new ArgumentException("The argument vector reported a negative count.", nameof(arguments));
         }
 
-        if (count > _maximumArguments)
+        if (count > limits.MaximumArgumentCount)
         {
             diagnostic = ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.InputLimitExceeded,
                 "The argument vector exceeds the maximum token count.",
-                _maximumArguments);
+                limits.MaximumArgumentCount);
             return [];
         }
 
@@ -179,7 +176,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         {
             string token = arguments[index]
                 ?? throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"arguments[{index}]"));
-            if (token.Length > _maximumTokenLength)
+            if (token.Length > limits.MaximumTokenLength)
             {
                 diagnostic = ParseDiagnostic.ForInput(
                     ParseDiagnosticCode.InputLimitExceeded,
@@ -189,7 +186,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             }
 
             totalLength += token.Length;
-            if (totalLength > _maximumTotalLength)
+            if (totalLength > limits.MaximumTotalCodeUnits)
             {
                 diagnostic = ParseDiagnostic.ForInput(
                     ParseDiagnosticCode.InputLimitExceeded,
@@ -256,7 +253,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         ref int index,
         CommandDefinition owner,
         List<OptionOccurrence> occurrences,
-        List<ParseDiagnostic> diagnostics,
+        DiagnosticBuffer diagnostics,
         List<UnmatchedToken> unmatched)
     {
         string token = tokens[index];
@@ -270,7 +267,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.UnknownOption,
                 "The token does not name a visible option.",
-                optionIndex));
+                optionIndex,
+                suggestions: SuggestOptions(owner, name)));
             unmatched.Add(new UnmatchedToken(optionIndex, token));
             return;
         }
@@ -383,7 +381,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void ValidateOptionOccurrences(
         List<OptionOccurrence> occurrences,
         CommandDefinition selectedCommand,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         Dictionary<(CommandDefinition Owner, OptionDefinition Option), List<OptionOccurrence>> groups = [];
         foreach (OptionOccurrence occurrence in occurrences)
@@ -430,7 +428,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static List<PositionalAssignment> BindPositionals(
         CommandDefinition selectedCommand,
         List<PositionalOccurrence> occurrences,
-        List<ParseDiagnostic> diagnostics,
+        DiagnosticBuffer diagnostics,
         List<UnmatchedToken> unmatched)
     {
         List<PositionalAssignment> assignments = [];
@@ -476,7 +474,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         CommandDefinition selectedCommand,
         List<OptionOccurrence> occurrences,
         List<PositionalAssignment> positionals,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         Dictionary<int, ConversionAttempt> convertedByTokenIndex = ConvertTokensInOrder(
             selectedCommand,
@@ -669,7 +667,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void ValidateBooleanOccurrences(
         CommandDefinition selectedCommand,
         List<OptionOccurrence> occurrences,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         foreach (OptionOccurrence occurrence in occurrences)
         {
@@ -693,7 +691,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private void ApplyAbsentDefaults(
         CommandDefinition selectedCommand,
         List<ParsedValue> values,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         for (int index = 0; index < values.Count; index++)
         {
@@ -776,7 +774,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void AddInvalidDefaultDiagnostic(
         CommandDefinition selectedCommand,
         ParsedValue entry,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         AddDiagnostic(diagnostics, entry.Option is not null
             ? ParseDiagnostic.ForOption(
@@ -796,7 +794,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void RunValueValidators(
         CommandDefinition selectedCommand,
         List<ParsedValue> values,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         ValidationContext context = new(selectedCommand, [.. values]);
         foreach (ParsedValue entry in values)
@@ -840,7 +838,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void RunCrossValidators(
         CommandDefinition selectedCommand,
         List<ParsedValue> values,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         ValidationContext context = new(selectedCommand, [.. values]);
         foreach (CrossValueValidator validator in selectedCommand.CrossValidators)
@@ -869,7 +867,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         CommandDefinition selectedCommand,
         List<OptionOccurrence> occurrences,
         List<PositionalAssignment> positionals,
-        List<ParseDiagnostic> diagnostics)
+        DiagnosticBuffer diagnostics)
     {
         List<ConversionRequest> requests = [];
         foreach (OptionOccurrence occurrence in occurrences)
@@ -1050,18 +1048,171 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return null;
     }
 
-    private static void AddDiagnostic(List<ParseDiagnostic> diagnostics, ParseDiagnostic diagnostic)
+    private static string[] SuggestCommands(CommandDefinition command, string input)
     {
-        if (diagnostics.Count < _maximumDiagnostics - 1)
+        if (input.Length > 128)
         {
-            diagnostics.Add(diagnostic);
+            return [];
         }
-        else if (diagnostics.Count == _maximumDiagnostics - 1)
+
+        List<NameCandidate> candidates = [];
+        foreach (CommandDefinition child in command.Children)
         {
-            diagnostics.Add(ParseDiagnostic.ForInput(
-                ParseDiagnosticCode.DiagnosticLimitExceeded,
-                "The parse result exceeded the maximum diagnostic count."));
+            if (child.IsHidden)
+            {
+                continue;
+            }
+
+            if (!TryAddCandidate(candidates, child.Name, child.Name))
+            {
+                break;
+            }
+
+            foreach (string alias in child.Aliases)
+            {
+                if (!TryAddCandidate(candidates, alias, child.Name))
+                {
+                    return FindSuggestions(candidates, input);
+                }
+            }
         }
+
+        return FindSuggestions(candidates, input);
+    }
+
+    private static string[] SuggestOptions(CommandDefinition command, string input)
+    {
+        if (input.Length > 128)
+        {
+            return [];
+        }
+
+        List<NameCandidate> candidates = [];
+        foreach (OptionDefinition option in command.Options)
+        {
+            if (option.IsHidden)
+            {
+                continue;
+            }
+
+            if (!TryAddCandidate(candidates, option.Name, option.Name))
+            {
+                break;
+            }
+
+            foreach (OptionAlias alias in option.Aliases)
+            {
+                if (!TryAddCandidate(candidates, alias.Name, option.Name))
+                {
+                    return FindSuggestions(candidates, input);
+                }
+            }
+        }
+
+        return FindSuggestions(candidates, input);
+    }
+
+    private static bool TryAddCandidate(List<NameCandidate> candidates, string spelling, string canonical)
+    {
+        if (candidates.Count == 256)
+        {
+            return false;
+        }
+
+        candidates.Add(new NameCandidate(spelling, canonical));
+        return true;
+    }
+
+    private static string[] FindSuggestions(List<NameCandidate> candidates, string input)
+    {
+        if (input.Length > 128)
+        {
+            return [];
+        }
+
+        Dictionary<string, SuggestionMatch> matches = [with(StringComparer.Ordinal)];
+        foreach (NameCandidate candidate in candidates)
+        {
+            if (candidate.Spelling.Length > 128)
+            {
+                continue;
+            }
+
+            bool isPrefix = candidate.Spelling.StartsWith(input, StringComparison.Ordinal);
+            int distance = GetBoundedEditDistance(candidate.Spelling, input);
+            if ((!isPrefix) && (distance > 2))
+            {
+                continue;
+            }
+
+            SuggestionMatch match = new(candidate.Canonical, isPrefix, distance);
+            if (!matches.TryGetValue(candidate.Canonical, out SuggestionMatch existing)
+                || IsBetterSuggestion(match, existing))
+            {
+                matches[candidate.Canonical] = match;
+            }
+        }
+
+        return [.. matches.Values
+            .OrderByDescending(static match => match.IsPrefix)
+            .ThenBy(static match => match.Distance)
+            .ThenBy(static match => match.Canonical, StringComparer.Ordinal)
+            .Take(5)
+            .Select(static match => match.Canonical)];
+    }
+
+    private static bool IsBetterSuggestion(SuggestionMatch candidate, SuggestionMatch existing)
+    {
+        return (candidate.IsPrefix && !existing.IsPrefix)
+            || (candidate.IsPrefix == existing.IsPrefix && candidate.Distance < existing.Distance);
+    }
+
+    private static int GetBoundedEditDistance(string left, string right)
+    {
+        const int maximumDistance = 2;
+        if (Math.Abs(left.Length - right.Length) > maximumDistance)
+        {
+            return maximumDistance + 1;
+        }
+
+        int[] previous = new int[right.Length + 1];
+        int[] current = new int[right.Length + 1];
+        Array.Fill(previous, maximumDistance + 1);
+        for (int column = 0; column <= Math.Min(right.Length, maximumDistance); column++)
+        {
+            previous[column] = column;
+        }
+
+        for (int row = 1; row <= left.Length; row++)
+        {
+            Array.Fill(current, maximumDistance + 1);
+            current[0] = row <= maximumDistance ? row : maximumDistance + 1;
+            int firstColumn = Math.Max(1, row - maximumDistance);
+            int lastColumn = Math.Min(right.Length, row + maximumDistance);
+            int rowMinimum = current[0];
+            for (int column = firstColumn; column <= lastColumn; column++)
+            {
+                int substitutionCost = left[row - 1] == right[column - 1] ? 0 : 1;
+                current[column] = Math.Min(
+                    Math.Min(previous[column] + 1, current[column - 1] + 1),
+                    previous[column - 1] + substitutionCost);
+                rowMinimum = Math.Min(rowMinimum, current[column]);
+            }
+
+            if (rowMinimum > maximumDistance)
+            {
+                return maximumDistance + 1;
+            }
+
+            (previous, current) = (current, previous);
+        }
+
+        return previous[right.Length];
+    }
+
+    private static void AddDiagnostic(DiagnosticBuffer diagnostics, ParseDiagnostic diagnostic)
+    {
+        diagnostics.Add(diagnostic);
     }
 
     private static ParseResult InvalidResult(string[] arguments, ParseDiagnostic diagnostic)
@@ -1072,21 +1223,83 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static ParseResult InvalidResult(
         string[] arguments,
         CommandDefinition[] selectedPath,
-        List<ParseDiagnostic> diagnostics,
+        ParseDiagnostic[] diagnostics,
         List<UnmatchedToken> unmatched)
     {
-        ParseDiagnostic[] orderedDiagnostics = [.. diagnostics
-            .OrderBy(static diagnostic => diagnostic.TokenIndex ?? int.MaxValue)
-            .ThenBy(static diagnostic => diagnostic.Code.ToString(), StringComparer.Ordinal)
-            .Take(_maximumDiagnostics)];
         return new ParseResult(
             ParseOutcome.Invalid,
             selectedPath,
-            orderedDiagnostics,
+            diagnostics,
             [.. unmatched],
             arguments,
             []);
     }
+
+    private sealed class DiagnosticBuffer(int maximum)
+    {
+        private readonly List<ParseDiagnostic> _items = [];
+
+        public int Count => _items.Count;
+
+        public bool Exists(Predicate<ParseDiagnostic> predicate)
+        {
+            return _items.Exists(predicate);
+        }
+
+        public void Add(ParseDiagnostic diagnostic)
+        {
+            if (maximum == 1)
+            {
+                if (_items.Count == 0)
+                {
+                    _items.Add(diagnostic);
+                }
+                else if (_items[0].Code != ParseDiagnosticCode.DiagnosticLimitExceeded)
+                {
+                    _items[0] = CreateLimitDiagnostic();
+                }
+
+                return;
+            }
+
+            if (_items.Count < maximum - 1)
+            {
+                _items.Add(diagnostic);
+            }
+            else if (_items.Count == maximum - 1)
+            {
+                _items.Add(CreateLimitDiagnostic());
+            }
+        }
+
+        public ParseDiagnostic[] ToOrderedArray()
+        {
+            return [.. _items
+                .Select(static (diagnostic, index) => new DiagnosticOrder(diagnostic, index))
+                .OrderBy(static item => item.Diagnostic.OrderingPhase)
+                .ThenBy(static item => item.Diagnostic.OrderingPhase is 0 or 1
+                    ? item.Diagnostic.ValueTokenIndex ?? item.Diagnostic.TokenIndex ?? int.MaxValue
+                    : 0)
+                .ThenBy(static item => item.Diagnostic.OrderingPhase is 0 or 1
+                    ? item.Diagnostic.Code.ToString()
+                    : string.Empty, StringComparer.Ordinal)
+                .ThenBy(static item => item.Index)
+                .Select(static item => item.Diagnostic)];
+        }
+
+        private static ParseDiagnostic CreateLimitDiagnostic()
+        {
+            return ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.DiagnosticLimitExceeded,
+                "The parse result exceeded the maximum diagnostic count.");
+        }
+    }
+
+    private sealed record NameCandidate(string Spelling, string Canonical);
+
+    private readonly record struct SuggestionMatch(string Canonical, bool IsPrefix, int Distance);
+
+    private readonly record struct DiagnosticOrder(ParseDiagnostic Diagnostic, int Index);
 
     private sealed class OptionOccurrence(
         CommandDefinition owner,

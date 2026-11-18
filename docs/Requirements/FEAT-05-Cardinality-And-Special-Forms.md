@@ -12,7 +12,7 @@ Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-03](FEAT-03-Token-Grammar.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md), and
 [FEAT-06](FEAT-06-Defaults-And-Validation.md). Results and diagnostics belong
-to [FEAT-07](Planned/FEAT-07-Parse-Results-And-Diagnostics.md). Maz examples and alternatives are
+to [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Maz examples and alternatives are
 in `../maz/specs/CLI Parser Specification.md` and
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs`.
 

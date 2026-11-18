@@ -9,25 +9,28 @@ namespace Mauve.Cli.Definitions;
 /// <summary>An immutable, validated snapshot of a command graph.</summary>
 public sealed class CommandModel
 {
-    private const int _maximumDepth = 64;
-    private const int _maximumDefinitions = 4096;
-
-    private CommandModel(CommandDefinition root)
+    private CommandModel(CommandDefinition root, CliLimits limits)
     {
         Root = root;
+        Limits = limits;
     }
 
     /// <summary>Gets the root command definition.</summary>
     public CommandDefinition Root { get; }
 
+    /// <summary>Gets the immutable limits used to validate and parse this model.</summary>
+    public CliLimits Limits { get; }
+
     /// <summary>Creates and validates an immutable snapshot from a command graph.</summary>
     /// <param name="root">The root command builder.</param>
+    /// <param name="limits">Optional positive model and parsing limits.</param>
     /// <returns>A validated command model.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="root"/> is null.</exception>
     /// <exception cref="ArgumentException">The graph contains invalid or ambiguous definitions.</exception>
-    public static CommandModel Create(CommandBuilder root)
+    public static CommandModel Create(CommandBuilder root, CliLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(root);
+        CliLimits effectiveLimits = limits ?? CliLimits.Default;
 
         Dictionary<CommandBuilder, NodeSnapshot> snapshots = [with(ReferenceEqualityComparer.Instance)];
         Dictionary<CommandBuilder, string[]> paths = [with(ReferenceEqualityComparer.Instance)];
@@ -38,7 +41,7 @@ public sealed class CommandModel
         traversal.Push(new TraversalFrame(root, 1, false));
         paths.Add(root, [root.Name]);
 
-        long definitionCount = 0;
+        long modelNodeCount = 0;
         while (traversal.Count > 0)
         {
             TraversalFrame frame = traversal.Pop();
@@ -68,9 +71,30 @@ public sealed class CommandModel
                 throw InvalidModel("A command definition is attached under more than one parent.");
             }
 
-            if (frame.Depth > _maximumDepth)
+            if (frame.Depth > effectiveLimits.MaximumCommandDepth)
             {
-                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"The command graph exceeds the maximum depth of {_maximumDepth}."));
+                throw InvalidModel(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The command graph exceeds the maximum depth of {effectiveLimits.MaximumCommandDepth}."));
+            }
+
+            if (frame.Builder.OptionCount > effectiveLimits.MaximumOptionsPerCommand)
+            {
+                throw InvalidModel(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Command '{frame.Builder.Name}' exceeds the maximum of {effectiveLimits.MaximumOptionsPerCommand} options."));
+            }
+
+            long minimumRemainingNodes = modelNodeCount
+                + 1
+                + frame.Builder.OptionCount
+                + frame.Builder.PositionalCount
+                + frame.Builder.ChildCount;
+            if (minimumRemainingNodes > effectiveLimits.MaximumModelNodes)
+            {
+                throw InvalidModel(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The command model exceeds the maximum of {effectiveLimits.MaximumModelNodes} nodes."));
             }
 
             CommandBuilder[] childrenSnapshot = frame.Builder.CopyChildren();
@@ -78,16 +102,7 @@ public sealed class CommandModel
             OptionDefinition[] options = frame.Builder.CopyOptions();
             PositionalDefinition[] positionals = frame.Builder.CopyPositionals();
             CrossValueValidator[] crossValidators = frame.Builder.CopyCrossValidators();
-            definitionCount += 1 + aliases.Length + options.Length + positionals.Length;
-            foreach (OptionDefinition option in options)
-            {
-                definitionCount += 1 + option.Aliases.Count;
-            }
-
-            if (definitionCount > _maximumDefinitions)
-            {
-                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"The command model exceeds the maximum of {_maximumDefinitions} definitions."));
-            }
+            modelNodeCount += 1L + options.Length + positionals.Length;
 
             ValidateCommand(frame.Builder, aliases, options, positionals, frame.Depth == 1);
             ValidateChildren(childrenSnapshot);
@@ -116,7 +131,7 @@ public sealed class CommandModel
             }
         }
 
-        return new CommandModel(definitions[root]);
+        return new CommandModel(definitions[root], effectiveLimits);
     }
 
     private static void ValidateCommand(

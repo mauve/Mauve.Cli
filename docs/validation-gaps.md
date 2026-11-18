@@ -9,9 +9,9 @@ and the installed [policy](../governance.md).
 ## Current baseline
 
 FEAT-01-001, FEAT-01-002, FEAT-02-001 through FEAT-02-004, FEAT-03-001,
-FEAT-03-002, FEAT-03-004, FEAT-04-001 through FEAT-04-004, all of FEAT-05
-and all of FEAT-06 are active. Portable test methods are declared for each,
-but this implementation has no observed product test-run evidence yet.
+FEAT-03-002, FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
+FEAT-05, FEAT-06 and FEAT-07 are active. Portable test methods are declared
+for each, but this implementation has no observed product test-run evidence yet.
 Remaining parser requirements are in `Requirements/Planned/`; they are not
 passing coverage and do not receive active ledger rows.
 
@@ -65,6 +65,13 @@ or protected hosted provenance.
 | FEAT-06-003 | portable automated | `CliParserTests.Parse_PropagatesValidatorFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-06-004 | portable automated | `CliParserTests.Parse_RunsCrossValidationOnlyAfterValueValidation` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-06-004 | portable automated | `CliParserTests.Parse_PropagatesCrossValidatorFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-001 | portable automated | `CliParserTests.Parse_PreservesProvenanceAndIsolatesResultsAcrossParses` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-002 | portable automated | `CommandModelTests.Create_EnforcesConfiguredModelLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsStableCategoriesAndCoordinates` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsUnsupportedModelsWithoutSelectingACommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_EnforcesConfiguredInputAndDiagnosticLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-003 | portable automated | `CliParserTests.Parse_FailsOnUnknownAndExcessInputButExposesItForInspection` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-07-004 | portable automated | `CliParserTests.Parse_SuggestsBoundedVisibleCanonicalNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

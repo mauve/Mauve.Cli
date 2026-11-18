@@ -9,6 +9,7 @@ namespace Mauve.Cli.Parsing;
 public sealed class ParseDiagnostic
 {
     private readonly ReadOnlyCollection<string> _definitionPath;
+    private readonly ReadOnlyCollection<string> _suggestions;
 
     internal ParseDiagnostic(
         ParseDiagnosticCode code,
@@ -18,7 +19,9 @@ public sealed class ParseDiagnostic
         int? valueOffset,
         string definitionName,
         string[] definitionPath,
-        string? failureCode)
+        string? failureCode,
+        string[] suggestions,
+        int orderingPhase)
     {
         Code = code;
         Message = message;
@@ -28,6 +31,8 @@ public sealed class ParseDiagnostic
         DefinitionName = definitionName;
         _definitionPath = Array.AsReadOnly(definitionPath);
         FailureCode = failureCode;
+        _suggestions = Array.AsReadOnly(suggestions);
+        OrderingPhase = orderingPhase;
     }
 
     /// <summary>Gets the diagnostic category.</summary>
@@ -53,6 +58,11 @@ public sealed class ParseDiagnostic
 
     /// <summary>Gets an application-supplied safe failure identifier, when present.</summary>
     public string? FailureCode { get; }
+
+    /// <summary>Gets bounded visible canonical candidates for unknown names.</summary>
+    public IReadOnlyList<string> Suggestions => _suggestions;
+
+    internal int OrderingPhase { get; }
 
     internal static ParseDiagnostic ForOption(
         ParseDiagnosticCode code,
@@ -81,7 +91,17 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.DiagnosticLimitExceeded => "The parse result exceeded the maximum diagnostic count.",
             _ => throw new NotImplementedException()
         };
-        return new ParseDiagnostic(code, message, tokenIndex, valueTokenIndex, valueOffset, name, [.. owner.Path], failureCode);
+        return new ParseDiagnostic(
+            code,
+            message,
+            tokenIndex,
+            valueTokenIndex,
+            valueOffset,
+            name,
+            [.. owner.Path],
+            failureCode,
+            [],
+            GetOrderingPhase(code));
     }
 
     internal static ParseDiagnostic ForPositional(
@@ -111,16 +131,37 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.DiagnosticLimitExceeded => "The parse result exceeded the maximum diagnostic count.",
             _ => throw new NotImplementedException()
         };
-        return new ParseDiagnostic(code, message, tokenIndex, valueTokenIndex, valueOffset, name, [.. owner.Path], failureCode);
+        return new ParseDiagnostic(
+            code,
+            message,
+            tokenIndex,
+            valueTokenIndex,
+            valueOffset,
+            name,
+            [.. owner.Path],
+            failureCode,
+            [],
+            GetOrderingPhase(code));
     }
 
     internal static ParseDiagnostic ForInput(
         ParseDiagnosticCode code,
         string message,
         int? tokenIndex = null,
-        string? failureCode = null)
+        string? failureCode = null,
+        string[]? suggestions = null)
     {
-        return new ParseDiagnostic(code, message, tokenIndex, null, null, string.Empty, [], failureCode);
+        return new ParseDiagnostic(
+            code,
+            message,
+            tokenIndex,
+            null,
+            null,
+            string.Empty,
+            [],
+            failureCode,
+            suggestions ?? [],
+            GetOrderingPhase(code));
     }
 
     internal static ParseDiagnostic ForCrossValidation(
@@ -136,6 +177,29 @@ public sealed class ParseDiagnostic
             null,
             name,
             [.. command.Path],
-            failureCode);
+            failureCode,
+            [],
+            4);
+    }
+
+    private static int GetOrderingPhase(ParseDiagnosticCode code)
+    {
+        return code switch
+        {
+            ParseDiagnosticCode.InvalidModel => -1,
+            ParseDiagnosticCode.InputLimitExceeded => -1,
+            ParseDiagnosticCode.UnknownCommand => 0,
+            ParseDiagnosticCode.UnknownOption => 0,
+            ParseDiagnosticCode.UnexpectedArgument => 0,
+            ParseDiagnosticCode.MissingValue => 0,
+            ParseDiagnosticCode.UnexpectedValue => 0,
+            ParseDiagnosticCode.DuplicateOption => 0,
+            ParseDiagnosticCode.InvalidValue => 1,
+            ParseDiagnosticCode.MissingRequired => 2,
+            ParseDiagnosticCode.ValidationFailed => 3,
+            ParseDiagnosticCode.OptionOutOfScope => 0,
+            ParseDiagnosticCode.DiagnosticLimitExceeded => 5,
+            _ => 0
+        };
     }
 }

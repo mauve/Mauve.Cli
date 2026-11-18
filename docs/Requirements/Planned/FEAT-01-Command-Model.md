@@ -57,7 +57,8 @@ definitions with equal names on disjoint branches are valid. Freeze/copy
 builder collections so mutation after validation cannot change the snapshot.
 Runtime model-validation failures and generator diagnostics describe the
 same violated invariant; FEAT-07 owns runtime diagnostic representation.
-Apply FEAT-07's 64-level depth and total-definition bounds before descending;
+Apply FEAT-07's configurable 64-level depth and 10000-node default bound
+before descending;
 use an explicit traversal stack or check depth before recursive calls.
 
 #### Selection algorithm and boundaries

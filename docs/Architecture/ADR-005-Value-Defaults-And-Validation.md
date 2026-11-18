@@ -42,4 +42,4 @@ graphs remain application-owned.
 Affected requirements:
 [FEAT-05](../Requirements/FEAT-05-Cardinality-And-Special-Forms.md),
 [FEAT-06](../Requirements/FEAT-06-Defaults-And-Validation.md),
-and [FEAT-07](../Requirements/Planned/FEAT-07-Parse-Results-And-Diagnostics.md).
+and [FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md).

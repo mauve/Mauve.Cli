@@ -10,7 +10,7 @@ explicitly registered conversion.
 ## Context
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md) and
 [FEAT-03](FEAT-03-Token-Grammar.md). Results and error presentation belong
-to [FEAT-07](Planned/FEAT-07-Parse-Results-And-Diagnostics.md). Reference:
+to [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Reference:
 the accepted pipeline in
 [ADR-004](../Architecture/ADR-004-Parser-And-Conversion-Pipeline.md),
 `../maz/Console/Cli/Parsing/CliParser.cs` and

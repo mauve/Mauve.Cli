@@ -11,7 +11,7 @@ validate individual and related values before invocation.
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
 [FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md), and
-[FEAT-07](Planned/FEAT-07-Parse-Results-And-Diagnostics.md). Evidence:
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Evidence:
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs` and
 `../maz/specs/CLI Parser Specification.md`. Environment and configuration
 providers are outside this feature.

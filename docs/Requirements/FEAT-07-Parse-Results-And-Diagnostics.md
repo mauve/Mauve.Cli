@@ -1,7 +1,7 @@
 # FEAT-07: Parse Results and Diagnostics
 
 ## Status
-**PLANNED**
+**ACTIVE**
 
 ## Capability
 Return an inspectable parse outcome with command selection, typed values,
@@ -12,43 +12,45 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-03](FEAT-03-Token-Grammar.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-05](../FEAT-05-Cardinality-And-Special-Forms.md) and
-[FEAT-06](../FEAT-06-Defaults-And-Validation.md). Evidence:
+[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md) and
+[FEAT-06](FEAT-06-Defaults-And-Validation.md). The bounded ordering and
+suggestion policy is recorded in
+[ADR-006](../Architecture/ADR-006-Results-Limits-And-Suggestions.md). Evidence:
 `../maz/Console/Cli/Parsing/CliParser.cs` and
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs`.
 
 ## Requirements
 ### FEAT-07-001 - Result and provenance
 Return the selected canonical command/path and typed values with explicit, defaulted or absent provenance, without mutable state shared across parses.
-**Acceptance:** A supplied zero and defaulted zero have equal values but distinct provenance; two parses of the same model retain independent results.
+**Acceptance:** A supplied zero and defaulted zero have equal values but distinct provenance; two concurrent parses of the same model retain independent results.
 **Security:** Expose values only through caller-controlled result access; do not log them automatically.
 
 ### FEAT-07-002 - Structured errors
 Return deterministic structured categories and relevant definition/token-position context for malformed definitions, missing values, conversion and validation errors.
-**Acceptance:** An invalid integer and a missing value are distinguishable, with stable locations across identical runs; errors prevent successful invocation.
+**Acceptance:** An invalid integer and a missing value are distinguishable, with stable locations across identical runs; parse-time unsupported definitions and oversized input have structured failures, and positive configured model limits reject oversized graphs.
 **Security:** Public error details must not include raw secret values or unbounded exception text.
 
 ### FEAT-07-003 - Unmatched input
 Expose unmatched tokens as failures by default and define any explicit permissive mode without treating unmatched input as recognized.
-**Acceptance:** Unknown `--wat` and excess positional input fail by default; a documented opt-in can inspect unmatched tokens without invoking as though they were valid.
+**Acceptance:** Unknown `--wat` and excess positional input fail by default; unmatched tokens remain explicitly inspectable on invalid results and never make a parse dispatchable.
 **Security:** Never silently discard unknown input or leak its contents in default diagnostics.
 
 ### FEAT-07-004 - Bounded suggestions
 Where suggestions are offered, derive them from visible declared names and limit candidate count and work.
-**Acceptance:** A typo near a visible command can yield a bounded suggestion; no close match or an exhausted limit yields none, deterministically.
+**Acceptance:** A typo near a visible command or option can yield up to five bounded canonical suggestions; hidden names, overlong input and no close match yield none.
 **Security:** Do not suggest hidden names by default or include sensitive values; bound work for large input.
 
 ## Design
-#### Proposed result schema
+#### Result schema
 
-Public type names remain undecided; the semantic contract does not.
-A result records its immutable model snapshot identity and outcome kind
-(`Validated`, `HelpRequested` or `Invalid`),
-canonical selected command/path, ordered diagnostics and unmatched
-occurrences. Preserve a defensive copy of argv only through deliberate
-caller access; do not expose mutable input arrays as result storage or
-automatically log input. Model validation failure has no selected path.
-An empty argv against a valid model selects the root.
+`ParseResult` records the immutable model snapshot identity through its
+definition handles and outcome kind (`Validated`, `HelpRequested` or
+`Invalid`), canonical selected command/path, ordered diagnostics and unmatched
+occurrences. Its `Arguments` property exposes a defensive copy through
+deliberate caller access; mutable input arrays are not result storage and
+input is never automatically logged. Input-limit and unsupported-model
+failures have no selected path. An empty argv against a valid model selects
+the root.
 
 Each value entry identifies its owner/definition, presence (`Absent`, `Bare`,
 `WithValue`), origin (`Absent`, `Default`, `Explicit`), availability/invalid
@@ -70,11 +72,11 @@ are explicit in FEAT-04/06. No previous result is mutated by the next parse.
 
 #### Diagnostics, locations and ordering
 
-Proposed semantic categories (not allocated numeric diagnostic IDs):
+Stable codes are the public `ParseDiagnosticCode` enum values:
 
 | Category | Meaning / location |
 | --- | --- |
-| InvalidModel | Definition collision, invalid arity, missing converter or composition error; definition identity, no invented argv index. |
+| InvalidModel | Unsupported model definition or converter; definition identity, no invented argv index. Invalid command graphs fail during `CommandModel.Create`. |
 | UnknownCommand / UnknownOption / UnexpectedArgument | Unrecognized occurrence at its original token index. |
 | OptionOutOfScope | Ancestor-local option consumed before descending, but invisible on the final command; original option index. |
 | MissingValue / UnexpectedValue | Known option arity violation; option token index. |
@@ -119,23 +121,24 @@ being mislabeled as user-input errors or successful defaults.
 
 #### Bounds and unmatched behavior
 
-Proposed default limits, checked before allocating/calling providers:
+`CliLimits` configures positive upper bounds on a `CommandModel`; defaults are
 4096 argv tokens, 16384 UTF-16 code units per token, 1048576 total code units,
-64 combined command/pack nesting levels, 4096 effective options on one command
-and 10000 normalized command/pack-inclusion/option/argument nodes across a
-snapshot (count reused inclusions separately).
-Configure positive lower/higher limits explicitly on the model/settings;
-limit failures remain failures. Cap diagnostics at 64 entries: if a further
-ordinary error occurs after 63, use the final entry as DiagnosticLimitExceeded.
-These are proposed safety values, not measured performance claims.
+64 command nesting levels, 4096 local options on one command, 10000 command/
+option/argument nodes, and 64 diagnostics. Limits are not performance claims.
+Model depth, option-count and node-count violations reject model creation
+before snapshot arrays are allocated. Parsing returns Invalid with
+InputLimitExceeded when an argv limit is reached. If another ordinary diagnostic would exceed the configured capacity, replace
+the final slot with DiagnosticLimitExceeded (at most 63 ordinary diagnostics
+plus the marker under the default).
 Null argv is an API argument error before parsing. Check count before
 enumerating elements; an over-count vector returns Invalid/InputLimitExceeded
 at the first excess index (4096 by default) without reading it. Otherwise
 inspect tokens left-to-right: an encountered null element is an API argument
 error; an overlong token or aggregate-size violation stops at that offending
 index. Input-limit outcomes have no selected path and run no routing/callbacks.
-Model-depth/node/option violations are InvalidModel with definition context
-and no argv index, also without a selected path. Check depth before descent.
+Check model depth before descent. Model graph violations are rejected by
+`CommandModel.Create`; they do not produce a parse path or invoke application
+callbacks.
 
 Strict parsing fails on all unmatched occurrences. Strict mode is the initial
 required surface; no permissive forwarding mode is approved. A future inspection-only
@@ -168,16 +171,17 @@ handles, and parsing the same model concurrently with different inputs.
 Maz returns mutable string errors/unmatched text and stores values on option
 instances. Those details are deliberately replaced by structured safe
 outcomes and per-parse storage. Its fuzzy suggestions are not an execution
-fallback. Approve schema semantics, bounds, ordering and advisory matching
-before implementation; no external source is necessary to fill in behavior.
+fallback.
 
 ## Metrics Impact
-**Instruments:** none - planned results introduce no runtime metrics.
+**Instruments:** none - results introduce no runtime metrics.
+**Diagnostics:** `InputLimitExceeded`, `DiagnosticLimitExceeded`
 
 ## Verification
-Future tests cover provenance, independent parses, category/order stability,
-unmatched input, hidden suggestions and size bounds. No observed test runs
-or active traceability are asserted.
+Portable behavior tests are declared for provenance, independent and
+concurrent parses, categories and coordinates, input/diagnostic bounds,
+unmatched input, model limits and hidden/bounded suggestions. No product
+test-run evidence has been recorded yet; see the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

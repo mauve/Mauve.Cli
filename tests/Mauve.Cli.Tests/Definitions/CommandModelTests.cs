@@ -246,4 +246,31 @@ public sealed class CommandModelTests
                 elementType: typeof(int)));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(mutableArrayCollection));
     }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Create_EnforcesConfiguredModelLimits()
+    {
+        CommandBuilder tooDeep = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("one").AddChild(new CommandBuilder("two")));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            tooDeep,
+            new CliLimits(maximumCommandDepth: 2)));
+
+        CommandBuilder tooManyOptions = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--one", typeof(string), OptionArity.RequiredScalar))
+            .AddOption(new OptionDefinition("--two", typeof(string), OptionArity.RequiredScalar));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            tooManyOptions,
+            new CliLimits(maximumOptionsPerCommand: 1)));
+
+        CommandBuilder tooManyNodes = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--one", typeof(string), OptionArity.RequiredScalar));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            tooManyNodes,
+            new CliLimits(maximumModelNodes: 1)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+            () => GC.KeepAlive(new CliLimits(maximumModelNodes: 0)));
+    }
 }

@@ -83,6 +83,12 @@ public sealed class CommandBuilder
         return this;
     }
 
+    internal int ChildCount => _children.Count;
+
+    internal int OptionCount => _options.Count;
+
+    internal int PositionalCount => _positionals.Count;
+
     internal string[] CopyAliases()
     {
         return [.. _aliases];
