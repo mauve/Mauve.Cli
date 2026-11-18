@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for the explicit-model implementation.
+Accepted for explicit and generated composition.
 
 ## Context
 
@@ -29,8 +29,11 @@ ordinary definitions governed by existing scope, conversion and result rules.
   search is provided.
 - Keep bound values in the ordinary per-parse `ParseResult`; the pack
   blueprint and static definitions never store mutable invocation values.
-- Generated declarations do not yet include pack inclusions. Generator and
-  explicit-model parity remains planned as FEAT-14-003.
+- Generated declarations use `CliOptionPack`, `CliPack` and
+  `CliPackOption`. Generated root builders expose `CreateBuilder()` so
+  callers can add explicit root-owned options before validation. Generated
+  handlers use `CommandInvocationContext` to resolve pack views by inclusion
+  key. Generated and explicit paths share runtime validation and parsing.
 
 ## Consequences
 

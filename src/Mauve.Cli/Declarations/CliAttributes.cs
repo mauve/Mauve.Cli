@@ -112,3 +112,73 @@ public sealed class CliArgumentAttribute(string name, int order) : Attribute
 public sealed class CliHandlerAttribute : Attribute
 {
 }
+
+/// <summary>Marks a declaration type as a reusable generated option pack.</summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class CliOptionPackAttribute : Attribute
+{
+}
+
+/// <summary>Declares an ordered command or nested-pack inclusion.</summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class CliPackAttribute(Type packType, string key, int order) : Attribute
+{
+    /// <summary>Gets the included option-pack declaration type.</summary>
+    public Type PackType { get; } = packType;
+
+    /// <summary>Gets the stable inclusion key.</summary>
+    public string Key { get; } = key;
+
+    /// <summary>Gets the explicit inclusion order.</summary>
+    public int Order { get; } = order;
+
+    /// <summary>Gets or sets the optional help-group title.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the optional help-group description.</summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>Declares an ordered option definition owned by a generated pack.</summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class CliPackOptionAttribute(string name, Type valueType, OptionArity arity, int order) : Attribute
+{
+    /// <summary>Gets the canonical option spelling.</summary>
+    public string Name { get; } = name;
+
+    /// <summary>Gets the value type.</summary>
+    public Type ValueType { get; } = valueType;
+
+    /// <summary>Gets the option arity.</summary>
+    public OptionArity Arity { get; } = arity;
+
+    /// <summary>Gets the explicit declaration order.</summary>
+    public int Order { get; } = order;
+
+    /// <summary>Gets or sets option aliases.</summary>
+    public string[] Aliases { get; set; } = [];
+
+    /// <summary>Gets or sets whether the option is required.</summary>
+    public bool IsRequired { get; set; }
+
+    /// <summary>Gets or sets whether null values are allowed.</summary>
+    public bool AllowsNull { get; set; }
+
+    /// <summary>Gets or sets whether the option is hidden from help and completion.</summary>
+    public bool IsHidden { get; set; }
+
+    /// <summary>Gets or sets whether values are sensitive.</summary>
+    public bool IsSensitive { get; set; }
+
+    /// <summary>Gets or sets the option description.</summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the display label for a value.</summary>
+    public string ValueLabel { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the inherited visibility scope.</summary>
+    public OptionScope Scope { get; set; }
+
+    /// <summary>Gets or sets the behavior for an optional-valued option used without a value.</summary>
+    public BareValuePolicy BareValuePolicy { get; set; }
+}

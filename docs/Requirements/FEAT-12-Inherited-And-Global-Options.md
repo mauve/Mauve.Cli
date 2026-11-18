@@ -11,8 +11,8 @@ deterministic visibility and conflict handling.
 Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md) and
 [FEAT-03](FEAT-03-Token-Grammar.md). The implementation decision is recorded
-in [ADR-009](../Architecture/ADR-009-Inherited-Option-Scope.md). OptionPack
-members will use the same explicit scope contract when FEAT-14 is implemented.
+in [ADR-009](../Architecture/ADR-009-Inherited-Option-Scope.md). Option-pack
+options use the same explicit scope contract as command-owned options.
 
 ## Requirements
 ### FEAT-12-001 - Explicit scope

@@ -43,20 +43,23 @@ unique, nonnegative order values. Bound properties are partial, get-only
 instance properties. A handler is a direct instance method with no parameters
 or one `CancellationToken`, and uses a return shape supported by FEAT-09.
 
-The generator emits deterministic partial sources and a static `CreateModel`
-method for each valid root. It builds ordinary immutable definitions and uses
-the runtime model validator. A handler creates a fresh command object for that
+The generator emits deterministic partial sources and `CreateModel` and
+`CreateBuilder` factories for each valid root. It builds ordinary immutable
+definitions and uses the runtime model validator. A handler creates a fresh command object for that
 invocation, attaches its `CommandInvocationContext`, and reads values through
 generated typed getters and `TryGet` companions. No application object is
 created for parse-only operations.
 
 `MCLI001` identifies invalid command declarations, `MCLI002` invalid members,
 and `MCLI003` hierarchy or visible-name conflicts. Unsupported shapes are
-compiler errors rather than runtime fallback. Defaults inferred from source
-initializers, generated converter registration, packs and completion
-providers are not part of this initial surface; they remain owned by their
-respective feature work. Applications may use the explicit converter registry
-with either model path.
+compiler errors rather than runtime fallback. Packs are declared using
+`CliOptionPack`, `CliPack` and `CliPackOption` as specified by
+[FEAT-14](FEAT-14-OptionPacks.md). Handlers may accept no parameter, a
+`CancellationToken`, or a `CommandInvocationContext`. Defaults inferred from
+source initializers, generated converter registration and completion
+providers are not part of this surface; they remain owned by their respective
+feature work. Applications may use the explicit converter registry with
+either model path.
 
 ## Metrics Impact
 **Instruments:** none - source generation adds no runtime instrumentation.

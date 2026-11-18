@@ -10,11 +10,11 @@ and the installed [policy](../governance.md).
 
 FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
-FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-11, FEAT-12 and partial
-FEAT-14 are active.
+FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-11, FEAT-12 and FEAT-14
+are active.
 Portable test methods are declared for each, but this implementation has no
 observed product test-run evidence yet.
-FEAT-10 and FEAT-13, and FEAT-14-003, remain in `Requirements/Planned/`; they
+FEAT-10 and FEAT-13 remain in `Requirements/Planned/`; they
 are not passing coverage and do not receive active ledger rows.
 
 The attempted product test run stopped during restore with `NU1301` because
@@ -100,6 +100,7 @@ or protected hosted provenance.
 | FEAT-14-002 | portable automated | `OptionPackTests.Create_RejectsPackCyclesAndVisibleAliasCollisions`; `OptionPackTests.Parse_AllowsPackReuseOnDisjointCommandsWithoutSharingValues` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-14-004 | portable automated | `OptionPackTests.InvokeAsync_BindsNestedPackValuesAndGroupsHelpByNearestTitle` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free help projection harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-14-005 | portable automated | `OptionPackTests.Parse_AllowsPackReuseOnDisjointCommandsWithoutSharingValues`; `OptionPackTests.Parse_CreatesIndependentCollectionValuesForEachPackParse`; `OptionPackTests.InvokeAsync_KeepsPackValuesIsolatedAcrossConcurrentInvocations` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-14-003 | portable automated | `CliModelGeneratorTests.Generate_BuildsPackModelEquivalentToExplicitModel`; `CliModelGeneratorTests.Generate_RejectsDuplicatePackAliasesWithoutRegisteringRoot`; `CliModelGeneratorTests.Generate_RejectsPackCyclesWithoutRegisteringRoot` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Package-free generator-driver harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

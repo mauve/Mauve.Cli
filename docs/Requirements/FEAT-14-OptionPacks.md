@@ -1,7 +1,7 @@
 # FEAT-14: OptionPacks
 
 ## Status
-**PARTIAL**
+**ACTIVE**
 
 ## Capability
 Compose reusable option definitions with nested inclusion, help grouping and
@@ -15,8 +15,8 @@ Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-08](FEAT-08-Help-And-Usage.md); inherited option scope follows
 [FEAT-12](FEAT-12-Inherited-And-Global-Options.md). Composition decisions
 are recorded in [ADR-011](../Architecture/ADR-011-OptionPack-Composition.md).
-Generated and explicit parity remains
-[planned](Planned/FEAT-14-OptionPacks.md).
+Generated pack declarations and explicit-model parity are defined by
+FEAT-14-003 and [ADR-010](../Architecture/ADR-010-Declarative-Generation.md).
 
 ## Requirements
 ### FEAT-14-001 - Typed composition
@@ -28,6 +28,11 @@ Allow commands to include reusable packs containing ordered options and nested p
 Validate nested composition for cycles, duplicate inclusion keys and duplicate visible names or aliases before parsing.
 **Acceptance:** A self-inclusion and a collision across two packs fail deterministically; the same pack can be reused on disjoint commands.
 **Security:** Snapshot traversal is bounded by the configured model node and nesting limits.
+
+### FEAT-14-003 - Generated and explicit parity
+Declare reusable packs with `CliOptionPack`, `CliPack` and `CliPackOption`, and generate a model that uses the shared runtime validation and invocation behavior.
+**Acceptance:** Equivalent nested packs created through generated and explicit APIs bind the same values and help groups; invalid pack aliases and cycles produce generator errors without root registration; an option added to the generated root builder works alongside generated packs.
+**Security:** Neither construction path bypasses definition validation or converter registration rules, and generated declarations never store invocation values in static state.
 
 ### FEAT-14-004 - Help integration
 Project pack titles into help groups without mutating option metadata.
@@ -52,19 +57,23 @@ remain in `ParseResult`, keyed by their declaring command and option
 definition. An option's explicit display group wins; otherwise the nearest
 titled pack supplies its group.
 
-Generated declaration parity, generated pack accessors, and completion data
-views are not implemented here. Completion and providers remain owned by
-FEAT-10, and generated composition remains planned under FEAT-14-003.
+Generated pack options expose immutable definition handles. Generated
+handlers that accept `CommandInvocationContext` resolve a pack by its inclusion
+key and read values from the current invocation. A generated root also exposes
+`CreateBuilder()` so callers can add explicit root-owned options before
+`CommandModel.Create` validates the combined model. Completion and providers
+remain owned by FEAT-10.
 
 ## Metrics Impact
 **Instruments:** none - option-pack composition adds no runtime instrumentation.
 
 ## Verification
-Focused tests cover nested values, help grouping, empty packs, cycles,
-collisions, disjoint reuse and concurrent/sequential isolation. The local
-package-free harness passed these scenarios. Product MSTest and Governance
-evidence remains unavailable until the trusted local Governance package feed
-is restored.
+Focused tests cover nested values, generated/explicit parity, manual root
+options, help grouping, empty packs, cycles, collisions, disjoint reuse and
+concurrent/sequential isolation. The package-free harness passed the explicit
+pack tests and generated parity scenarios; this is not product MSTest or
+Governance acceptance evidence. The product test run remains blocked by the
+missing trusted local Governance package feed.
 
 ## Diagrams
 
