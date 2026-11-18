@@ -1,11 +1,13 @@
-# FileTool.Cli scaffold
+# FileTool.Cli
 
-This .NET 11 executable currently prints an explicit not-implemented message.
-It is wired to the runtime and build-time generator projects and can be
-published as NativeAOT. It performs no parsing or file operations.
+This example builds its command model with the explicit API. It does not use
+the source generator or change files:
 
-The future example should demonstrate a `copy` command, repeated/rest path
-arguments, `--` for dash-prefixed filenames, composed OptionPacks, global
-options and completion. No overwrite behavior or filesystem side effects
-are part of this bootstrap. See the
-[planned requirements](../../docs/Requirements/Planned/README.md).
+```sh
+dotnet run --project examples/FileTool.Cli -- copy source.txt backup.txt
+dotnet run --project examples/FileTool.Cli -- copy --overwrite source.txt backup.txt
+dotnet run --project examples/FileTool.Cli -- copy --help
+```
+
+The command prints the requested operation. It does not copy or overwrite
+files.

@@ -1,11 +1,13 @@
-# Todo.Cli scaffold
+# Todo.Cli
 
-This .NET 11 executable currently prints an explicit not-implemented message.
-It is wired to the runtime and build-time generator projects and can be
-published as NativeAOT. It does not interpret arguments.
+This example uses generated command declarations:
 
-The future example should demonstrate `todo add` / `todo list`, positional
-text, required/optional and enum options, a reusable output OptionPack, async
-execution and cancellation. Implement it only as its
-[planned requirements](../../docs/Requirements/Planned/README.md) become active.
-Do not use nonexistent API snippets as runnable documentation.
+```sh
+dotnet run --project examples/Todo.Cli -- add "Buy milk"
+dotnet run --project examples/Todo.Cli -- new "Call Sam"
+dotnet run --project examples/Todo.Cli -- list
+dotnet run --project examples/Todo.Cli -- --help
+```
+
+The `add` and `new` names share one command. The sample prints the selected
+action and does not store tasks.
