@@ -74,7 +74,7 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Todo.Cli and FileTool.Cli scaffolds, Linux ARM64, SDK 11.0.100/GCC | Scaffold publish/run has been observed; no parser exists. | Replace placeholder-only execution with real generated parsing as requirements activate. |
+| Todo.Cli and FileTool.Cli scaffolds, Linux ARM64, SDK 11.0.100/GCC | Scaffold publish/run has been observed; neither example exercises the implemented parser yet. | Replace placeholder-only execution with real generated and explicit parsing before claiming product AOT support. |
 | Generated parser consumer, Linux ARM64 | Planned, unverified. | Nested command/alias, built-ins and custom converter, pack composition, validation/error paths, handler cancellation and safe help/completion. |
 | Explicit-model parser consumer with no generator reference, Linux ARM64 | Planned, unverified. | Equivalent semantic fixtures and failure outcomes to generated consumer. |
 | Other RIDs / native compilers | Unverified; not an implicit support promise. | Approve a RID/compiler/native-prerequisite row, then publish and execute on that architecture before claiming support. |

@@ -27,8 +27,9 @@ NativeAOT and deterministic validation.
   Governance tooling changes the product's .NET 11 requirement.
 - OptionPacks own reusable typed composition. Inherited/global visibility
   is separate. Pack values must be isolated between parses/invocations.
-- Both examples are honest scaffolds until the parser exists. Their
-  initial NativeAOT gates establish only the compiler/toolchain wiring.
+- The examples began as honest bootstrap scaffolds. The runtime parser now
+  exists, but those examples still establish only compiler/toolchain wiring
+  until they exercise real generated and explicit parser behavior.
 - Product assemblies are not publishable packages yet (`IsPackable=false`).
   Distribution/package layout is future work, not an accidental empty NuGet
   package contract.

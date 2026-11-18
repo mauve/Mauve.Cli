@@ -1,90 +1,73 @@
 # Mauve.Cli
 
-A bootstrapped .NET 11 CLI parser library repository. **No parser or source
-generator is implemented yet.** The source-generation-first declarative API
-and equivalent explicit model are specified as
-[14 planned features](docs/Requirements/Planned/README.md), including
-first-class OptionPacks.
+Mauve.Cli is a .NET library for building typed command-line applications. It
+provides an explicit command model and a source-generated declaration API.
+Both use the same parser and invocation pipeline.
 
-## Projects
+## Highlights
 
-| Project | Purpose / current state |
-| --- | --- |
-| `src/Mauve.Cli` | Empty `net11.0` runtime library with AOT compatibility analysis. |
-| `src/Mauve.Cli.Generators` | Empty `netstandard2.0` Roslyn component; build-time only. |
-| `tests/Mauve.Cli.Tests` | MSTest runtime test scaffold; zero product tests. |
-| `tests/Mauve.Cli.Generators.Tests` | MSTest generator test scaffold; zero product tests. |
-| `examples/Todo.Cli` | Compiling nested-command example scaffold; no parsing. |
-| `examples/FileTool.Cli` | Compiling file/OptionPack example scaffold; no parsing. |
+- Nested commands, aliases, options, and positional arguments.
+- Typed conversion, defaults, validation, and structured parse errors.
+- Help documents and asynchronous command handlers.
+- Reusable nested option packs with invocation-local values.
+- Generated command models with no runtime generator dependency.
+- Bounded model and input processing.
 
-## Bootstrap and verification
+Completion and end-to-end NativeAOT verification are still planned.
 
-Prerequisites: SDK **11.0.100** for this solution, SDK **10.0.404** and the
-.NET 10 runtime for the current Governance source/tool, Bash, `jq`, and a
-trusted Mauve.Governance **0.14.0** source checkout. Both SDKs must coexist.
-Native verification needs a supported native compiler/linker, C development
-files and zlib; the recorded baseline is **Linux ARM64 with GCC 15.2 (`cc`)**.
-Other platforms/compilers have not been verified.
+## Explicit model
 
-```sh
-bash scripts/bootstrap-governance.sh ../Mauve.Governance
-bash scripts/verify.sh
+Build a command model, parse the argument tokens, and read typed values:
+
+```csharp
+using Mauve.Cli.Definitions;
+using Mauve.Cli.Parsing;
+
+CommandModel model = CommandModel.Create(
+    new CommandBuilder("greet")
+        .AddOption(new OptionDefinition(
+            "--name",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            isRequired: true)));
+
+ParseResult result = new CliParser().Parse(model, ["--name", "Ada"]);
+if (result.Outcome == ParseOutcome.Validated
+    && result.TryGetOptionValue(model.Root.Options[0], out string? name))
+{
+    Console.WriteLine($"Hello, {name}!");
+}
 ```
 
-The checkout path is configurable. Governance packages are built into the
-ignored `artifacts/governance-feed`; NuGet source mapping and a repository-local
-package cache prevent accidentally resolving `Mauve.Governance.*` elsewhere.
-Do not delete the feed/cache and expect offline restore. Regenerate the feed
-from the same trusted source snapshot after cloning. Version `0.14.0` alone
-does not identify unpublished local source changes; see
-[the enrollment ADR](docs/Architecture/ADR-002-Governance-Enrollment.md).
-No globally installed tool is required or modified.
-Local packages use deterministic archive timestamps so repeated packaging
-does not invalidate lock hashes solely because time passed.
+## Generated commands
 
-Individual checks, after bootstrapping:
+Declare commands and options on partial classes. The generator creates the
+model factory and typed property bindings:
 
-```sh
-dotnet tool restore --configfile NuGet.Config
-dotnet tool run governance -- validate --root . --strict-planned
-dotnet tool run governance -- generate --root . --output artifacts/traceability.json
-dotnet restore Mauve.Cli.slnx --locked-mode
-dotnet build Mauve.Cli.slnx -c Release --no-restore
-dotnet format Mauve.Cli.slnx --verify-no-changes --no-restore
-dotnet test Mauve.Cli.slnx -c Release --no-build
-bash scripts/verify-tooling.sh
+```csharp
+using Mauve.Cli.Declarations;
+using Mauve.Cli.Definitions;
+
+[CliCommand("greet", IsRoot = true)]
+public partial class GreetCommand
+{
+    [CliOption("--name", OptionArity.RequiredScalar, 0, IsRequired = true)]
+    public partial string Name { get; }
+
+    [CliHandler]
+    private int Run() => Name.Length;
+}
 ```
 
-`verify.sh` also publishes and executes both NativeAOT scaffold applications
-and checks that a Governance update would be a no-op. It uses `cc` explicitly;
-set `CPP_COMPILER_AND_LINKER=clang` to select an installed alternative.
-The native publish uses the host RID, existing restored assets and previously
-built project references, so it does not rewrite shared library lock files.
-Changing SDK/RID/dependencies requires deliberate lock regeneration and review.
+Call `GreetCommand.CreateModel()` to create the model, then pass it to
+`CliInvoker` with the user's argument tokens.
 
-**Evidence boundaries:** zero discovered product tests is the expected initial
-baseline, not passing parser coverage. A separate disposable infrastructure
-probe verifies actual MSTest discovery, method-level Governance traits,
-metadata-bearing TRX import, and expected metadata/style compiler failures.
-Its source lives under ignored `artifacts/obj/`, which Governance excludes;
-probe inputs use `.in` extensions and are not product tests. Native execution
-proves only the scaffold/toolchain, not future parser or generated bindings.
+## Option packs
 
-## Implementation handoff
+Option packs group reusable options and can contain nested packs. Explicit
+models use `OptionPackBuilder`; generated declarations use `CliOptionPack`,
+`CliPack`, and `CliPackOption`. A generated handler can read pack values from
+its `CommandInvocationContext`.
 
-Start with [agent instructions](docs/AGENT_INSTRUCTIONS.md), the
-[feature lifecycle](docs/Requirements/README.md) and
-[project boundaries](docs/Architecture/ADR-001-Project-Boundaries.md).
-Resolve a feature's marked design blockers before implementing it. Promote
-requirements with their implementation, behavioral tests and ledger entries;
-do not label remaining planned work as active.
-
-Governance owns the paths recorded in `.mauve-governance/manifest.json`.
-Strict C# settings belong in the consumer-owned nested `.editorconfig` files,
-not the managed root file. See the
-[strict .NET/AOT policy](docs/Policies/POL-01-Strict-Dotnet-And-Aot.md) and
-[usage feedback](docs/governance-feedback.md).
-
-The installed hosted Governance workflows remain opt-in and disabled by
-default. No hosted package release, protected check or CI execution is
-claimed; the reproducible local command is `bash scripts/verify.sh`.
+See the [feature index](docs/Requirements/README.md) for implementation
+status and the [architecture decisions](docs/Architecture/) for API details.

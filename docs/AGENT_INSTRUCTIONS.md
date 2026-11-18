@@ -3,7 +3,10 @@
 Read [the feature lifecycle](Requirements/README.md), the
 [planned backlog](Requirements/Planned/README.md), [ADR-001](Architecture/ADR-001-Project-Boundaries.md)
 and [POL-01](Policies/POL-01-Strict-Dotnet-And-Aot.md) before implementation.
-This bootstrap contains no parser or generator implementation.
+This repository contains an implemented parser, invocation API, source
+generator and explicit and generated OptionPacks. Check the active feature
+documents for supported behavior; completion and end-to-end NativeAOT
+verification remain planned.
 
 Use .NET 11/C# 15, with a source-generation-first declarative API and an
 equivalent explicit model. Keep the Roslyn component build-time-only and
@@ -14,8 +17,9 @@ Azure, HTTP, renderer or configuration services into this library.
 Resolve marked feature design blockers before implementing their behavior.
 Promote only implemented requirements into active ownership, preserving IDs,
 with focused behavioral tests, ledger entries, relevant ADRs and checks.
-Do not treat planned documents, source traceability or the disposable runner
-probe as product acceptance evidence. Initial product test count is zero.
+Do not treat planned documents, source traceability or a disposable runner
+probe as product MSTest or Governance acceptance evidence. Record what
+actually ran and what was blocked in the validation ledger.
 
 Use native method-level MSTest metadata:
 `[TestProperty(Metadata.Feature, "FEAT-01")]` and
@@ -27,8 +31,8 @@ merely to replace the honest empty baseline.
 
 Run `bash scripts/bootstrap-governance.sh /path/to/Mauve.Governance` first
 when the local feed is missing, then `bash scripts/verify.sh`.
-The README lists individual commands. Use locked restore normally; update
-central package versions/locks intentionally. No global tool installation,
+Use locked restore normally; update central package versions/locks
+intentionally. No global tool installation,
 blanket analyzer suppressions or managed-file edits.
 
 Paths in `.mauve-governance/manifest.json` belong to Governance. Put local

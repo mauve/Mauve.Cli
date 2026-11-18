@@ -52,7 +52,8 @@ Only Linux ARM64/GCC is initially verified. Other hosts and real parser AOT
 behavior remain unverified; see
 [FEAT-13](../Requirements/Planned/FEAT-13-NativeAot-And-Trimming.md).
 
-The zero-product-test baseline is a known absence of parser implementation,
-not a waiver or a passing requirement. The independent probe's TRX lives
-under `artifacts/obj/governance-probe/`; it must not populate the active
-parser ledger or source-only index.
+The parser now has product test methods, but no product MSTest run is claimed
+until restore and the required Governance feed succeed. A missing test run is
+an evidence gap, not a pass. The independent probe's TRX lives under
+`artifacts/obj/governance-probe/`; it must not populate the active parser
+ledger or source-only index.
