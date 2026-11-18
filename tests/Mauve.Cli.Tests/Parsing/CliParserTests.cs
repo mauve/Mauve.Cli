@@ -800,6 +800,110 @@ public sealed class CliParserTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-12")]
+    [TestProperty(Metadata.Requirement, "FEAT-12-001")]
+    public void Parse_RecognizesInheritedOptionsOnlyInSelectedScope()
+    {
+        OptionDefinition verbose = new(
+            "--verbose",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            scope: OptionScope.Inherited);
+        int regionValidatorCalls = 0;
+        ValueValidator<string> regionValidator = new((_, _) =>
+        {
+            regionValidatorCalls++;
+            return ValueValidationOutcome.Success;
+        });
+        OptionDefinition region = new(
+            "--region",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            validators: [regionValidator],
+            scope: OptionScope.Inherited);
+        OptionDefinition rootOnly = new("--root-only", typeof(string), OptionArity.RequiredScalar);
+        OptionDefinition leafOnly = new("--leaf-only", typeof(string), OptionArity.RequiredScalar);
+        CommandBuilder leaf = new CommandBuilder("copy")
+            .AddOption(leafOnly);
+        CommandBuilder file = new CommandBuilder("file")
+            .AddOption(region)
+            .AddChild(leaf);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(verbose)
+            .AddOption(rootOnly)
+            .AddChild(file));
+        CliParser parser = new();
+
+        ParseResult beforePath = parser.Parse(model, ["--verbose", "file", "copy"]);
+        ParseResult afterPath = parser.Parse(model, ["file", "copy", "--verbose"]);
+        ParseResult betweenPath = parser.Parse(model, ["file", "--region=west", "copy"]);
+        ParseResult ancestorBeforeOwner = parser.Parse(model, ["--region=west", "file", "copy"]);
+        ParseResult localAfterChild = parser.Parse(model, ["file", "copy", "--root-only=x"]);
+        ParseResult localBeforeChild = parser.Parse(model, ["--leaf-only=x", "file", "copy"]);
+        ParseResult ownerLocalBeforeDescendant = parser.Parse(model, ["--root-only=x", "file", "copy"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, beforePath.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, afterPath.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, betweenPath.Outcome);
+        Assert.IsTrue(beforePath.TryGetOptionValue(model.Root, verbose, out bool beforeValue));
+        Assert.IsTrue(beforeValue);
+        Assert.IsTrue(afterPath.TryGetOptionValue(verbose, out bool afterValue));
+        Assert.IsTrue(afterValue);
+        Assert.IsTrue(betweenPath.TryGetOptionValue(model.Root.Children[0], region, out string? regionValue));
+        Assert.AreEqual("west", regionValue);
+        ParsedValue regionEntry = betweenPath.Values.Single(value => ReferenceEquals(value.Option, region));
+        Assert.AreSame(model.Root.Children[0], regionEntry.Owner);
+        Assert.AreEqual(ValueOrigin.Explicit, regionEntry.Origin);
+        Assert.AreEqual(1, regionValidatorCalls);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, ancestorBeforeOwner.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, localAfterChild.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, localBeforeChild.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.OptionOutOfScope, ownerLocalBeforeDescendant.Diagnostics[0].Code);
+        CollectionAssert.AreEqual(
+            new[] { "tool", "file", "copy" },
+            ownerLocalBeforeDescendant.SelectedPath.Select(static command => command.Name).ToArray());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-12")]
+    [TestProperty(Metadata.Requirement, "FEAT-12-002")]
+    public void Parse_BindsInheritedOptionsBeforeBetweenAndAfterSelectedPath()
+    {
+        OptionDefinition verbose = new(
+            "--verbose",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            scope: OptionScope.Inherited);
+        OptionDefinition region = new(
+            "--region",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            scope: OptionScope.Inherited);
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddOption(verbose)
+            .AddChild(new CommandBuilder("file")
+                .AddOption(region)
+                .AddChild(new CommandBuilder("copy")));
+        CommandModel model = CommandModel.Create(root);
+        CommandDefinition file = model.Root.Children[0];
+        CliParser parser = new();
+
+        ParseResult before = parser.Parse(model, ["--verbose", "file", "copy"]);
+        ParseResult between = parser.Parse(model, ["file", "--region=west", "copy"]);
+        ParseResult after = parser.Parse(model, ["file", "copy", "--verbose"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, before.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, between.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, after.Outcome);
+        Assert.IsTrue(before.TryGetOptionValue(verbose, out bool beforeValue));
+        Assert.IsTrue(beforeValue);
+        Assert.IsTrue(after.TryGetOptionValue(model.Root, verbose, out bool afterValue));
+        Assert.IsTrue(afterValue);
+        Assert.IsTrue(between.TryGetOptionValue(file, region, out string? regionValue));
+        Assert.AreEqual("west", regionValue);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-004")]
     public void Parse_HelpBypassesConversionAndRequirednessButNotStructuralErrors()

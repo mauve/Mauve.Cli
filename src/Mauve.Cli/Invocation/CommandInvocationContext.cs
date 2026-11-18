@@ -33,7 +33,7 @@ public sealed class CommandInvocationContext
     public bool TryGetOptionValue<T>(OptionDefinition option, out T? value)
     {
         ArgumentNullException.ThrowIfNull(option);
-        return ParseResult.TryGetOptionValue(Command, option, out value);
+        return ParseResult.TryGetOptionValue(option, out value);
     }
 
     /// <summary>Attempts to get a typed positional value for the selected command.</summary>

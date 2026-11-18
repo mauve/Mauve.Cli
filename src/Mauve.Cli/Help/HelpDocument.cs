@@ -78,10 +78,11 @@ public sealed class HelpDocument
             .Select(static positional => CreatePositionalItem(positional))];
 
         List<HelpOptionGroupBuilder> groups = [];
-        Dictionary<string, HelpOptionGroupBuilder> groupsByKey = [with(StringComparer.Ordinal)];
-        string[] ownerPath = [.. selected.Path.Select(HelpTextSanitizer.SingleLine)];
-        foreach (OptionDefinition option in selected.Options)
+        Dictionary<(CommandDefinition Owner, string Key), HelpOptionGroupBuilder> groupsByKey = [];
+        IReadOnlyList<CommandOption> effectiveOptions = CommandModel.GetEffectiveOptions(model.GetPath(selected));
+        foreach (CommandOption ownedOption in effectiveOptions)
         {
+            OptionDefinition option = ownedOption.Definition;
             if (option.IsHidden)
             {
                 continue;
@@ -89,14 +90,15 @@ public sealed class HelpDocument
 
             OptionDisplayGroup? displayGroup = option.DisplayGroup;
             string key = displayGroup?.Key ?? "@ungrouped";
-            if (!groupsByKey.TryGetValue(key, out HelpOptionGroupBuilder? group))
+            (CommandDefinition Owner, string Key) groupIdentity = (ownedOption.Owner, key);
+            if (!groupsByKey.TryGetValue(groupIdentity, out HelpOptionGroupBuilder? group))
             {
                 group = new HelpOptionGroupBuilder(
-                    ownerPath,
+                    [.. ownedOption.Owner.Path.Select(HelpTextSanitizer.SingleLine)],
                     key,
                     HelpTextSanitizer.SingleLine(displayGroup?.Title ?? "Options"),
                     HelpTextSanitizer.Description(displayGroup?.Description ?? string.Empty));
-                groupsByKey.Add(key, group);
+                groupsByKey.Add(groupIdentity, group);
                 groups.Add(group);
             }
 

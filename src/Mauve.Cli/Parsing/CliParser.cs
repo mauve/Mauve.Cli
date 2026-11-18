@@ -80,7 +80,13 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
             if (!endOfOptions && IsOptionCandidate(token))
             {
-                ScanOption(tokens, ref index, current, optionOccurrences, diagnostics, unmatched);
+                ScanOption(
+                    tokens,
+                    ref index,
+                    CommandModel.GetEffectiveOptions(selectedPath),
+                    optionOccurrences,
+                    diagnostics,
+                    unmatched);
                 continue;
             }
 
@@ -109,11 +115,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         CommandDefinition selectedCommand = selectedPath[^1];
+        IReadOnlyList<CommandOption> effectiveOptions = CommandModel.GetEffectiveOptions(selectedPath);
         List<OptionOccurrence> inScopeOccurrences = [];
         foreach (OptionOccurrence occurrence in optionOccurrences)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!ReferenceEquals(occurrence.Owner, selectedCommand))
+            if (!effectiveOptions.Contains(new CommandOption(occurrence.Owner, occurrence.Option)))
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                     ParseDiagnosticCode.OptionOutOfScope,
@@ -126,7 +133,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             inScopeOccurrences.Add(occurrence);
         }
 
-        ValidateOptionOccurrences(inScopeOccurrences, selectedCommand, diagnostics);
+        ValidateOptionOccurrences(inScopeOccurrences, effectiveOptions, diagnostics);
         List<PositionalAssignment> positionalAssignments = BindPositionals(
             selectedCommand,
             positionalOccurrences,
@@ -138,7 +145,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
         }
 
-        ValidateHelpOptionOccurrences(inScopeOccurrences, selectedCommand, diagnostics);
+        ValidateHelpOptionOccurrences(inScopeOccurrences, diagnostics);
         if (diagnostics.Count > 0)
         {
             return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
@@ -156,7 +163,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 []);
         }
 
-        ValidateRequiredInputs(selectedCommand, inScopeOccurrences, positionalAssignments, diagnostics);
+        ValidateRequiredInputs(
+            selectedCommand,
+            effectiveOptions,
+            inScopeOccurrences,
+            positionalAssignments,
+            diagnostics);
         if (diagnostics.Exists(static diagnostic => diagnostic.Code != ParseDiagnosticCode.MissingRequired))
         {
             return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
@@ -164,6 +176,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
         List<ParsedValue> values = ConvertValues(
             selectedCommand,
+            effectiveOptions,
             inScopeOccurrences,
             positionalAssignments,
             diagnostics,
@@ -296,7 +309,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private static void ScanOption(
         string[] tokens,
         ref int index,
-        CommandDefinition owner,
+        IReadOnlyList<CommandOption> visibleOptions,
         List<OptionOccurrence> occurrences,
         DiagnosticBuffer diagnostics,
         List<UnmatchedToken> unmatched)
@@ -307,17 +320,20 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         string name = hasInlineValue ? token[..equalsIndex] : token;
         string? inlineValue = hasInlineValue ? token[(equalsIndex + 1)..] : null;
         int optionIndex = index;
-        if (!owner.TryGetOption(name, out OptionDefinition? option))
+        CommandOption? match = FindVisibleOption(visibleOptions, name);
+        if (match is null)
         {
             AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.UnknownOption,
                 "The token does not name a visible option.",
                 optionIndex,
-                suggestions: SuggestOptions(owner, name)));
+                suggestions: SuggestOptions(visibleOptions, name)));
             unmatched.Add(new UnmatchedToken(optionIndex, token));
             return;
         }
 
+        CommandDefinition owner = match.Value.Owner;
+        OptionDefinition option = match.Value.Definition;
         OptionAliasKind aliasKind = FindAliasKind(option, name);
         OptionOccurrence occurrence = new(owner, option, optionIndex, aliasKind);
         if (aliasKind == OptionAliasKind.Negating && hasInlineValue)
@@ -425,7 +441,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private static void ValidateOptionOccurrences(
         List<OptionOccurrence> occurrences,
-        CommandDefinition selectedCommand,
+        IReadOnlyList<CommandOption> effectiveOptions,
         DiagnosticBuffer diagnostics)
     {
         Dictionary<(CommandDefinition Owner, OptionDefinition Option), List<OptionOccurrence>> groups = [];
@@ -441,9 +457,10 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             group.Add(occurrence);
         }
 
-        foreach (OptionDefinition option in selectedCommand.Options)
+        foreach (CommandOption ownedOption in effectiveOptions)
         {
-            _ = groups.TryGetValue((selectedCommand, option), out List<OptionOccurrence>? occurrencesForOption);
+            OptionDefinition option = ownedOption.Definition;
+            _ = groups.TryGetValue((ownedOption.Owner, option), out List<OptionOccurrence>? occurrencesForOption);
             if (occurrencesForOption is not null
                 && option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection))
             {
@@ -453,7 +470,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                         ParseDiagnosticCode.DuplicateOption,
                         option,
-                        selectedCommand,
+                        ownedOption.Owner,
                         repeated.OptionIndex));
                 }
             }
@@ -463,7 +480,6 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private static void ValidateHelpOptionOccurrences(
         List<OptionOccurrence> occurrences,
-        CommandDefinition selectedCommand,
         DiagnosticBuffer diagnostics)
     {
         foreach (OptionOccurrence occurrence in occurrences)
@@ -476,7 +492,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                     ParseDiagnosticCode.InvalidValue,
                     occurrence.Option,
-                    selectedCommand,
+                    occurrence.Owner,
                     occurrence.OptionIndex,
                     raw.TokenIndex,
                     raw.ValueOffset,
@@ -487,19 +503,23 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private static void ValidateRequiredInputs(
         CommandDefinition selectedCommand,
+        IReadOnlyList<CommandOption> effectiveOptions,
         List<OptionOccurrence> optionOccurrences,
         List<PositionalAssignment> positionalAssignments,
         DiagnosticBuffer diagnostics)
     {
-        foreach (OptionDefinition option in selectedCommand.Options)
+        foreach (CommandOption ownedOption in effectiveOptions)
         {
+            OptionDefinition option = ownedOption.Definition;
             if (option.IsRequired
-                && !optionOccurrences.Exists(occurrence => ReferenceEquals(occurrence.Option, option)))
+                && !optionOccurrences.Exists(occurrence =>
+                    ReferenceEquals(occurrence.Owner, ownedOption.Owner)
+                    && ReferenceEquals(occurrence.Option, option)))
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                     ParseDiagnosticCode.MissingRequired,
                     option,
-                    selectedCommand,
+                    ownedOption.Owner,
                     null));
             }
         }
@@ -555,6 +575,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private List<ParsedValue> ConvertValues(
         CommandDefinition selectedCommand,
+        IReadOnlyList<CommandOption> effectiveOptions,
         List<OptionOccurrence> occurrences,
         List<PositionalAssignment> positionals,
         DiagnosticBuffer diagnostics,
@@ -566,25 +587,26 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             positionals,
             diagnostics,
             cancellationToken);
-        ValidateBooleanOccurrences(selectedCommand, occurrences, diagnostics);
+        ValidateBooleanOccurrences(occurrences, diagnostics);
         if (diagnostics.Count > 0)
         {
             return [];
         }
 
         List<ParsedValue> values = [];
-        foreach (OptionDefinition option in selectedCommand.Options)
+        foreach (CommandOption ownedOption in effectiveOptions)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            OptionDefinition option = ownedOption.Definition;
             List<OptionOccurrence> optionOccurrences = [.. occurrences
-                .Where(occurrence => ReferenceEquals(occurrence.Owner, selectedCommand)
+                .Where(occurrence => ReferenceEquals(occurrence.Owner, ownedOption.Owner)
                     && ReferenceEquals(occurrence.Option, option))];
             if (optionOccurrences.Count == 0)
             {
                 if (option.Arity == OptionArity.BooleanFlag)
                 {
                     values.Add(new ParsedValue(
-                        selectedCommand,
+                        ownedOption.Owner,
                         option,
                         null,
                         false,
@@ -596,7 +618,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 else
                 {
                     values.Add(new ParsedValue(
-                        selectedCommand,
+                        ownedOption.Owner,
                         option,
                         null,
                         null,
@@ -613,7 +635,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 OptionOccurrence flag = optionOccurrences[0];
                 values.Add(new ParsedValue(
-                    selectedCommand,
+                    ownedOption.Owner,
                     option,
                     null,
                     flag.BooleanValue ?? true,
@@ -641,14 +663,14 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                         ParseDiagnosticCode.ValidationFailed,
                         option,
-                        selectedCommand,
+                        ownedOption.Owner,
                         bareOccurrence.OptionIndex,
                         failureCode: "default.invalid"));
                     continue;
                 }
 
                 values.Add(new ParsedValue(
-                    selectedCommand,
+                    ownedOption.Owner,
                     option,
                     null,
                     bareValue,
@@ -701,7 +723,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 value = convertedValues[0];
             }
             values.Add(new ParsedValue(
-                selectedCommand,
+                ownedOption.Owner,
                 option,
                 null,
                 value,
@@ -759,7 +781,6 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     }
 
     private static void ValidateBooleanOccurrences(
-        CommandDefinition selectedCommand,
         List<OptionOccurrence> occurrences,
         DiagnosticBuffer diagnostics)
     {
@@ -773,7 +794,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                     ParseDiagnosticCode.InvalidValue,
                     occurrence.Option,
-                    selectedCommand,
+                    occurrence.Owner,
                     occurrence.OptionIndex,
                     raw.TokenIndex,
                     raw.ValueOffset,
@@ -859,7 +880,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             }
 
             values[index] = new ParsedValue(
-                selectedCommand,
+                entry.Owner,
                 entry.Option,
                 entry.Positional,
                 defaultValue,
@@ -879,7 +900,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             ? ParseDiagnostic.ForOption(
                 ParseDiagnosticCode.ValidationFailed,
                 entry.Option,
-                selectedCommand,
+                entry.Owner,
                 null,
                 failureCode: "default.invalid")
             : ParseDiagnostic.ForPositional(
@@ -923,7 +944,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     ? ParseDiagnostic.ForOption(
                         ParseDiagnosticCode.ValidationFailed,
                         entry.Option,
-                        selectedCommand,
+                        entry.Owner,
                         tokenIndex,
                         tokenIndex,
                         failureCode: failureCode)
@@ -996,6 +1017,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     raw.TokenIndex,
                     occurrence.OptionIndex,
                     raw.ValueOffset,
+                    occurrence.Owner,
                     occurrence.Option,
                     null));
             }
@@ -1013,6 +1035,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     assignment.Definition.IsSensitive,
                     occurrence.Index,
                     occurrence.Index,
+                    null,
                     null,
                     null,
                     assignment.Definition));
@@ -1053,7 +1076,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     ? ParseDiagnostic.ForOption(
                         ParseDiagnosticCode.InvalidValue,
                         request.Option,
-                        selectedCommand,
+                        request.OptionOwner!,
                         request.DefinitionTokenIndex,
                         request.TokenIndex,
                         request.ValueOffset,
@@ -1197,7 +1220,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return FindSuggestions(candidates, input);
     }
 
-    private static string[] SuggestOptions(CommandDefinition command, string input)
+    private static string[] SuggestOptions(IReadOnlyList<CommandOption> options, string input)
     {
         if (input.Length > 128)
         {
@@ -1205,8 +1228,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         List<NameCandidate> candidates = [];
-        foreach (OptionDefinition option in command.Options)
+        foreach (CommandOption ownedOption in options)
         {
+            OptionDefinition option = ownedOption.Definition;
             if (option.IsHidden)
             {
                 continue;
@@ -1227,6 +1251,23 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         return FindSuggestions(candidates, input);
+    }
+
+    private static CommandOption? FindVisibleOption(
+        IReadOnlyList<CommandOption> options,
+        string name)
+    {
+        foreach (CommandOption ownedOption in options)
+        {
+            OptionDefinition option = ownedOption.Definition;
+            if (string.Equals(option.Name, name, StringComparison.Ordinal)
+                || option.Aliases.Any(alias => string.Equals(alias.Name, name, StringComparison.Ordinal)))
+            {
+                return ownedOption;
+            }
+        }
+
+        return null;
     }
 
     private static bool TryAddCandidate(List<NameCandidate> candidates, string spelling, string canonical)
@@ -1456,6 +1497,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         int TokenIndex,
         int DefinitionTokenIndex,
         int? ValueOffset,
+        CommandDefinition? OptionOwner,
         OptionDefinition? Option,
         PositionalDefinition? Positional);
 

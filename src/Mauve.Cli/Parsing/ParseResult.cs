@@ -63,12 +63,32 @@ public sealed class ParseResult
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(option);
         EnsureValidated();
-        if (!ReferenceEquals(SelectedCommand, owner) || !owner.Options.Contains(option))
+        bool ownerIsSelected = ReferenceEquals(SelectedCommand, owner);
+        bool ownerIsVisibleAncestor = option.Scope == OptionScope.Inherited && _selectedPath.Contains(owner);
+        if ((!ownerIsSelected && !ownerIsVisibleAncestor) || !owner.Options.Contains(option))
         {
             throw new ArgumentException("The option handle is not part of this selected model path.", nameof(option));
         }
 
         ParsedValue entry = _values.Single(parsed => ReferenceEquals(parsed.Owner, owner) && ReferenceEquals(parsed.Option, option));
+        return TryGet(entry, out value);
+    }
+
+    /// <summary>Attempts to get a typed option value by its definition handle.</summary>
+    /// <typeparam name="T">The expected value type.</typeparam>
+    /// <param name="option">The selected command's local or inherited option definition.</param>
+    /// <param name="value">The value when available.</param>
+    /// <returns>True when the value is available.</returns>
+    public bool TryGetOptionValue<T>(OptionDefinition option, out T? value)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        EnsureValidated();
+        ParsedValue? entry = _values.FirstOrDefault(parsed => ReferenceEquals(parsed.Option, option));
+        if (entry is null)
+        {
+            throw new ArgumentException("The option handle is not part of this selected model path.", nameof(option));
+        }
+
         return TryGet(entry, out value);
     }
 

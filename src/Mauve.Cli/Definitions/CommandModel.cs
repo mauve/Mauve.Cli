@@ -151,7 +151,99 @@ public sealed class CommandModel
             }
         }
 
-        return new CommandModel(definitions[root], effectiveLimits, includeStandardHelp);
+        CommandDefinition rootDefinition = definitions[root];
+        ValidateEffectiveOptions(rootDefinition, effectiveLimits);
+        return new CommandModel(rootDefinition, effectiveLimits, includeStandardHelp);
+    }
+
+    internal static IReadOnlyList<CommandOption> GetEffectiveOptions(
+        IReadOnlyList<CommandDefinition> selectedPath)
+    {
+        List<CommandOption> options = [];
+        for (int pathIndex = selectedPath.Count - 1; pathIndex >= 0; pathIndex--)
+        {
+            CommandDefinition owner = selectedPath[pathIndex];
+            foreach (OptionDefinition option in owner.Options)
+            {
+                if (pathIndex == selectedPath.Count - 1 || option.Scope == OptionScope.Inherited)
+                {
+                    options.Add(new CommandOption(owner, option));
+                }
+            }
+        }
+
+        return options;
+    }
+
+    internal IReadOnlyList<CommandDefinition> GetPath(CommandDefinition command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        List<CommandDefinition> path = [Root];
+        CommandDefinition current = Root;
+        for (int index = 1; index < command.Path.Count; index++)
+        {
+            string component = command.Path[index];
+            CommandDefinition? child = current.Children.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, component, StringComparison.Ordinal));
+            if (child is null)
+            {
+                throw new ArgumentException("The command does not belong to this model.", nameof(command));
+            }
+
+            path.Add(child);
+            current = child;
+        }
+
+        return !ReferenceEquals(current, command)
+            ? throw new ArgumentException("The command does not belong to this model.", nameof(command))
+            : path;
+    }
+
+    private static void ValidateEffectiveOptions(CommandDefinition root, CliLimits limits)
+    {
+        Stack<(CommandDefinition Command, CommandDefinition[] Path)> pending = new();
+        pending.Push((root, [root]));
+        while (pending.Count > 0)
+        {
+            (CommandDefinition command, CommandDefinition[] path) = pending.Pop();
+            IReadOnlyList<CommandOption> effective = GetEffectiveOptions(path);
+            HashSet<string> names = new(StringComparer.Ordinal);
+            foreach (CommandOption option in effective)
+            {
+                if (!names.Add(option.Definition.Name))
+                {
+                    throw InvalidModel(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The effective command path contains a duplicate option spelling '{option.Definition.Name}'."));
+                }
+
+                foreach (OptionAlias alias in option.Definition.Aliases)
+                {
+                    if (!names.Add(alias.Name))
+                    {
+                        throw InvalidModel(string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"The effective command path contains a duplicate option spelling '{alias.Name}'."));
+                    }
+                }
+            }
+
+            if (effective.Count > limits.MaximumOptionsPerCommand)
+            {
+                throw InvalidModel(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The effective command path exceeds the maximum of {limits.MaximumOptionsPerCommand} options."));
+            }
+
+            for (int index = command.Children.Count - 1; index >= 0; index--)
+            {
+                CommandDefinition child = command.Children[index];
+                CommandDefinition[] childPath = new CommandDefinition[path.Length + 1];
+                Array.Copy(path, childPath, path.Length);
+                childPath[^1] = child;
+                pending.Push((child, childPath));
+            }
+        }
     }
 
     private static void ValidateCommand(
@@ -272,6 +364,11 @@ with(StringComparer.Ordinal),             command.Name
         if (!Enum.IsDefined(option.Arity))
         {
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Option '{option.Name}' has an unsupported arity."));
+        }
+
+        if (!Enum.IsDefined(option.Scope))
+        {
+            throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Option '{option.Name}' has an unsupported scope."));
         }
 
         if (option.AllowsNull && !CanRepresentNull(option.ValueType))

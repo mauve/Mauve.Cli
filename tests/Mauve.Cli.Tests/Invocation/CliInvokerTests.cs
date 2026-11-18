@@ -274,6 +274,33 @@ public sealed class CliInvokerTests
             context.TryGetOptionValue(value, out int parsed) && parsed == 2));
     }
 
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-12")]
+    [TestProperty(Metadata.Requirement, "FEAT-12-004")]
+    public async Task InvokeAsync_ExposesInheritedValuesFromTheirDeclaringCommand()
+    {
+        OptionDefinition verbose = new(
+            "--verbose",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            scope: OptionScope.Inherited);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(verbose)
+            .AddChild(new CommandBuilder("copy")
+                .SetHandler((context, _) =>
+                {
+                    Assert.IsTrue(context.TryGetOptionValue(verbose, out bool enabled));
+                    Assert.IsTrue(enabled);
+                    return 0;
+                })));
+
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(model, ["--verbose", "copy"])
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+    }
+
     private static async Task<InvocationResult> Invoke(CommandBuilder command)
     {
         return await new CliInvoker()

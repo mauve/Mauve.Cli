@@ -11,7 +11,7 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md) and
 [FEAT-02](FEAT-02-Options-And-Arguments.md). The parser and conversion
 pipeline is recorded in [ADR-004](../Architecture/ADR-004-Parser-And-Conversion-Pipeline.md).
 Ancestor options are not implicitly visible; inherited and global option
-scope is owned by [FEAT-12](Planned/FEAT-12-Inherited-And-Global-Options.md).
+scope is owned by [FEAT-12](FEAT-12-Inherited-And-Global-Options.md).
 
 ## Requirements
 ### FEAT-03-001 - Argument vector boundary

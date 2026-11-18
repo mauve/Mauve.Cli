@@ -14,7 +14,7 @@ Depends on [FEAT-04](FEAT-04-Typed-Conversion.md),
 separation is in [ADR-001](../../Architecture/ADR-001-Project-Boundaries.md).
 Full integrated acceptance also requires results [FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md),
 help [FEAT-08](../FEAT-08-Help-And-Usage.md), completion [FEAT-10](FEAT-10-Completion.md),
-scope [FEAT-12](FEAT-12-Inherited-And-Global-Options.md) and
+scope [FEAT-12](../FEAT-12-Inherited-And-Global-Options.md) and
 packs [FEAT-14](FEAT-14-OptionPacks.md). Gate incremental supported subsets
 as they activate, but do not claim the full feature while required scenarios
 remain planned.

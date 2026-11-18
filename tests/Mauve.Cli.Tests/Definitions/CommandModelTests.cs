@@ -70,6 +70,34 @@ public sealed class CommandModelTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-12")]
+    [TestProperty(Metadata.Requirement, "FEAT-12-003")]
+    public void Create_RejectsInheritedOptionCollisionsButAllowsDisjointScopes()
+    {
+        CommandBuilder collision = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition(
+                "--verbose",
+                typeof(bool),
+                OptionArity.BooleanFlag,
+                scope: OptionScope.Inherited))
+            .AddChild(new CommandBuilder("copy")
+                .AddOption(new OptionDefinition(
+                    "--other",
+                    typeof(bool),
+                    OptionArity.BooleanFlag,
+                    aliases: [new OptionAlias("--verbose")])));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(collision));
+
+        CommandBuilder disjoint = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--format", typeof(string), OptionArity.RequiredScalar))
+            .AddChild(new CommandBuilder("copy")
+                .AddOption(new OptionDefinition("--format", typeof(string), OptionArity.RequiredScalar)))
+            .AddChild(new CommandBuilder("move")
+                .AddOption(new OptionDefinition("--format", typeof(string), OptionArity.RequiredScalar)));
+        Assert.AreEqual(2, CommandModel.Create(disjoint).Root.Children.Count);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-01")]
     [TestProperty(Metadata.Requirement, "FEAT-01-002")]
     public void Create_AllowsSameNamesOnDisjointBranches()

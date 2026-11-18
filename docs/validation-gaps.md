@@ -10,7 +10,7 @@ and the installed [policy](../governance.md).
 
 FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
-FEAT-05, FEAT-06, FEAT-07, FEAT-08 and FEAT-09 are active. Portable test methods are
+FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09 and FEAT-12 are active. Portable test methods are
 declared for each, but this implementation has no observed product test-run
 evidence yet.
 Remaining parser requirements are in `Requirements/Planned/`; they are not
@@ -86,6 +86,11 @@ or protected hosted provenance.
 | FEAT-09-004 | portable automated | `CliInvokerTests.InvokeAsync_PropagatesHandlerFaultsAndIsolatesInvocations` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-01-003 | portable automated | `CliParserTests.Parse_SelectsCanonicalCommandPathsAndHonorsAliasesAndPositionals` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-03-003 | portable automated | `CliParserTests.Parse_TracksConsumedCommandAndValueTokenPositions` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-12-001 | portable automated | `CliParserTests.Parse_RecognizesInheritedOptionsOnlyInSelectedScope` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-12-002 | portable automated | `CliParserTests.Parse_BindsInheritedOptionsBeforeBetweenAndAfterSelectedPath` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-12-003 | portable automated | `CommandModelTests.Create_RejectsInheritedOptionCollisionsButAllowsDisjointScopes` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-12-004 | portable automated | `HelpDocumentTests.Create_ProjectsInheritedOptionsWithTheirDeclaringOwner` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-12-004 | portable automated | `CliInvokerTests.InvokeAsync_ExposesInheritedValuesFromTheirDeclaringCommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

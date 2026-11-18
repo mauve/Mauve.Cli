@@ -32,6 +32,7 @@ public sealed class OptionDefinition
     /// <param name="validators">Ordered validators for available values.</param>
     /// <param name="defaultDisplay">Explicit non-sensitive text allowed in generated help.</param>
     /// <param name="displayGroup">Optional stable group metadata for generated help.</param>
+    /// <param name="scope">Whether descendants can see this option.</param>
     public OptionDefinition(
         string name,
         Type valueType,
@@ -52,7 +53,8 @@ public sealed class OptionDefinition
         Func<object?>? defaultValueFactory = null,
         IEnumerable<IValueValidator>? validators = null,
         string? defaultDisplay = null,
-        OptionDisplayGroup? displayGroup = null)
+        OptionDisplayGroup? displayGroup = null,
+        OptionScope scope = OptionScope.Local)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -75,6 +77,7 @@ public sealed class OptionDefinition
         DefaultValueFactory = defaultValueFactory;
         DefaultDisplay = defaultDisplay;
         DisplayGroup = displayGroup;
+        Scope = scope;
 
         List<OptionAlias> aliasCopy = aliases is null ? [] : [with(aliases)];
         if (aliasCopy.Exists(static alias => alias is null))
@@ -151,6 +154,9 @@ public sealed class OptionDefinition
 
     /// <summary>Gets optional stable help-group metadata.</summary>
     public OptionDisplayGroup? DisplayGroup { get; }
+
+    /// <summary>Gets whether the option is local to its owner or inherited by descendants.</summary>
+    public OptionScope Scope { get; }
 
     internal bool IsHelpOption { get; private init; }
 

@@ -73,6 +73,39 @@ public sealed class HelpDocumentTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-12")]
+    [TestProperty(Metadata.Requirement, "FEAT-12-004")]
+    public void Create_ProjectsInheritedOptionsWithTheirDeclaringOwner()
+    {
+        OptionDefinition inherited = new(
+            "--verbose",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            scope: OptionScope.Inherited,
+            displayGroup: new OptionDisplayGroup("shared", "Global"));
+        CommandBuilder leaf = new CommandBuilder("copy")
+            .AddOption(new OptionDefinition(
+                "--force",
+                typeof(bool),
+                OptionArity.BooleanFlag,
+                displayGroup: new OptionDisplayGroup("shared", "Local")));
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(inherited)
+            .AddChild(leaf));
+        HelpDocument help = HelpDocument.Create(model, model.Root.Children[0]);
+
+        Assert.AreEqual(2, help.OptionGroups.Count);
+        Assert.AreEqual("Local", help.OptionGroups[0].Title);
+        Assert.AreEqual("Global", help.OptionGroups[1].Title);
+        CollectionAssert.AreEqual(new[] { "tool" }, help.OptionGroups[1].OwnerPath.ToArray());
+        Assert.AreEqual(
+            "--verbose",
+            help.OptionGroups.SelectMany(static group => group.Options)
+                .Single(static option => option.Syntax.StartsWith("--verbose", StringComparison.Ordinal))
+                .Syntax);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-002")]
     public void Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults()

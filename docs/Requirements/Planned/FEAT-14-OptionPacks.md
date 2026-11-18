@@ -14,7 +14,7 @@ Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-11](FEAT-11-Declarative-Api-And-Generation.md). Integrates with
 [help](../FEAT-08-Help-And-Usage.md),
 [completion](FEAT-10-Completion.md), and
-[scope](FEAT-12-Inherited-And-Global-Options.md), which own their
+[scope](../FEAT-12-Inherited-And-Global-Options.md), which own their
 respective mechanisms. Evidence: `../maz/Console/Cli/OptionPack.cs`,
 `../maz/Console/Cli/Shared/GlobalBehaviorOptionPack.cs`, and
 `../maz/Console/Cli/Shared/SubscriptionOptionPack.cs`. Application
