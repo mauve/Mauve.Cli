@@ -42,7 +42,7 @@ requirements. Future AOT checks must retain and exercise actual generated
 and explicit-model code; an empty runtime reference can be trimmed away.
 
 Affected requirements include
-[FEAT-01](../Requirements/Planned/FEAT-01-Command-Model.md),
+[FEAT-01](../Requirements/FEAT-01-Command-Model.md),
 [FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md),
 [FEAT-11](../Requirements/Planned/FEAT-11-Declarative-Api-And-Generation.md),
 [FEAT-12](../Requirements/Planned/FEAT-12-Inherited-And-Global-Options.md),

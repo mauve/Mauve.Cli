@@ -41,6 +41,7 @@ dispatch. A future inherited-option feature may alter visibility only through
 its own explicit scope model; parser routing does not infer inheritance.
 
 Affected requirements:
+[FEAT-01](../Requirements/FEAT-01-Command-Model.md),
 [FEAT-03](../Requirements/FEAT-03-Token-Grammar.md),
 [FEAT-04](../Requirements/FEAT-04-Typed-Conversion.md),
 [FEAT-05](../Requirements/FEAT-05-Cardinality-And-Special-Forms.md),

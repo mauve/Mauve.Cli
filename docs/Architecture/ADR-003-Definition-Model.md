@@ -51,5 +51,5 @@ invariants.
 
 Affected requirements:
 [FEAT-01 active definitions](../Requirements/FEAT-01-Command-Model.md),
-[FEAT-01 planned command selection](../Requirements/Planned/FEAT-01-Command-Model.md),
+[FEAT-01 command selection](../Requirements/FEAT-01-Command-Model.md),
 and [FEAT-02](../Requirements/FEAT-02-Options-And-Arguments.md).

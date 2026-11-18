@@ -9,7 +9,7 @@ validate definitions before parsing.
 
 ## Context
 Depends on [FEAT-01](FEAT-01-Command-Model.md). Syntax belongs to
-[FEAT-03](Planned/FEAT-03-Token-Grammar.md), cardinality to
+[FEAT-03](FEAT-03-Token-Grammar.md), cardinality to
 [FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md). The approved
 schema and validation boundary are recorded in
 [ADR-003](../Architecture/ADR-003-Definition-Model.md).

@@ -8,7 +8,7 @@ Make a declarative, source-generated model and binding the primary path,
 while supporting an explicit programmatic model with equivalent semantics.
 
 ## Context
-Depends on [FEAT-01](FEAT-01-Command-Model.md),
+Depends on [FEAT-01](../FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md) and
 [FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md). See

@@ -10,8 +10,8 @@ Interpret a caller-provided argument vector without changing token boundaries.
 Depends on [FEAT-01](FEAT-01-Command-Model.md) and
 [FEAT-02](FEAT-02-Options-And-Arguments.md). The parser and conversion
 pipeline is recorded in [ADR-004](../Architecture/ADR-004-Parser-And-Conversion-Pipeline.md).
-Command selection before an inherited option is accepted remains planned
-until [FEAT-12](Planned/FEAT-12-Inherited-And-Global-Options.md) is active.
+Ancestor options are not implicitly visible; inherited and global option
+scope is owned by [FEAT-12](Planned/FEAT-12-Inherited-And-Global-Options.md).
 
 ## Requirements
 ### FEAT-03-001 - Argument vector boundary
@@ -23,6 +23,11 @@ The parser consumes caller-provided tokens without reinterpreting shell quoting 
 The parser recognizes declared aliases in space-separated and equals forms, and reports a missing required value without consuming the end marker.
 **Acceptance:** `--count=2`, `--count 2` and `-c 2` bind alike; `--count --` reports a missing value; unknown options are not silently accepted.
 **Security:** Preserve token boundaries and reject malformed input instead of guessing a value for an unrelated option.
+
+### FEAT-03-003 - Command and option ordering
+Track consumed token positions when resolving the command path and binding inputs, so equal text elsewhere is not mistaken for a command.
+**Acceptance:** For child `copy`, `copy --name copy` keeps the second `copy` as the option value; an option before a child consumes its required value only once.
+**Security:** Selection must not change based on duplicate text in a value or skip validation of an unconsumed token.
 
 ### FEAT-03-004 - Dash and end marker
 The parser treats `--` as the end of option and command recognition; subsequent tokens are positional, including dash-prefixed literals.
@@ -43,6 +48,11 @@ text cannot select another command. The parser records each consumed token's
 original index and rechecks local option ownership against the final command.
 An ancestor option is not inherited implicitly.
 
+Option values are consumed by token position. A value that happens to equal a
+child name remains a value; the parser does not skip it or search later text
+for an earlier command. Once a command is selected, subsequent equal text is
+bound according to the selected command's option and positional definitions.
+
 Required values stop before `--` and option-like tokens. A numeric definition
 may consume a negative candidate beginning with `-` and an ASCII digit, or
 `-.` followed by a digit; conversion then decides whether it is valid.
@@ -56,7 +66,9 @@ command or positional matching. Short clusters are not inferred.
 ## Verification
 Portable behavior tests are declared in
 [`CliParserTests`](../../tests/Mauve.Cli.Tests/Parsing/CliParserTests.cs):
-argument-boundary, missing-value, command-text and end-marker scenarios.
+argument-boundary, missing-value, command-text, consumed-token ordering and
+end-marker scenarios, including
+`Parse_TracksConsumedCommandAndValueTokenPositions`.
 No product test-run evidence has been recorded yet; see the
 [validation ledger](../validation-gaps.md).
 

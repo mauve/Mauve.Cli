@@ -723,6 +723,83 @@ public sealed class CliParserTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-01")]
+    [TestProperty(Metadata.Requirement, "FEAT-01-003")]
+    public void Parse_SelectsCanonicalCommandPathsAndHonorsAliasesAndPositionals()
+    {
+        CommandBuilder copy = new CommandBuilder("copy")
+            .AddAlias("cp")
+            .AddPositional(new PositionalDefinition("source", typeof(string), minimumValues: 0));
+        CommandBuilder file = new CommandBuilder("file")
+            .AddChild(copy)
+            .AddPositional(new PositionalDefinition("argument", typeof(string)));
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddChild(file));
+        CliParser parser = new();
+
+        ParseResult aliased = parser.Parse(model, ["file", "cp", "cp"]);
+        ParseResult positionalTypo = parser.Parse(model, ["file", "cpoy"]);
+        ParseResult unknownChild = parser.Parse(
+            CommandModel.Create(new CommandBuilder("tool").AddChild(new CommandBuilder("copy"))),
+            ["missing"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, aliased.Outcome);
+        CollectionAssert.AreEqual(
+            new[] { "tool", "file", "copy" },
+            aliased.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.IsTrue(aliased.TryGetPositionalValue(
+            aliased.SelectedCommand!,
+            aliased.SelectedCommand!.Positionals[0],
+            out string? source));
+        Assert.AreEqual("cp", source);
+        Assert.AreEqual(ParseOutcome.Validated, positionalTypo.Outcome);
+        CollectionAssert.AreEqual(
+            new[] { "tool", "file" },
+            positionalTypo.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreEqual(ParseDiagnosticCode.UnknownCommand, unknownChild.Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-03")]
+    [TestProperty(Metadata.Requirement, "FEAT-03-003")]
+    public void Parse_TracksConsumedCommandAndValueTokenPositions()
+    {
+        CommandBuilder copy = new CommandBuilder("copy")
+            .AddOption(new OptionDefinition("--name", typeof(string), OptionArity.RequiredScalar))
+            .AddPositional(new PositionalDefinition(
+                "paths",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string)));
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddChild(copy));
+        ParseResult selected = new CliParser().Parse(model, ["copy", "--name", "copy", "copy"]);
+
+        CommandBuilder rootWithOption = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--name", typeof(string), OptionArity.RequiredScalar))
+            .AddChild(new CommandBuilder("copy"));
+        ParseResult optionBeforeChild = new CliParser().Parse(
+            CommandModel.Create(rootWithOption),
+            ["--name", "copy", "copy"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, selected.Outcome);
+        Assert.IsTrue(selected.TryGetOptionValue(
+            selected.SelectedCommand!,
+            selected.SelectedCommand!.Options[0],
+            out string? name));
+        Assert.AreEqual("copy", name);
+        Assert.IsTrue(selected.TryGetPositionalValue(
+            selected.SelectedCommand,
+            selected.SelectedCommand.Positionals[0],
+            out IReadOnlyList<string>? paths));
+        CollectionAssert.AreEqual(new[] { "copy" }, paths!.ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "tool", "copy" },
+            optionBeforeChild.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreEqual(ParseDiagnosticCode.OptionOutOfScope, optionBeforeChild.Diagnostics[0].Code);
+        Assert.AreEqual(0, optionBeforeChild.Diagnostics[0].TokenIndex);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-004")]
     public void Parse_HelpBypassesConversionAndRequirednessButNotStructuralErrors()

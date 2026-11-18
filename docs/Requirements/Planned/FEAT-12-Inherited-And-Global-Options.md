@@ -8,9 +8,9 @@ Expose explicitly scoped parent or global options to descendant commands,
 with deterministic visibility and conflict handling.
 
 ## Context
-Depends on [FEAT-01](FEAT-01-Command-Model.md),
+Depends on [FEAT-01](../FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md) and
-[FEAT-03](FEAT-03-Token-Grammar.md). Evidence:
+[FEAT-03](../FEAT-03-Token-Grammar.md). Evidence:
 `../maz/Console/Cli/CommandDef.cs`,
 `../maz/Console/Cli/Shared/GlobalBehaviorOptionPack.cs`, and
 `../maz/specs/CLI Parser Specification.md`. Pack composition is separate:
