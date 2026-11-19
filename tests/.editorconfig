@@ -69,3 +69,12 @@ dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 dotnet_naming_style.private_field_style.required_prefix = _
 dotnet_naming_style.private_field_style.capitalization = camel_case
+
+# MSTEST0049: Flow TestContext.CancellationToken to async operations
+dotnet_diagnostic.MSTEST0049.severity = error
+
+# MSTEST0037: Use proper 'Assert' methods
+dotnet_diagnostic.MSTEST0037.severity = error
+
+# MSTEST0068: Use 'Assert' instead of 'CollectionAssert'
+dotnet_diagnostic.MSTEST0068.severity = error

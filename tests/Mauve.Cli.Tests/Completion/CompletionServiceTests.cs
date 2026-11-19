@@ -15,6 +15,8 @@ namespace Mauve.Cli.Tests.Completion;
 [TestClass]
 public sealed class CompletionServiceTests
 {
+    public required TestContext TestContext { get; set; }
+
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-001")]
@@ -29,9 +31,9 @@ public sealed class CompletionServiceTests
         CompletionService service = new();
 
         CompletionResult commands = await service.CompleteAsync(
-            new CompletionRequest(model, ["fi"], 0, 2)).ConfigureAwait(false);
+            new CompletionRequest(model, ["fi"], 0, 2), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult options = await service.CompleteAsync(
-            new CompletionRequest(model, ["--mode=fast"], 0, 4)).ConfigureAwait(false);
+            new CompletionRequest(model, ["--mode=fast"], 0, 4), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CompletionOutcome.Completed, commands.Outcome);
         Assert.AreEqual("file", commands.Candidates.Single().InsertionText);
@@ -63,9 +65,9 @@ public sealed class CompletionServiceTests
         CompletionService service = new();
 
         CompletionResult omitted = await service.CompleteAsync(
-            new CompletionRequest(model, ["--o"], 0, 3)).ConfigureAwait(false);
+            new CompletionRequest(model, ["--o"], 0, 3), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult empty = await service.CompleteAsync(
-            new CompletionRequest(model, ["--e"], 0, 3)).ConfigureAwait(false);
+            new CompletionRequest(model, ["--e"], 0, 3), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(omitted.Candidates.Single().Description);
         Assert.AreEqual(string.Empty, empty.Candidates.Single().Description);
@@ -96,10 +98,10 @@ public sealed class CompletionServiceTests
                 ["--tenant=acme", "--region=west", active],
                 2,
                 active.IndexOf("al", StringComparison.Ordinal) + 1),
-            providers).ConfigureAwait(false);
+            providers, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CompletionOutcome.Completed, result.Outcome);
-        Assert.AreEqual(1, result.Candidates.Count);
+        Assert.HasCount(1, result.Candidates);
         Assert.AreEqual("alpha item", result.Candidates[0].InsertionText);
         Assert.AreEqual("tenant:acme;region:unavailable", result.Candidates[0].Description);
         Assert.AreEqual("--resource=".Length, result.Candidates[0].ReplacementStart);
@@ -133,10 +135,10 @@ public sealed class CompletionServiceTests
             new CompletionRequest(model, ["--count", "-3"], 1, 2),
             new CompletionProviderRegistryBuilder()
                 .Register(count, static (_, _) => SingleValue("-3"))
-                .Build()).ConfigureAwait(false);
+                .Build(), TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult negated = await service.CompleteAsync(
             new CompletionRequest(model, ["--no-verbose", "--target="], 1, "--target=".Length),
-            providers).ConfigureAwait(false);
+            providers, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual("-3", numeric.Candidates.Single().InsertionText);
         Assert.AreEqual("False", negated.Candidates.Single().InsertionText);
@@ -157,15 +159,14 @@ public sealed class CompletionServiceTests
             .Build();
         string active = "--mode=pr";
         CompletionResult result = await new CompletionService(converters).CompleteAsync(
-            new CompletionRequest(model, [active], 0, active.Length)).ConfigureAwait(false);
+            new CompletionRequest(model, [active], 0, active.Length), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult ordered = await new CompletionService(converters).CompleteAsync(
-            new CompletionRequest(model, ["--mode="], 0, "--mode=".Length)).ConfigureAwait(false);
+            new CompletionRequest(model, ["--mode="], 0, "--mode=".Length), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CompletionOutcome.Completed, result.Outcome);
         Assert.AreEqual("pretty", result.Candidates.Single().InsertionText);
-        CollectionAssert.AreEqual(
-            new[] { "plain", "pretty" },
-            ordered.Candidates.Select(static candidate => candidate.InsertionText).ToArray());
+        Assert.AreSequenceEqual(
+            ["plain", "pretty"], [.. ordered.Candidates.Select(static candidate => candidate.InsertionText)]);
     }
 
     [TestMethod]
@@ -201,13 +202,13 @@ public sealed class CompletionServiceTests
         CompletionService service = new();
 
         CompletionResult requiredPending = await service.CompleteAsync(
-            new CompletionRequest(model, ["--required", "req"], 1, 3), providers).ConfigureAwait(false);
+            new CompletionRequest(model, ["--required", "req"], 1, 3), providers, TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult optionalBare = await service.CompleteAsync(
-            new CompletionRequest(model, ["--filter", "x"], 1, 1), providers).ConfigureAwait(false);
+            new CompletionRequest(model, ["--filter", "x"], 1, 1), providers, TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult boolean = await service.CompleteAsync(
-            new CompletionRequest(model, ["--verbose", "tr"], 1, 2), providers).ConfigureAwait(false);
+            new CompletionRequest(model, ["--verbose", "tr"], 1, 2), providers, TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult positional = await service.CompleteAsync(
-            new CompletionRequest(model, ["--", "-na"], 1, 3), providers).ConfigureAwait(false);
+            new CompletionRequest(model, ["--", "-na"], 1, 3), providers, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual("required-value", requiredPending.Candidates.Single().InsertionText);
         Assert.AreEqual(CompletionOutcome.Completed, optionalBare.Outcome);
@@ -236,9 +237,9 @@ public sealed class CompletionServiceTests
         string active = "--target=";
 
         CompletionResult failed = await service.CompleteAsync(
-            new CompletionRequest(model, [active], 0, active.Length), failing).ConfigureAwait(false);
+            new CompletionRequest(model, [active], 0, active.Length), failing, TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult limited = await service.CompleteAsync(
-            new CompletionRequest(model, [active], 0, active.Length), excessive).ConfigureAwait(false);
+            new CompletionRequest(model, [active], 0, active.Length), excessive, TestContext.CancellationToken).ConfigureAwait(false);
         OptionDefinition longDescription = new(
             "--large",
             typeof(bool),
@@ -247,16 +248,16 @@ public sealed class CompletionServiceTests
         CommandModel oversizedModel = CommandModel.Create(
             new CommandBuilder("tool").AddOption(longDescription));
         CompletionResult oversized = await service.CompleteAsync(
-            new CompletionRequest(oversizedModel, ["--la"], 0, 4)).ConfigureAwait(false);
+            new CompletionRequest(oversizedModel, ["--la"], 0, 4), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CompletionOutcome.ProviderFailed, failed.Outcome);
         Assert.IsFalse(failed.IsComplete);
-        Assert.AreEqual(1, failed.Candidates.Count);
+        Assert.HasCount(1, failed.Candidates);
         Assert.AreEqual(CompletionOutcome.LimitReached, limited.Outcome);
-        Assert.AreEqual(128, limited.Candidates.Count);
+        Assert.HasCount(128, limited.Candidates);
         Assert.IsFalse(limited.IsComplete);
         Assert.AreEqual(CompletionOutcome.LimitReached, oversized.Outcome);
-        Assert.AreEqual(0, oversized.Candidates.Count);
+        Assert.IsEmpty(oversized.Candidates);
         Assert.IsFalse(oversized.IsComplete);
     }
 
@@ -291,7 +292,7 @@ public sealed class CompletionServiceTests
             preCancellation.Token).ConfigureAwait(false);
         CompletionService service = new();
         CompletionResult malformed = await service.CompleteAsync(
-            new CompletionRequest(model, ["--unknown", string.Empty], 1, 0)).ConfigureAwait(false);
+            new CompletionRequest(model, ["--unknown", string.Empty], 1, 0), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         ConverterRegistry enumConverters = new ConverterRegistryBuilder()
             .RegisterEnum([
                 new KeyValuePair<string, Format>("plain", Format.Plain),
@@ -299,10 +300,10 @@ public sealed class CompletionServiceTests
             ])
             .Build();
         CompletionResult secretValues = await new CompletionService(enumConverters).CompleteAsync(
-            new CompletionRequest(model, ["--secret=pr"], 0, "--secret=pr".Length)).ConfigureAwait(false);
+            new CompletionRequest(model, ["--secret=pr"], 0, "--secret=pr".Length), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         CompletionResult unsupportedShell = await CompletionService.CompleteForShellAsync(
             "bash",
-            new CompletionRequest(model, [], 0, 0)).ConfigureAwait(false);
+            new CompletionRequest(model, [], 0, 0), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CompletionOutcome.Cancelled, cancelled.Outcome);
         Assert.AreEqual(CompletionOutcome.Cancelled, preCancelled.Outcome);
@@ -310,7 +311,7 @@ public sealed class CompletionServiceTests
         Assert.AreEqual(CompletionOutcome.ContextFailed, malformed.Outcome);
         Assert.IsFalse(malformed.IsComplete);
         Assert.AreEqual(CompletionOutcome.Completed, secretValues.Outcome);
-        Assert.AreEqual(0, secretValues.Candidates.Count);
+        Assert.IsEmpty(secretValues.Candidates);
         Assert.AreEqual(CompletionOutcome.UnsupportedShell, unsupportedShell.Outcome);
         _ = Assert.Throws<ArgumentException>(() =>
             new CompletionProviderRegistryBuilder().Register(

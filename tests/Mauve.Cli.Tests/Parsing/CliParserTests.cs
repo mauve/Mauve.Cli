@@ -30,8 +30,8 @@ public sealed class CliParserTests
             model.Root,
             model.Root.Positionals[0],
             out IReadOnlyList<string>? paths));
-        CollectionAssert.AreEqual(new[] { "-file", "a b", string.Empty }, paths!.ToArray());
-        Assert.AreEqual(arguments.Length, result.Arguments.Count);
+        Assert.AreSequenceEqual(["-file", "a b", string.Empty], [.. paths!]);
+        Assert.HasCount(arguments.Length, result.Arguments);
     }
 
     [TestMethod]
@@ -53,8 +53,8 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseOutcome.Invalid, result.Outcome);
         Assert.AreEqual(ParseDiagnosticCode.MissingValue, result.Diagnostics[0].Code);
         Assert.AreEqual(0, result.Diagnostics[0].TokenIndex);
-        Assert.AreEqual(0, result.Values.Count);
-        Assert.AreEqual(0, result.UnmatchedTokens.Count);
+        Assert.IsEmpty(result.Values);
+        Assert.IsEmpty(result.UnmatchedTokens);
     }
 
     [TestMethod]
@@ -72,7 +72,7 @@ public sealed class CliParserTests
             model.Root,
             model.Root.Positionals[0],
             out IReadOnlyList<string>? paths));
-        CollectionAssert.AreEqual(new[] { "-file" }, paths!.ToArray());
+        Assert.AreSequenceEqual(["-file"], [.. paths!]);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknown.Diagnostics[0].Code);
     }
 
@@ -166,7 +166,7 @@ public sealed class CliParserTests
         ParseResult result = new CliParser(converters).Parse(model, ["--second=Write", "--first=Read"]);
 
         Assert.AreEqual(ParseOutcome.Validated, result.Outcome);
-        CollectionAssert.AreEqual(new[] { "Write", "Read" }, callOrder);
+        Assert.AreSequenceEqual(["Write", "Read"], callOrder);
     }
 
     [TestMethod]
@@ -185,7 +185,7 @@ public sealed class CliParserTests
         Assert.AreEqual(0, result.Diagnostics[0].ValueTokenIndex);
         Assert.AreEqual(8, result.Diagnostics[0].ValueOffset);
         Assert.IsFalse(result.Diagnostics[0].Message.Contains("2147483648", StringComparison.Ordinal));
-        Assert.AreEqual(0, result.Values.Count);
+        Assert.IsEmpty(result.Values);
     }
 
     [TestMethod]
@@ -287,7 +287,7 @@ public sealed class CliParserTests
             model.Root,
             model.Root.Options[0],
             out IReadOnlyList<string>? tags));
-        CollectionAssert.AreEqual(new[] { "a", "b" }, tags!.ToArray());
+        Assert.AreSequenceEqual(["a", "b"], [.. tags!]);
         IList<string> readOnlyTags = (IList<string>)tags!;
         Assert.IsTrue(readOnlyTags.IsReadOnly);
         Assert.ThrowsExactly<NotSupportedException>(() => readOnlyTags[0] = "changed");
@@ -320,12 +320,12 @@ public sealed class CliParserTests
             model.Root,
             model.Root.Options[0],
             out IReadOnlyList<string>? tags));
-        CollectionAssert.AreEqual(new[] { "a", "b" }, tags!.ToArray());
+        Assert.AreSequenceEqual(["a", "b"], [.. tags!]);
         Assert.IsTrue(values.TryGetPositionalValue(
             model.Root,
             model.Root.Positionals[0],
             out IReadOnlyList<string>? paths));
-        CollectionAssert.AreEqual(new[] { "-file" }, paths!.ToArray());
+        Assert.AreSequenceEqual(["-file"], [.. paths!]);
         Assert.AreEqual(ParseDiagnosticCode.MissingValue, missing.Diagnostics[0].Code);
     }
 
@@ -343,7 +343,7 @@ public sealed class CliParserTests
             model.Root,
             model.Root.Positionals[0],
             out IReadOnlyList<string>? paths));
-        CollectionAssert.AreEqual(new[] { "a", "-b", "c" }, paths!.ToArray());
+        Assert.AreSequenceEqual(["a", "-b", "c"], [.. paths!]);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, cluster.Diagnostics[0].Code);
     }
 
@@ -625,7 +625,7 @@ public sealed class CliParserTests
 
         Assert.AreEqual(ParseOutcome.Invalid, result.Outcome);
         Assert.AreEqual(ParseDiagnosticCode.InvalidModel, result.Diagnostics[0].Code);
-        Assert.AreEqual(0, result.SelectedPath.Count);
+        Assert.IsEmpty(result.SelectedPath);
         Assert.IsNull(result.Diagnostics[0].TokenIndex);
         Assert.AreEqual("--date", result.Diagnostics[0].DefinitionName);
     }
@@ -641,7 +641,7 @@ public sealed class CliParserTests
         ParseResult tooManyArguments = new CliParser().Parse(countLimitedModel, ["one", "two"]);
         Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, tooManyArguments.Diagnostics[0].Code);
         Assert.AreEqual(1, tooManyArguments.Diagnostics[0].TokenIndex);
-        Assert.AreEqual(0, tooManyArguments.SelectedPath.Count);
+        Assert.IsEmpty(tooManyArguments.SelectedPath);
 
         CommandModel tokenLimitedModel = CommandModel.Create(
             new CommandBuilder("tool"),
@@ -661,7 +661,7 @@ public sealed class CliParserTests
             new CommandBuilder("tool"),
             new CliLimits(maximumDiagnostics: 2));
         ParseResult manyErrors = new CliParser().Parse(diagnosticLimitedModel, ["--bad", "--worse", "--worst"]);
-        Assert.AreEqual(2, manyErrors.Diagnostics.Count);
+        Assert.HasCount(2, manyErrors.Diagnostics);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, manyErrors.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.DiagnosticLimitExceeded, manyErrors.Diagnostics[1].Code);
     }
@@ -704,10 +704,10 @@ public sealed class CliParserTests
         string longName = string.Concat("--", new string('x', 130));
         ParseResult overlongTypo = new CliParser().Parse(CommandModel.Create(root), [longName]);
 
-        CollectionAssert.AreEqual(new[] { "copy" }, commandTypo.Diagnostics[0].Suggestions.ToArray());
-        CollectionAssert.AreEqual(new[] { "--output" }, optionTypo.Diagnostics[0].Suggestions.ToArray());
-        Assert.AreEqual(0, hiddenTypo.Diagnostics[0].Suggestions.Count);
-        Assert.AreEqual(0, overlongTypo.Diagnostics[0].Suggestions.Count);
+        Assert.AreSequenceEqual(["copy"], [.. commandTypo.Diagnostics[0].Suggestions]);
+        Assert.AreSequenceEqual(["--output"], [.. optionTypo.Diagnostics[0].Suggestions]);
+        Assert.IsEmpty(hiddenTypo.Diagnostics[0].Suggestions);
+        Assert.IsEmpty(overlongTypo.Diagnostics[0].Suggestions);
 
         CommandBuilder options = new("tool");
         for (int index = 0; index < 8; index++)
@@ -719,7 +719,7 @@ public sealed class CliParserTests
         }
 
         ParseResult bounded = new CliParser().Parse(CommandModel.Create(options), ["--option-"]);
-        Assert.AreEqual(5, bounded.Diagnostics[0].Suggestions.Count);
+        Assert.HasCount(5, bounded.Diagnostics[0].Suggestions);
     }
 
     [TestMethod]
@@ -743,18 +743,16 @@ public sealed class CliParserTests
             ["missing"]);
 
         Assert.AreEqual(ParseOutcome.Validated, aliased.Outcome);
-        CollectionAssert.AreEqual(
-            new[] { "tool", "file", "copy" },
-            aliased.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["tool", "file", "copy"], [.. aliased.SelectedPath.Select(static command => command.Name)]);
         Assert.IsTrue(aliased.TryGetPositionalValue(
             aliased.SelectedCommand!,
             aliased.SelectedCommand!.Positionals[0],
             out string? source));
         Assert.AreEqual("cp", source);
         Assert.AreEqual(ParseOutcome.Validated, positionalTypo.Outcome);
-        CollectionAssert.AreEqual(
-            new[] { "tool", "file" },
-            positionalTypo.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["tool", "file"], [.. positionalTypo.SelectedPath.Select(static command => command.Name)]);
         Assert.AreEqual(ParseDiagnosticCode.UnknownCommand, unknownChild.Diagnostics[0].Code);
     }
 
@@ -791,10 +789,9 @@ public sealed class CliParserTests
             selected.SelectedCommand,
             selected.SelectedCommand.Positionals[0],
             out IReadOnlyList<string>? paths));
-        CollectionAssert.AreEqual(new[] { "copy" }, paths!.ToArray());
-        CollectionAssert.AreEqual(
-            new[] { "tool", "copy" },
-            optionBeforeChild.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreSequenceEqual(["copy"], [.. paths!]);
+        Assert.AreSequenceEqual(
+            ["tool", "copy"], [.. optionBeforeChild.SelectedPath.Select(static command => command.Name)]);
         Assert.AreEqual(ParseDiagnosticCode.OptionOutOfScope, optionBeforeChild.Diagnostics[0].Code);
         Assert.AreEqual(0, optionBeforeChild.Diagnostics[0].TokenIndex);
     }
@@ -859,9 +856,8 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, localAfterChild.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, localBeforeChild.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.OptionOutOfScope, ownerLocalBeforeDescendant.Diagnostics[0].Code);
-        CollectionAssert.AreEqual(
-            new[] { "tool", "file", "copy" },
-            ownerLocalBeforeDescendant.SelectedPath.Select(static command => command.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["tool", "file", "copy"], [.. ownerLocalBeforeDescendant.SelectedPath.Select(static command => command.Name)]);
     }
 
     [TestMethod]
@@ -960,8 +956,8 @@ public sealed class CliParserTests
         ParseResult unknownCommand = parser.Parse(model, ["missing", "--help"]);
 
         Assert.AreEqual(ParseOutcome.HelpRequested, help.Outcome);
-        CollectionAssert.AreEqual(new[] { "tool", "copy" }, help.SelectedPath.Select(static command => command.Name).ToArray());
-        Assert.AreEqual(0, help.Values.Count);
+        Assert.AreSequenceEqual(["tool", "copy"], [.. help.SelectedPath.Select(static command => command.Name)]);
+        Assert.IsEmpty(help.Values);
         Assert.AreEqual(0, converterCalls);
         Assert.AreEqual(0, validatorCalls);
         Assert.AreEqual(0, crossValidatorCalls);
@@ -988,7 +984,7 @@ public sealed class CliParserTests
             positionalModel.Root,
             positionalModel.Root.Positionals[0],
             out IReadOnlyList<string>? paths));
-        CollectionAssert.AreEqual(new[] { "--help" }, paths!.ToArray());
+        Assert.AreSequenceEqual(["--help"], [.. paths!]);
     }
 
     private static CommandModel CreateLeafModel()

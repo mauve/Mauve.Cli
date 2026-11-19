@@ -12,6 +12,8 @@ namespace Mauve.Cli.Tests.Definitions;
 [TestClass]
 public sealed class OptionPackTests
 {
+    public required TestContext TestContext { get; set; }
+
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-004")]
@@ -34,7 +36,7 @@ public sealed class OptionPackTests
                     return 0;
                 }));
 
-        InvocationResult result = await new CliInvoker().InvokeAsync(model, []).ConfigureAwait(false);
+        InvocationResult result = await new CliInvoker().InvokeAsync(model, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
     }
@@ -68,7 +70,7 @@ public sealed class OptionPackTests
         HelpDocument help = HelpDocument.Create(model);
         InvocationResult result = await new CliInvoker().InvokeAsync(
             model,
-            ["--endpoint=https://example.test", "--retries=2"]).ConfigureAwait(false);
+            ["--endpoint=https://example.test", "--retries=2"], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual("Retry", help.OptionGroups[0].Title);
         Assert.AreEqual("Network", help.OptionGroups[1].Title);
@@ -164,8 +166,8 @@ public sealed class OptionPackTests
                 }));
         CliInvoker invoker = new();
 
-        Task<InvocationResult> first = invoker.InvokeAsync(model, ["--value=2"]).AsTask();
-        Task<InvocationResult> second = invoker.InvokeAsync(model, ["--value=5"]).AsTask();
+        Task<InvocationResult> first = invoker.InvokeAsync(model, ["--value=2"], TestContext.CancellationToken).AsTask();
+        Task<InvocationResult> second = invoker.InvokeAsync(model, ["--value=5"], TestContext.CancellationToken).AsTask();
         _ = await Task.WhenAll(first, second).ConfigureAwait(false);
 
         InvocationResult firstResult = await first.ConfigureAwait(false);

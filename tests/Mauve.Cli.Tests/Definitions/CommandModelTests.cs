@@ -36,15 +36,15 @@ public sealed class CommandModelTests
 
         Assert.AreEqual("Mauve.Cli", model.Root.Name);
         Assert.AreEqual("Root command", model.Root.Description);
-        Assert.AreEqual(2, model.Root.Children.Count);
+        Assert.HasCount(2, model.Root.Children);
         Assert.AreEqual("file", model.Root.Children[0].Name);
         Assert.AreEqual("list", model.Root.Children[1].Name);
         Assert.AreEqual("Copy a file", model.Root.Children[0].Children[0].LongDescription);
-        CollectionAssert.AreEqual(new[] { "Mauve.Cli", "file", "copy" }, model.Root.Children[0].Children[0].Path.ToArray());
-        CollectionAssert.AreEqual(new[] { "cp" }, model.Root.Children[0].Children[0].Aliases.ToArray());
+        Assert.AreSequenceEqual(["Mauve.Cli", "file", "copy"], [.. model.Root.Children[0].Children[0].Path]);
+        Assert.AreSequenceEqual(["cp"], [.. model.Root.Children[0].Children[0].Aliases]);
 
         root.AddChild(new CommandBuilder("later"));
-        Assert.AreEqual(2, model.Root.Children.Count);
+        Assert.HasCount(2, model.Root.Children);
     }
 
     [TestMethod]
@@ -54,7 +54,7 @@ public sealed class CommandModelTests
     {
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
 
-        Assert.AreEqual(0, model.Root.Children.Count);
+        Assert.IsEmpty(model.Root.Children);
     }
 
     [TestMethod]
@@ -94,7 +94,7 @@ public sealed class CommandModelTests
                 .AddOption(new OptionDefinition("--format", typeof(string), OptionArity.RequiredScalar)))
             .AddChild(new CommandBuilder("move")
                 .AddOption(new OptionDefinition("--format", typeof(string), OptionArity.RequiredScalar)));
-        Assert.AreEqual(2, CommandModel.Create(disjoint).Root.Children.Count);
+        Assert.HasCount(2, CommandModel.Create(disjoint).Root.Children);
     }
 
     [TestMethod]
@@ -105,7 +105,7 @@ public sealed class CommandModelTests
         CommandBuilder distinctBranches = new CommandBuilder("tool")
             .AddChild(new CommandBuilder("first").AddChild(new CommandBuilder("read")))
             .AddChild(new CommandBuilder("second").AddChild(new CommandBuilder("read")));
-        Assert.AreEqual(2, CommandModel.Create(distinctBranches).Root.Children.Count);
+        Assert.HasCount(2, CommandModel.Create(distinctBranches).Root.Children);
     }
 
     [TestMethod]
@@ -220,9 +220,8 @@ public sealed class CommandModelTests
 
         CommandDefinition definition = CommandModel.Create(root).Root;
 
-        CollectionAssert.AreEqual(
-            new[] { "source", "destination" },
-            definition.Positionals.Select(static positional => positional.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["source", "destination"], [.. definition.Positionals.Select(static positional => positional.Name)]);
     }
 
     [TestMethod]
@@ -256,7 +255,7 @@ public sealed class CommandModelTests
             .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar))
             .AddOption(new OptionDefinition("--Output", typeof(string), OptionArity.RequiredScalar));
 
-        Assert.AreEqual(2, CommandModel.Create(distinctCase).Root.Options.Count);
+        Assert.HasCount(2, CommandModel.Create(distinctCase).Root.Options);
     }
 
     [TestMethod]
@@ -275,7 +274,7 @@ public sealed class CommandModelTests
                 OptionArity.OptionalScalar,
                 allowsNull: true,
                 bareValuePolicy: BareValuePolicy.Null));
-        Assert.AreEqual(1, CommandModel.Create(nullableOption).Root.Options.Count);
+        Assert.HasCount(1, CommandModel.Create(nullableOption).Root.Options);
 
         CommandBuilder invalidFlag = new CommandBuilder("tool")
             .AddOption(new OptionDefinition("--verbose", typeof(string), OptionArity.BooleanFlag));
@@ -292,7 +291,7 @@ public sealed class CommandModelTests
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(invalidRest));
         CommandBuilder validRest = new CommandBuilder("tool")
             .AddPositional(new PositionalDefinition("paths", typeof(IReadOnlyList<string>), maximumValues: null, elementType: typeof(string)));
-        Assert.AreEqual(1, CommandModel.Create(validRest).Root.Positionals.Count);
+        Assert.HasCount(1, CommandModel.Create(validRest).Root.Positionals);
 
         CommandBuilder invalidCollection = new CommandBuilder("tool")
             .AddOption(new OptionDefinition(

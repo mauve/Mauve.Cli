@@ -50,9 +50,9 @@ public sealed class HelpDocumentTests
         string renderedLeaf = HelpTextRenderer.Render(leafHelp);
 
         Assert.AreEqual("tool", rootHelp.Usage);
-        Assert.AreEqual(1, rootHelp.Children.Count);
+        Assert.HasCount(1, rootHelp.Children);
         Assert.AreEqual("copy", rootHelp.Children[0].Name);
-        CollectionAssert.AreEqual(new[] { "cp" }, rootHelp.Children[0].Aliases.ToArray());
+        Assert.AreSequenceEqual(["cp"], [.. rootHelp.Children[0].Aliases]);
         Assert.AreEqual("tool copy [OPTIONS] <source> [destination]", leafHelp.Usage);
         Assert.AreEqual("@ungrouped", leafHelp.OptionGroups[0].Key);
         Assert.IsTrue(renderedLeaf.Contains("--count", StringComparison.Ordinal));
@@ -94,10 +94,10 @@ public sealed class HelpDocumentTests
             .AddChild(leaf));
         HelpDocument help = HelpDocument.Create(model, model.Root.Children[0]);
 
-        Assert.AreEqual(2, help.OptionGroups.Count);
+        Assert.HasCount(2, help.OptionGroups);
         Assert.AreEqual("Local", help.OptionGroups[0].Title);
         Assert.AreEqual("Global", help.OptionGroups[1].Title);
-        CollectionAssert.AreEqual(new[] { "tool" }, help.OptionGroups[1].OwnerPath.ToArray());
+        Assert.AreSequenceEqual(["tool"], [.. help.OptionGroups[1].OwnerPath]);
         Assert.AreEqual(
             "--verbose",
             help.OptionGroups.SelectMany(static group => group.Options)
@@ -208,12 +208,11 @@ public sealed class HelpDocumentTests
         Assert.AreEqual("--first;width=48;groups=2", written[0]);
         Assert.AreEqual("first", document.OptionGroups[0].Key);
         Assert.AreEqual("second", document.OptionGroups[1].Key);
-        Assert.AreEqual(2, document.OptionGroups[0].Options.Count);
-        CollectionAssert.AreEqual(new[] { "tool" }, document.OptionGroups[0].OwnerPath.ToArray());
+        Assert.HasCount(2, document.OptionGroups[0].Options);
+        Assert.AreSequenceEqual(["tool"], [.. document.OptionGroups[0].OwnerPath]);
         string rendered = HelpTextRenderer.Render(document, 48);
         Assert.IsTrue(rendered.Split('\n').All(static line => line.Length <= 48));
-        Assert.IsTrue(rendered.IndexOf("First group:", StringComparison.Ordinal)
-            < rendered.IndexOf("Second group:", StringComparison.Ordinal));
+        Assert.IsLessThan(rendered.IndexOf("Second group:", StringComparison.Ordinal), rendered.IndexOf("First group:", StringComparison.Ordinal));
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             HelpOutput.Write(document, static _ => throw new InvalidOperationException("sink fault")));
 

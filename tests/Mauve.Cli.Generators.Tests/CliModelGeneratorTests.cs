@@ -48,6 +48,8 @@ public sealed class CliModelGeneratorTests
         }
         """;
 
+    public required TestContext TestContext { get; set; }
+
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
@@ -62,7 +64,7 @@ public sealed class CliModelGeneratorTests
         CommandModel generatedModel = (CommandModel)rootType.GetMethod("CreateModel")!
             .Invoke(null, [null, false])!;
         InvocationResult generatedResult = await new CliInvoker()
-            .InvokeAsync(generatedModel, ["c", "--count=3", "file.txt"])
+            .InvokeAsync(generatedModel, ["c", "--count=3", "file.txt"], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         OptionDefinition count = new("--count", typeof(int), OptionArity.RequiredScalar, isRequired: true);
@@ -80,7 +82,7 @@ public sealed class CliModelGeneratorTests
                         return value + path!.Length;
                     })));
         InvocationResult explicitResult = await new CliInvoker()
-            .InvokeAsync(explicitModel, ["c", "--count=3", "file.txt"])
+            .InvokeAsync(explicitModel, ["c", "--count=3", "file.txt"], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(InvocationOutcome.Completed, generatedResult.Outcome);
@@ -97,23 +99,23 @@ public sealed class CliModelGeneratorTests
     {
         GeneratorDriver driver = CreateDriver();
         CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
-        SyntaxTree firstTree = CSharpSyntaxTree.ParseText(_validDeclaration, parseOptions);
+        SyntaxTree firstTree = CSharpSyntaxTree.ParseText(_validDeclaration, parseOptions, cancellationToken: TestContext.CancellationToken);
         CSharpCompilation firstInput = CreateCompilation(firstTree);
-        driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _);
+        driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _, TestContext.CancellationToken);
         string[] initialSources = GetGeneratedSources(driver);
 
-        driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _);
-        CollectionAssert.AreEqual(initialSources, GetGeneratedSources(driver));
+        driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _, TestContext.CancellationToken);
+        Assert.AreSequenceEqual(initialSources, GetGeneratedSources(driver));
 
         string changedDeclaration = _validDeclaration.Replace(
             "Aliases = [\"c\"]",
             "Aliases = [\"duplicate\"]",
             StringComparison.Ordinal);
-        CSharpCompilation changedInput = CreateCompilation(CSharpSyntaxTree.ParseText(changedDeclaration, parseOptions));
-        driver = driver.RunGeneratorsAndUpdateCompilation(changedInput, out Compilation changedOutput, out ImmutableArray<Diagnostic> diagnostics);
+        CSharpCompilation changedInput = CreateCompilation(CSharpSyntaxTree.ParseText(changedDeclaration, parseOptions, cancellationToken: TestContext.CancellationToken));
+        driver = driver.RunGeneratorsAndUpdateCompilation(changedInput, out Compilation changedOutput, out ImmutableArray<Diagnostic> diagnostics, TestContext.CancellationToken);
         Assert.IsFalse(diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
-        Assert.IsFalse(changedOutput.GetDiagnostics().Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
-        Assert.IsTrue(GetGeneratedSources(driver).Any(static source => source.Contains("duplicate", StringComparison.Ordinal)));
+        Assert.IsFalse(changedOutput.GetDiagnostics(TestContext.CancellationToken).Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.Contains(static source => source.Contains("duplicate", StringComparison.Ordinal), GetGeneratedSources(driver));
         Assert.AreNotEqual(
             string.Join(Environment.NewLine, initialSources),
             string.Join(Environment.NewLine, GetGeneratedSources(driver)));
@@ -167,19 +169,16 @@ public sealed class CliModelGeneratorTests
         CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
 
         Assert.AreEqual("upload-files", model.Root.Name);
-        CollectionAssert.AreEqual(
-            new[] { "http-server", "version2" },
-            model.Root.Children.Select(static child => child.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["http-server", "version2"], [.. model.Root.Children.Select(static child => child.Name)]);
         Assert.AreEqual(string.Empty, model.Root.Children[0].Description);
         Assert.IsNull(model.Root.Children[1].Description);
-        CollectionAssert.AreEqual(
-            new[] { "--item-ids", "--dry-run" },
-            model.Root.Options.Select(static option => option.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["--item-ids", "--dry-run"], [.. model.Root.Options.Select(static option => option.Name)]);
         Assert.AreEqual(OptionArity.GreedyCollection, model.Root.Options[0].Arity);
         Assert.AreEqual(OptionArity.BooleanFlag, model.Root.Options[1].Arity);
-        CollectionAssert.AreEqual(
-            new[] { "input-file", "extra-paths" },
-            model.Root.Positionals.Select(static positional => positional.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["input-file", "extra-paths"], [.. model.Root.Positionals.Select(static positional => positional.Name)]);
         Assert.IsNull(model.Root.Positionals[1].MaximumValues);
         Assert.AreEqual(0, model.Root.Positionals[1].MinimumValues);
 
@@ -191,7 +190,7 @@ public sealed class CliModelGeneratorTests
             model.Root,
             model.Root.Options[0],
             out IReadOnlyList<int>? itemIds));
-        CollectionAssert.AreEqual(new[] { 1, 2, 3, 4 }, itemIds!.ToArray());
+        Assert.AreSequenceEqual([1, 2, 3, 4], [.. itemIds!]);
     }
 
     [TestMethod]
@@ -232,9 +231,8 @@ public sealed class CliModelGeneratorTests
         Type rootType = fixture.GetType("PartialOrderFixture.RootCommand", throwOnError: true)!;
         CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
 
-        CollectionAssert.AreEqual(
-            new[] { "--first-tree-first", "--first-tree-second", "--second-tree" },
-            model.Root.Options.Select(static option => option.Name).ToArray());
+        Assert.AreSequenceEqual(
+            ["--first-tree-first", "--first-tree-second", "--second-tree"], [.. model.Root.Options.Select(static option => option.Name)]);
     }
 
     [TestMethod]
@@ -312,8 +310,7 @@ public sealed class CliModelGeneratorTests
 
         GeneratorResult generated = Generate(invalidDeclaration);
         Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
-        Assert.IsFalse(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources)
-            .Any(static source => source.HintName.Contains("Root", StringComparison.Ordinal)));
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
     [TestMethod]
@@ -344,8 +341,7 @@ public sealed class CliModelGeneratorTests
 
         GeneratorResult generated = Generate(invalidDeclaration);
         Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
-        Assert.IsFalse(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources)
-            .Any(static source => source.HintName.Contains("Root", StringComparison.Ordinal)));
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
     [TestMethod]
@@ -411,7 +407,7 @@ public sealed class CliModelGeneratorTests
         OptionDefinition generatedRetries = ReadPackOption(fixture, "GeneratorPackFixture.RetryPack");
         InvocationResult generatedInvocation = await new CliInvoker().InvokeAsync(
             generatedModel,
-            ["--endpoint=https://example.test", "--retries=2"]).ConfigureAwait(false);
+            ["--endpoint=https://example.test", "--retries=2"], TestContext.CancellationToken).ConfigureAwait(false);
         ParseResult generatedResult = generatedInvocation.ParseResult!;
 
         OptionDefinition endpoint = new("--endpoint", typeof(string), OptionArity.RequiredScalar, isRequired: true);
@@ -434,7 +430,7 @@ public sealed class CliModelGeneratorTests
                 }));
         InvocationResult explicitInvocation = await new CliInvoker().InvokeAsync(
             explicitModel,
-            ["--endpoint=https://example.test", "--retries=2"]).ConfigureAwait(false);
+            ["--endpoint=https://example.test", "--retries=2"], TestContext.CancellationToken).ConfigureAwait(false);
         ParseResult explicitResult = explicitInvocation.ParseResult!;
 
         Assert.AreEqual(InvocationOutcome.Completed, generatedInvocation.Outcome);
@@ -453,12 +449,10 @@ public sealed class CliModelGeneratorTests
             manualOption,
             out string? profile));
         Assert.AreEqual("fast", profile);
-        CollectionAssert.AreEqual(
-            explicitResult.SelectedCommand!.Path.ToArray(),
-            generatedResult.SelectedCommand!.Path.ToArray());
-        CollectionAssert.AreEqual(
-            HelpDocument.Create(explicitModel).OptionGroups.Select(static group => group.Title).ToArray(),
-            HelpDocument.Create(generatedModel).OptionGroups.Select(static group => group.Title).ToArray());
+        Assert.AreSequenceEqual(
+            [.. explicitResult.SelectedCommand!.Path], [.. generatedResult.SelectedCommand!.Path]);
+        Assert.AreSequenceEqual(
+            [.. HelpDocument.Create(explicitModel).OptionGroups.Select(static group => group.Title)], [.. HelpDocument.Create(generatedModel).OptionGroups.Select(static group => group.Title)]);
     }
 
     [TestMethod]
@@ -492,8 +486,7 @@ public sealed class CliModelGeneratorTests
 
         GeneratorResult generated = Generate(declaration);
         Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
-        Assert.IsFalse(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources)
-            .Any(static source => source.HintName.Contains("Root", StringComparison.Ordinal)));
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
     [TestMethod]
@@ -525,20 +518,21 @@ public sealed class CliModelGeneratorTests
 
         GeneratorResult generated = Generate(declaration);
         Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
-        Assert.IsFalse(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources)
-            .Any(static source => source.HintName.Contains("Root", StringComparison.Ordinal)));
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
-    private static GeneratorResult Generate(params string[] sources)
+    private GeneratorResult Generate(params string[] sources)
     {
         CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.None);
         CSharpCompilation compilation = CreateCompilation(
-            [.. sources.Select(source => CSharpSyntaxTree.ParseText(source, parseOptions))]);
+            [.. sources.Select(source => CSharpSyntaxTree.ParseText(
+                source, parseOptions, cancellationToken: TestContext.CancellationToken))]);
         GeneratorDriver driver = CreateDriver(parseOptions);
         driver = driver.RunGeneratorsAndUpdateCompilation(
             compilation,
             out Compilation output,
-            out ImmutableArray<Diagnostic> diagnostics);
+            out ImmutableArray<Diagnostic> diagnostics,
+            TestContext.CancellationToken);
         return new GeneratorResult(driver.GetRunResult(), output, diagnostics);
     }
 
@@ -571,10 +565,10 @@ public sealed class CliModelGeneratorTests
         ];
     }
 
-    private static Assembly EmitAndLoad(Compilation compilation)
+    private Assembly EmitAndLoad(Compilation compilation)
     {
         using MemoryStream assemblyStream = new();
-        EmitResult emit = compilation.Emit(assemblyStream);
+        EmitResult emit = compilation.Emit(assemblyStream, cancellationToken: TestContext.CancellationToken);
         Assert.IsTrue(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics));
         return Assembly.Load(assemblyStream.ToArray());
     }
@@ -593,14 +587,14 @@ public sealed class CliModelGeneratorTests
             .Select(static source => source.SourceText.ToString())];
     }
 
-    private static void AssertNoErrors(GeneratorResult generated)
+    private void AssertNoErrors(GeneratorResult generated)
     {
         Diagnostic[] generatorErrors = [.. generated.GeneratorDiagnostics
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
-        Diagnostic[] compilationErrors = [.. generated.OutputCompilation.GetDiagnostics()
+        Diagnostic[] compilationErrors = [.. generated.OutputCompilation.GetDiagnostics(TestContext.CancellationToken)
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
-        Assert.IsFalse(generatorErrors.Length > 0, string.Join(Environment.NewLine, generatorErrors));
-        Assert.IsFalse(compilationErrors.Length > 0, string.Join(Environment.NewLine, compilationErrors));
+        Assert.IsEmpty(generatorErrors, string.Join(Environment.NewLine, generatorErrors));
+        Assert.IsEmpty(compilationErrors, string.Join(Environment.NewLine, compilationErrors));
     }
 
     private sealed record GeneratorResult(

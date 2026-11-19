@@ -16,6 +16,8 @@ namespace Mauve.Cli.Tests.Invocation;
 [TestClass]
 public sealed class CliInvokerTests
 {
+    public required TestContext TestContext { get; set; }
+
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-09")]
     [TestProperty(Metadata.Requirement, "FEAT-09-001")]
@@ -43,7 +45,7 @@ public sealed class CliInvokerTests
         CommandModel model = CommandModel.Create(root);
 
         InvocationResult result = await new CliInvoker()
-            .InvokeAsync(model, ["copy", "--count=7"])
+            .InvokeAsync(model, ["copy", "--count=7"], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
@@ -73,13 +75,13 @@ public sealed class CliInvokerTests
         CliInvoker invoker = new();
 
         InvocationResult invalid = await invoker
-            .InvokeAsync(CommandModel.Create(root), ["copy", "--wat"])
+            .InvokeAsync(CommandModel.Create(root), ["copy", "--wat"], TestContext.CancellationToken)
             .ConfigureAwait(false);
         CommandModel helpModel = CommandModel.Create(root, includeStandardHelp: true);
-        InvocationResult help = await invoker.InvokeAsync(helpModel, ["copy", "--help"]).ConfigureAwait(false);
+        InvocationResult help = await invoker.InvokeAsync(helpModel, ["copy", "--help"], TestContext.CancellationToken).ConfigureAwait(false);
         InvocationResult noHandler = await invoker.InvokeAsync(
             CommandModel.Create(new CommandBuilder("empty")),
-            []).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(InvocationOutcome.InvalidInput, invalid.Outcome);
         Assert.AreEqual(InvocationOutcome.HelpRequested, help.Outcome);
@@ -198,7 +200,7 @@ public sealed class CliInvokerTests
             waitingModel,
             [],
             waitingSource.Token).AsTask();
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.CancellationToken).ConfigureAwait(false);
         await waitingSource.CancelAsync().ConfigureAwait(false);
         InvocationResult cancelled = await running.ConfigureAwait(false);
 
@@ -229,7 +231,7 @@ public sealed class CliInvokerTests
             .SetHandler((_, _) => throw expected));
         try
         {
-            _ = await new CliInvoker().InvokeAsync(faultingModel, []).ConfigureAwait(false);
+            _ = await new CliInvoker().InvokeAsync(faultingModel, [], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.Fail();
         }
         catch (OperationCanceledException actual)
@@ -242,7 +244,7 @@ public sealed class CliInvokerTests
             .SetHandler((_, _) => throw unexpected));
         try
         {
-            _ = await new CliInvoker().InvokeAsync(failingModel, []).ConfigureAwait(false);
+            _ = await new CliInvoker().InvokeAsync(failingModel, [], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.Fail();
         }
         catch (InvalidOperationException actual)
@@ -261,17 +263,17 @@ public sealed class CliInvokerTests
             }));
         CliInvoker invoker = new();
         InvocationResult[] results = await Task.WhenAll(
-            invoker.InvokeAsync(concurrentModel, ["--value=1"]).AsTask(),
-            invoker.InvokeAsync(concurrentModel, ["--value=2"]).AsTask()).ConfigureAwait(false);
+            invoker.InvokeAsync(concurrentModel, ["--value=1"], TestContext.CancellationToken).AsTask(),
+            invoker.InvokeAsync(concurrentModel, ["--value=2"], TestContext.CancellationToken).AsTask()).ConfigureAwait(false);
         CommandInvocationContext[] captured = [.. contexts];
 
         Assert.AreEqual(2, results.Count(static result => result.Outcome == InvocationOutcome.Completed));
         Assert.AreNotSame(captured[0], captured[1]);
         Assert.AreNotSame(captured[0].ParseResult, captured[1].ParseResult);
-        Assert.IsTrue(captured.Any(context =>
-            context.TryGetOptionValue(value, out int parsed) && parsed == 1));
-        Assert.IsTrue(captured.Any(context =>
-            context.TryGetOptionValue(value, out int parsed) && parsed == 2));
+        Assert.Contains(context =>
+            context.TryGetOptionValue(value, out int parsed) && parsed == 1, captured);
+        Assert.Contains(context =>
+            context.TryGetOptionValue(value, out int parsed) && parsed == 2, captured);
     }
 
     [TestMethod]
@@ -295,16 +297,16 @@ public sealed class CliInvokerTests
                 })));
 
         InvocationResult result = await new CliInvoker()
-            .InvokeAsync(model, ["--verbose", "copy"])
+            .InvokeAsync(model, ["--verbose", "copy"], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
     }
 
-    private static async Task<InvocationResult> Invoke(CommandBuilder command)
+    private async Task<InvocationResult> Invoke(CommandBuilder command)
     {
         return await new CliInvoker()
-            .InvokeAsync(CommandModel.Create(command), [])
+            .InvokeAsync(CommandModel.Create(command), [], TestContext.CancellationToken)
             .ConfigureAwait(false);
     }
 }
