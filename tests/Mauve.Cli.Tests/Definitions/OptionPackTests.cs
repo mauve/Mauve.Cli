@@ -141,7 +141,9 @@ public sealed class OptionPackTests
         Task<InvocationResult> second = invoker.InvokeAsync(model, ["--value=5"]).AsTask();
         _ = await Task.WhenAll(first, second).ConfigureAwait(false);
 
-        Assert.AreEqual(2, first.Result.ExitCode);
-        Assert.AreEqual(5, second.Result.ExitCode);
+        InvocationResult firstResult = await first.ConfigureAwait(false);
+        InvocationResult secondResult = await second.ConfigureAwait(false);
+        Assert.AreEqual(2, firstResult.ExitCode);
+        Assert.AreEqual(5, secondResult.ExitCode);
     }
 }

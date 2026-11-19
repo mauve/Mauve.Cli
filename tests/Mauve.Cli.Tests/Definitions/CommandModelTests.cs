@@ -15,15 +15,15 @@ public sealed class CommandModelTests
     [TestProperty(Metadata.Requirement, "FEAT-01-001")]
     public void Create_PreservesOrderedHierarchyMetadataAndCanonicalPaths()
     {
-        CommandBuilder root = new CommandBuilder("Mauve.Cli")
+        CommandBuilder root = new("Mauve.Cli")
         {
             Description = "Root command"
         };
-        CommandBuilder file = new CommandBuilder("file")
+        CommandBuilder file = new("file")
         {
             Description = "File operations"
         };
-        CommandBuilder copy = new CommandBuilder("copy")
+        CommandBuilder copy = new("copy")
         {
             LongDescription = "Copy a file"
         };
@@ -123,8 +123,8 @@ public sealed class CommandModelTests
     [TestProperty(Metadata.Requirement, "FEAT-01-002")]
     public void Create_RejectsCommandCycles()
     {
-        CommandBuilder root = new CommandBuilder("tool");
-        CommandBuilder child = new CommandBuilder("child");
+        CommandBuilder root = new("tool");
+        CommandBuilder child = new("child");
         root.AddChild(child);
         child.AddChild(root);
 
@@ -136,8 +136,8 @@ public sealed class CommandModelTests
     [TestProperty(Metadata.Requirement, "FEAT-01-002")]
     public void Create_RejectsCommandNodesWithMultipleParents()
     {
-        CommandBuilder sharedRoot = new CommandBuilder("tool");
-        CommandBuilder shared = new CommandBuilder("shared");
+        CommandBuilder sharedRoot = new("tool");
+        CommandBuilder shared = new("shared");
         sharedRoot.AddChild(new CommandBuilder("first").AddChild(shared));
         sharedRoot.AddChild(new CommandBuilder("second").AddChild(shared));
 
@@ -149,11 +149,11 @@ public sealed class CommandModelTests
     [TestProperty(Metadata.Requirement, "FEAT-02-001")]
     public void Create_PreservesOptionAliasesVisibilityAndTypeMetadata()
     {
-        OptionDefinition output = new OptionDefinition(
+        OptionDefinition output = new(
             "--output",
             typeof(string),
             OptionArity.RequiredScalar,
-            new[] { new OptionAlias("-o") },
+            [new OptionAlias("-o")],
             isHidden: true,
             description: "Output path");
         CommandBuilder root = new CommandBuilder("tool").AddOption(output);
@@ -207,13 +207,13 @@ public sealed class CommandModelTests
     public void Create_RejectsDuplicateOptionSpellingsButAllowsCaseDifferences()
     {
         CommandBuilder invalid = new CommandBuilder("tool")
-            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar, new[] { new OptionAlias("-o") }))
-            .AddOption(new OptionDefinition("--other", typeof(string), OptionArity.RequiredScalar, new[] { new OptionAlias("-o") }));
+            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar, [new OptionAlias("-o")]))
+            .AddOption(new OptionDefinition("--other", typeof(string), OptionArity.RequiredScalar, [new OptionAlias("-o")]));
 
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(invalid));
 
         CommandBuilder repeatedAlias = new CommandBuilder("tool")
-            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar, new[] { new OptionAlias("-o"), new OptionAlias("-o") }));
+            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar, [new OptionAlias("-o"), new OptionAlias("-o")]));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(repeatedAlias));
 
         CommandBuilder distinctCase = new CommandBuilder("tool")

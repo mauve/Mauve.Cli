@@ -56,7 +56,7 @@ The subsequent locked solution restore and complete `scripts/verify.sh`
 gate passed. Logs are retained locally as `artifacts/bootstrap-repeat.log`
 and `artifacts/verification.log`.
 
-## GF-002: .NET 11 works for the exercised MSTest/VSTest integration
+## GF-002: .NET 11 works for the exercised MSTest/MTP integration
 
 **State:** executed compatibility observation, not an upstream support promise.
 Owner/proposal: Governance consumer compatibility matrix.
@@ -66,9 +66,10 @@ unverified; first use should establish rather than assume compatibility.
 
 **Observed:** local tool-manifest restore and strict validation work under the
 consumer SDK 11.0.100 while the .NET 10 tool runtime remains installed. A real
-`net11.0` MSTest 4.5.1/VSTest probe was discovered and passed; the packaged
-Governance logger emitted native Feature/Requirement traits, and
-`governance test-results` imported one passing infrastructure requirement.
+`net11.0` MSTest 4.5.1/MTP probe was discovered and passed. Standard MTP TRX
+preserved native Feature/Requirement traits, and `governance test-results`
+imported one passing infrastructure requirement without the VSTest-only
+Governance logger.
 The packaged analyzer rejected a separate test missing Feature metadata with
 MGTEST001. No Governance source modification or framework downgrade was needed.
 
@@ -78,7 +79,7 @@ run `bash scripts/verify-tooling.sh`; inspect its fresh TRX, imported JSON and
 
 **Impact/proposal:** document this precise tested SDK/runner combination or add
 a net11 fixture to the compatibility suite. This does not verify a .NET
-11-only machine, MTP-native logging, other frameworks/architectures, protected
+11-only machine, other frameworks/architectures, protected
 runner provenance, or every Governance package.
 
 ## GF-003: Managed EditorConfig needs a strict-consumer composition recipe

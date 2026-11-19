@@ -18,12 +18,13 @@ This consumer-owned extension annotates `MGOV-POL-002`, `MGOV-POL-003`,
   configs impose four-space formatting, explicit types/accessibility,
   file-scoped namespaces, braces, naming rules and no unused imports.
   Source/tests/examples share that strict baseline.
-- Tests disable CA1515 because VSTest requires public fixtures in test
-  assemblies. Example console output has narrowly justified CA1303
-  suppressions, and generated-only command/pack types have justified
-  analyzer suppressions where static analysis cannot see generator use.
-  These are not blanket analyzer waivers.
-- Tests use MSTest/VSTest, explicit imports and assembly parallelization.
+- Tests disable CA1515 and public-member XML documentation because MSTest
+  requires public fixtures. Test-only naming, ignored assertion return values
+  and inline test-data arrays have narrow analyzer exceptions. Example console
+  output and generated-only declarations also carry narrow suppressions.
+  These are not product-code analyzer waivers.
+- Tests use MSTest on Microsoft Testing Platform, explicit imports and
+  assembly parallelization.
   Future tests declare one owning active feature and matching requirements
   using native method-level `TestProperty`/Governance metadata. Do not use
   synthetic passing assertions or planned IDs as implementation evidence.
@@ -38,7 +39,7 @@ This consumer-owned extension annotates `MGOV-POL-002`, `MGOV-POL-003`,
 
 `bash scripts/verify.sh` is the local fail-closed gate: strict Governance
 validation/source-only generation; locked restore; Release build; format
-verification; product tests; separate real metadata/TRX probe and expected
+verification; the full MTP test suite; separate real metadata/TRX probe and expected
 MGTEST001/IDE0161 rejections; trimmed and NativeAOT publish/run acceptance;
 no-op Governance update check. `scripts/verify-aot.sh` can run the
 environment-gated native acceptance independently.
@@ -56,8 +57,6 @@ unverified; see
 [FEAT-13](../Requirements/FEAT-13-NativeAot-And-Trimming.md) and
 [ADR-013](../Architecture/ADR-013-NativeAot-Support-Matrix.md).
 
-The parser has product test methods, but no complete strict product MSTest
-run is claimed until all analyzer/build errors are resolved. A missing test
-run is an evidence gap, not a pass. The independent probe's TRX lives under
-`artifacts/obj/governance-probe/`; it must not populate the active parser
-ledger or source-only index.
+The strict solution build and 77-test MTP suite pass locally. The independent
+probe's TRX lives under `artifacts/obj/governance-probe/`; it must not populate
+the active parser ledger or source-only index.

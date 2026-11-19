@@ -17,12 +17,12 @@ rm -f -- "$probe/MissingMetadata.cs" "$probe/StyleViolation.cs"
 results="$(mktemp -d "$probe/results.XXXXXX")"
 
 dotnet restore "$probe/Probe.csproj" --force-evaluate -p:RestoreLockedMode=false
-dotnet test "$probe/Probe.csproj" -c Release --no-restore --logger governance-trx \
+dotnet test "$probe/Probe.csproj" -c Release --no-restore --report-trx \
     --results-directory "$results"
 
-mapfile -t reports < <(find "$results" -maxdepth 1 -type f -name 'governance-*.trx')
+mapfile -t reports < <(find "$results" -maxdepth 1 -type f -name '*.trx')
 if (( ${#reports[@]} != 1 )); then
-    echo "Expected exactly one fresh Governance TRX report." >&2
+    echo "Expected exactly one fresh MTP TRX report." >&2
     exit 1
 fi
 report="${reports[0]}"

@@ -1,4 +1,3 @@
-// Internal FEAT-13 acceptance fixture shared by both examples and the AOT test.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -9,7 +8,7 @@ using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
 
-namespace Mauve.Cli.Examples.Aot;
+namespace Mauve.Cli.Aot.Tests;
 
 internal enum Priority
 {

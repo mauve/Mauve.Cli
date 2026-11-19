@@ -4,7 +4,10 @@
     "rollForward": "disable",
     "allowPrerelease": false
   },
+  "msbuild-sdks": {
+    "MSTest.Sdk": "4.5.1"
+  },
   "test": {
-    "runner": "VSTest"
+    "runner": "Microsoft.Testing.Platform"
   }
 }

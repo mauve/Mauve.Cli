@@ -1,11 +1,9 @@
-// Internal FEAT-13 fixture for generated-model trimming and NativeAOT checks.
 using System.Diagnostics.CodeAnalysis;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
-using Mauve.Cli.Examples.Aot;
 using Mauve.Cli.Invocation;
 
-namespace Todo.Cli;
+namespace Mauve.Cli.Aot.Tests;
 
 [CliCommand("aot-todo", IsRoot = true)]
 [CliChild(typeof(AotAddCommand), 0)]
@@ -20,6 +18,10 @@ internal sealed partial class AotRootCommand
 
 [CliCommand("add", Aliases = ["new"])]
 [CliPack(typeof(NetworkPack), "network", 0, Title = "Network")]
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated dispatcher instantiates this command at invocation.")]
 internal sealed partial class AotAddCommand
 {
     [CliOption("--count", OptionArity.RequiredScalar, 0, IsRequired = true)]

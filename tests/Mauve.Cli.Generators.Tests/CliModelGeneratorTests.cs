@@ -5,22 +5,21 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
-using Mauve.Cli.Generators;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
-using MSTestMetadata = Mauve.Governance.Testing.MSTest.Metadata;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using MSTestMetadata = Mauve.Governance.Testing.MSTest.Metadata;
 
 namespace Mauve.Cli.Generators.Tests;
 
 [TestClass]
 public sealed class CliModelGeneratorTests
 {
-    private const string ValidDeclaration = """
+    private const string _validDeclaration = """
         using Mauve.Cli.Declarations;
         using Mauve.Cli.Definitions;
         using Mauve.Cli.Invocation;
@@ -54,7 +53,7 @@ public sealed class CliModelGeneratorTests
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
     public async Task Generate_CompilesAndRunsNestedAliasBinding()
     {
-        GeneratorResult generated = Generate(ValidDeclaration);
+        GeneratorResult generated = Generate(_validDeclaration);
         AssertNoErrors(generated);
 
         Assembly fixture = EmitAndLoad(generated.OutputCompilation);
@@ -97,7 +96,7 @@ public sealed class CliModelGeneratorTests
     {
         GeneratorDriver driver = CreateDriver();
         CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
-        SyntaxTree firstTree = CSharpSyntaxTree.ParseText(ValidDeclaration, parseOptions);
+        SyntaxTree firstTree = CSharpSyntaxTree.ParseText(_validDeclaration, parseOptions);
         CSharpCompilation firstInput = CreateCompilation(firstTree);
         driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _);
         string[] initialSources = GetGeneratedSources(driver);
@@ -105,7 +104,10 @@ public sealed class CliModelGeneratorTests
         driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _);
         CollectionAssert.AreEqual(initialSources, GetGeneratedSources(driver));
 
-        string changedDeclaration = ValidDeclaration.Replace("Aliases = [\"c\"]", "Aliases = [\"duplicate\"]", StringComparison.Ordinal);
+        string changedDeclaration = _validDeclaration.Replace(
+            "Aliases = [\"c\"]",
+            "Aliases = [\"duplicate\"]",
+            StringComparison.Ordinal);
         CSharpCompilation changedInput = CreateCompilation(CSharpSyntaxTree.ParseText(changedDeclaration, parseOptions));
         driver = driver.RunGeneratorsAndUpdateCompilation(changedInput, out Compilation changedOutput, out ImmutableArray<Diagnostic> diagnostics);
         Assert.IsFalse(diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
@@ -250,13 +252,10 @@ public sealed class CliModelGeneratorTests
                 {
                     OptionPackContext network = context.GetOptionPack("network");
                     OptionPackContext retry = network.GetNestedPack("retry");
-                    if (!network.TryGetOptionValue(endpoint, out string? address)
-                        || !retry.TryGetOptionValue(retries, out int count))
-                    {
-                        throw new System.InvalidOperationException("The explicit pack values are unavailable.");
-                    }
-
-                    return address!.Length + count;
+                    return network.TryGetOptionValue(endpoint, out string? address)
+                        && retry.TryGetOptionValue(retries, out int count)
+                            ? address!.Length + count
+                            : throw new InvalidOperationException("The explicit pack values are unavailable.");
                 }));
         InvocationResult explicitInvocation = await new CliInvoker().InvokeAsync(
             explicitModel,
@@ -367,7 +366,7 @@ public sealed class CliModelGeneratorTests
         return new GeneratorResult(driver.GetRunResult(), output, diagnostics);
     }
 
-    private static GeneratorDriver CreateDriver(CSharpParseOptions? parseOptions = null)
+    private static CSharpGeneratorDriver CreateDriver(CSharpParseOptions? parseOptions = null)
     {
         return CSharpGeneratorDriver.Create(
             [new CliModelGenerator().AsSourceGenerator()],
@@ -388,10 +387,12 @@ public sealed class CliModelGeneratorTests
     private static MetadataReference[] GetReferences()
     {
         string trustedAssemblies = (string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!;
-        return trustedAssemblies.Split(Path.PathSeparator)
-            .Select(static path => MetadataReference.CreateFromFile(path))
-            .Append(MetadataReference.CreateFromFile(typeof(CommandModel).Assembly.Location))
-            .ToArray();
+        return
+        [
+            .. trustedAssemblies.Split(Path.PathSeparator)
+                .Select(static path => MetadataReference.CreateFromFile(path))
+                .Append(MetadataReference.CreateFromFile(typeof(CommandModel).Assembly.Location))
+        ];
     }
 
     private static Assembly EmitAndLoad(Compilation compilation)

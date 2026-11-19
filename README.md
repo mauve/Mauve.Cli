@@ -76,7 +76,9 @@ dispatch. Option packs can group reusable options in either API.
 
 Linux x64 is verified for both generated and direct models. Run
 `bash scripts/verify-aot.sh` to repeat the trimmed and NativeAOT publish/run
-checks. ARM64 and other targets remain unverified.
+checks. The gate runs a focused parser test as a native MSTest executable and
+also runs both published example apps. ARM64 and other targets remain
+unverified.
 
 See the [examples](examples/), [feature specifications](docs/Requirements/README.md),
 and [contributor guide](CONTRIBUTING.md) for more information.

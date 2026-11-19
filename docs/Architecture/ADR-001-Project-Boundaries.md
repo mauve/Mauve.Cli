@@ -22,14 +22,16 @@ NativeAOT and deterministic validation.
 - The primary user experience is declarative, generated registration and
   binding. The explicit model remains supported with equivalent semantics;
   neither path may discover application assemblies by runtime scanning.
-- MSTest tests execute on .NET 11 under VSTest. Generator tests may use
-  Roslyn compilations; neither generator host targeting nor the .NET 10
-  Governance tooling changes the product's .NET 11 requirement.
+- MSTest tests execute on .NET 11 through Microsoft Testing Platform (MTP).
+  Generator tests may use Roslyn compilations; neither generator host
+  targeting nor the .NET 10 Governance tooling changes the product's .NET 11
+  requirement.
 - OptionPacks own reusable typed composition. Inherited/global visibility
   is separate. Pack values must be isolated between parses/invocations.
-- The examples exercise generated and explicit parser behavior. Verified
-  trimmed and NativeAOT support is limited to Linux x64; see
-  [ADR-013](ADR-013-NativeAot-Support-Matrix.md).
+- A focused test executable owns comprehensive managed and NativeAOT parser
+  acceptance. The examples independently exercise their normal generated and
+  explicit models after trimmed and native publication. Verified support is
+  limited to Linux x64; see [ADR-013](ADR-013-NativeAot-Support-Matrix.md).
 - Product assemblies are not publishable packages yet (`IsPackable=false`).
   Distribution/package layout is future work, not an accidental empty NuGet
   package contract.

@@ -913,7 +913,7 @@ public sealed class CliParserTests
         int crossValidatorCalls = 0;
         int defaultFactoryCalls = 0;
         ConverterRegistry converters = new ConverterRegistryBuilder()
-            .Register<int>((_, _) =>
+            .Register((_, _) =>
             {
                 converterCalls++;
                 return ValueConversion.Failure<int>("integer.invalid");

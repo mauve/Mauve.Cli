@@ -153,7 +153,7 @@ public sealed class CliInvokerTests
         using CancellationTokenSource converterSource = new();
         int validatorCalls = 0;
         ConverterRegistry converters = new ConverterRegistryBuilder()
-            .Register<int>((_, _) =>
+            .Register((_, _) =>
             {
                 _ = converterSource.CancelAsync();
                 return ValueConversion.FromValue(4);
@@ -226,11 +226,11 @@ public sealed class CliInvokerTests
     {
         OperationCanceledException expected = new("handler fault");
         CommandModel faultingModel = CommandModel.Create(new CommandBuilder("fault")
-            .SetHandler((Func<CommandInvocationContext, CancellationToken, int>)((_, _) => throw expected)));
+            .SetHandler((_, _) => throw expected));
         try
         {
             _ = await new CliInvoker().InvokeAsync(faultingModel, []).ConfigureAwait(false);
-            Assert.IsTrue(false);
+            Assert.Fail();
         }
         catch (OperationCanceledException actual)
         {
@@ -239,11 +239,11 @@ public sealed class CliInvokerTests
 
         InvalidOperationException unexpected = new("handler failure");
         CommandModel failingModel = CommandModel.Create(new CommandBuilder("fail")
-            .SetHandler((Func<CommandInvocationContext, CancellationToken, int>)((_, _) => throw unexpected)));
+            .SetHandler((_, _) => throw unexpected));
         try
         {
             _ = await new CliInvoker().InvokeAsync(failingModel, []).ConfigureAwait(false);
-            Assert.IsTrue(false);
+            Assert.Fail();
         }
         catch (InvalidOperationException actual)
         {

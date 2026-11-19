@@ -1,12 +1,10 @@
 using System.Threading.Tasks;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
-using Mauve.Cli.Examples.Aot;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Todo.Cli;
 
-namespace Mauve.Cli.Tests.Aot;
+namespace Mauve.Cli.Aot.Tests;
 
 /// <summary>Checks the generated and explicit parser paths used for AOT verification.</summary>
 [TestClass]

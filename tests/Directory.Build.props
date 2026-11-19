@@ -5,9 +5,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="MSTest" />
     <PackageReference Include="Mauve.Governance.Testing.MSTest" PrivateAssets="all" />
     <PackageReference Include="Mauve.Governance.Testing.Analyzers" PrivateAssets="all" />
-    <PackageReference Include="Mauve.Governance.Testing.TrxLogger" PrivateAssets="all" />
   </ItemGroup>
 </Project>

@@ -2,10 +2,8 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
-using Mauve.Cli.Conversion;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
-using Mauve.Cli.Examples.Aot;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
@@ -82,26 +80,14 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        CommandModel model = TodoCommand.CreateModel(includeStandardHelp: true);
         if (args is ["--verify-aot"])
         {
-            ConverterRegistry converters = AotScenario.CreateConverters();
-            CommandModel aotModel = AotRootCommand.CreateModel(includeStandardHelp: true);
-            ScenarioHandles handles = AotScenario.CreateGeneratedHandles(
-                aotModel,
-                GlobalPack.Option0,
-                GlobalPack.Option1,
-                NetworkPack.Option0,
-                NetworkPack.Option1,
-                NetworkPack.Option2,
-                NetworkPack.Option3,
-                NetworkPack.Option4,
-                RetryPack.Option0);
-            await AotScenario.VerifyAsync(aotModel, handles, converters).ConfigureAwait(false);
-            Write("AOT scenarios passed.");
+            await VerifyAotAsync(model).ConfigureAwait(false);
+            Write("AOT smoke check passed.");
             return 0;
         }
 
-        CommandModel model = TodoCommand.CreateModel(includeStandardHelp: true);
         InvocationResult result = await new CliInvoker().InvokeAsync(model, args).ConfigureAwait(false);
         if (result.Outcome == InvocationOutcome.HelpRequested && result.ParseResult?.SelectedCommand is not null)
         {
@@ -120,6 +106,24 @@ internal static class Program
         }
 
         return result.ExitCode ?? 1;
+    }
+
+    private static async Task VerifyAotAsync(CommandModel model)
+    {
+        CliInvoker invoker = new();
+        InvocationResult valid = await invoker.InvokeAsync(model, ["new", "AOT check"]).ConfigureAwait(false);
+        if (valid.Outcome != InvocationOutcome.Completed
+            || valid.ExitCode != 0
+            || string.Join(" ", valid.ParseResult!.SelectedCommand!.Path) != "todo add")
+        {
+            throw new InvalidOperationException("The generated Todo command did not run successfully.");
+        }
+
+        InvocationResult invalid = await invoker.InvokeAsync(model, ["add"]).ConfigureAwait(false);
+        if (invalid.Outcome != InvocationOutcome.InvalidInput)
+        {
+            throw new InvalidOperationException("The generated Todo command accepted missing input.");
+        }
     }
 
     [SuppressMessage(

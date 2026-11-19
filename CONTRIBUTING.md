@@ -47,7 +47,12 @@ For focused work, build and test with:
 dotnet build src/Mauve.Cli/Mauve.Cli.csproj --configuration Release
 dotnet test tests/Mauve.Cli.Tests/Mauve.Cli.Tests.csproj --configuration Release
 dotnet test tests/Mauve.Cli.Generators.Tests/Mauve.Cli.Generators.Tests.csproj --configuration Release
+dotnet test tests/Mauve.Cli.Aot.Tests/Mauve.Cli.Aot.Tests.csproj --configuration Release
 ```
+
+All test projects use Microsoft Testing Platform. Use MTP options such as
+`--report-trx` directly with `dotnet test`; do not use VSTest `--logger`
+syntax.
 
 NativeAOT verification requires a native C/C++ toolchain and platform
 development libraries. The current verified target is Linux x64 with Clang:

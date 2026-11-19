@@ -250,14 +250,14 @@ public sealed class CompletionServiceTests
                 return WaitingValues(token);
             })
             .Build();
-        CancellationTokenSource cancellation = new();
+        using CancellationTokenSource cancellation = new();
         string active = "--target=";
         ValueTask<CompletionResult> pending = new CompletionService().CompleteAsync(
             new CompletionRequest(model, [active], 0, active.Length), providers, cancellation.Token);
-        cancellation.Cancel();
+        await cancellation.CancelAsync().ConfigureAwait(false);
         CompletionResult cancelled = await pending.ConfigureAwait(false);
-        CancellationTokenSource preCancellation = new();
-        preCancellation.Cancel();
+        using CancellationTokenSource preCancellation = new();
+        await preCancellation.CancelAsync().ConfigureAwait(false);
         CompletionResult preCancelled = await new CompletionService().CompleteAsync(
             new CompletionRequest(model, [active], 0, active.Length),
             providers,

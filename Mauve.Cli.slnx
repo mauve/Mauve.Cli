@@ -8,6 +8,7 @@
     <Project Path="src/Mauve.Cli/Mauve.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Mauve.Cli.Aot.Tests/Mauve.Cli.Aot.Tests.csproj" />
     <Project Path="tests/Mauve.Cli.Generators.Tests/Mauve.Cli.Generators.Tests.csproj" />
     <Project Path="tests/Mauve.Cli.Tests/Mauve.Cli.Tests.csproj" />
   </Folder>

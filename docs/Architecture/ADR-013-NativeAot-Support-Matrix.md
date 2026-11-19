@@ -15,8 +15,12 @@ available in this environment.
 
 - Linux x64 is the first verified NativeAOT and trimming target.
 - The generated `Todo.Cli` and explicit `FileTool.Cli` consumers must each
-  pass managed trimmed and NativeAOT publish/run scenarios with linker and
-  compiler warnings treated as errors.
+  pass small managed trimmed and NativeAOT publish/run checks using their
+  normal user-facing models, with linker and compiler warnings treated as
+  errors.
+- `Mauve.Cli.Aot.Tests` must run the comprehensive generated and explicit
+  parser matrix through managed MTP and as a NativeAOT MTP executable. Both
+  runs must report exactly one passing test with the same FEAT-13 metadata.
 - `scripts/verify-aot.sh` is the reproducible local gate. It requires a native
   Linux x64 host, performs locked restores, preserves command output and
   environment/source/artifact hashes, and rejects generator assemblies in
@@ -29,5 +33,6 @@ available in this environment.
 The support claim is limited to the exact RID and acceptance scope in
 [FEAT-13](../Requirements/FEAT-13-NativeAot-And-Trimming.md). Changes to the
 runtime, generator, converter registration, or representative consumers
-require rerunning the gate. Application-provided callbacks remain the
+require rerunning the gate. Native tests supplement rather than replace final
+application artifact execution. Application-provided callbacks remain the
 application's trimming/AOT responsibility.

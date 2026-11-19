@@ -31,8 +31,9 @@ conflict with this checkout's cached package, stop and use a reviewed source/
 version and fresh isolated target cache rather than ignoring hash mismatches.
 Never edit a sibling checkout's authored files to make enrollment pass.
 
-Separately test the net11 MSTest adapter, analyzer and VSTest TRX logger with
-an isolated runner probe. Do not mix synthetic probe metadata with
+Separately test the net11 MSTest adapter, analyzer and standard MTP TRX output
+with an isolated runner probe. Import that TRX through the Governance tool and
+do not mix synthetic probe metadata with
 [planned parser requirements](../Requirements/Planned/README.md), source
 traceability or coverage.
 

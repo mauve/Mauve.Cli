@@ -40,8 +40,16 @@ csharp_indent_switch_labels = true
 csharp_using_directive_placement = outside_namespace:error
 dotnet_diagnostic.IDE0005.severity = error
 dotnet_diagnostic.IDE0055.severity = error
-# VSTest discovers public MSTest fixtures even though Test SDK emits an executable.
+# MSTest discovers public fixtures even though MTP emits a test executable.
 dotnet_diagnostic.CA1515.severity = none
+# MSTest requires public fixtures; XML API docs are not useful for test-only members.
+dotnet_diagnostic.CS1591.severity = none
+# Behavior-style test names use underscores to separate the operation and expectation.
+dotnet_diagnostic.CA1707.severity = none
+# Tests intentionally ignore values returned by assertion helpers.
+dotnet_diagnostic.IDE0058.severity = none
+# Inline arrays keep individual test inputs next to the assertion that consumes them.
+dotnet_diagnostic.CA1861.severity = none
 
 dotnet_naming_rule.interfaces.symbols = interfaces
 dotnet_naming_rule.interfaces.style = interface_style

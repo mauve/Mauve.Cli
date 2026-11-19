@@ -8,7 +8,7 @@ rid="${1:-linux-x64}"
 host_rid="$(dotnet --info | awk '/^[[:space:]]*RID:/ { print $2; exit }')"
 machine="$(uname -m)"
 compiler="${CPP_COMPILER_AND_LINKER:-clang}"
-evidence="artifacts/aot-verification/$rid/$(date -u +%Y%m%dT%H%M%SZ)"
+evidence="$root/artifacts/aot-verification/$rid/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$evidence"
 
 if [[ "$rid" != "linux-x64" || "$host_rid" != "$rid" || "$machine" != "x86_64" ]]; then
@@ -17,6 +17,7 @@ if [[ "$rid" != "linux-x64" || "$host_rid" != "$rid" || "$machine" != "x86_64" ]
 fi
 
 command -v "$compiler" >/dev/null
+command -v jq >/dev/null
 {
     echo "UTC: $(date -u +%FT%TZ)"
     echo "RID: $rid"
@@ -37,18 +38,19 @@ command -v "$compiler" >/dev/null
         src/Mauve.Cli/packages.lock.json \
         src/Mauve.Cli.Generators/packages.lock.json \
         examples/Todo.Cli/packages.lock.json \
-        examples/FileTool.Cli/packages.lock.json
+        examples/FileTool.Cli/packages.lock.json \
+        tests/Mauve.Cli.Aot.Tests/packages.lock.json
     echo "Acceptance source SHA-256:"
     sha256sum \
-        examples/Aot.Scenarios/AotScenario.cs \
-        examples/Todo.Cli/AotDeclarations.cs \
         examples/Todo.Cli/Program.cs \
         examples/Todo.Cli/Todo.Cli.csproj \
         examples/FileTool.Cli/Program.cs \
         examples/FileTool.Cli/FileTool.Cli.csproj \
         src/Mauve.Cli.Generators/CliModelGenerator.cs \
-        tests/Mauve.Cli.Tests/Aot/AotAcceptanceTests.cs \
-        tests/Mauve.Cli.Tests/Mauve.Cli.Tests.csproj \
+        tests/Mauve.Cli.Aot.Tests/AotScenario.cs \
+        tests/Mauve.Cli.Aot.Tests/AotDeclarations.cs \
+        tests/Mauve.Cli.Aot.Tests/AotAcceptanceTests.cs \
+        tests/Mauve.Cli.Aot.Tests/Mauve.Cli.Aot.Tests.csproj \
         scripts/verify-aot.sh \
         docs/Architecture/ADR-013-NativeAot-Support-Matrix.md \
         docs/Requirements/FEAT-13-NativeAot-And-Trimming.md
@@ -107,4 +109,55 @@ for example in Todo.Cli FileTool.Cli; do
     sha256sum "$native/$example" | tee -a "$evidence/$example.log"
 done
 
-echo "Trimmed managed and NativeAOT publish/run evidence: $evidence"
+test_project="tests/Mauve.Cli.Aot.Tests/Mauve.Cli.Aot.Tests.csproj"
+test_name="Mauve.Cli.Aot.Tests"
+run_logged "$evidence/$test_name.log" dotnet restore "$test_project" --locked-mode
+run_logged "$evidence/$test_name.log" dotnet build "$test_project" --configuration Release --no-restore
+
+managed_results="$evidence/$test_name-managed-results"
+mkdir -p "$managed_results"
+run_logged "$evidence/$test_name.log" \
+    dotnet test "$test_project" --configuration Release --no-restore --no-build \
+    --report-trx --results-directory "$managed_results"
+
+native="$evidence/$test_name-native"
+run_logged "$evidence/$test_name.log" \
+    dotnet publish "$test_project" --configuration Release --runtime "$rid" --no-restore \
+    -p:BuildProjectReferences=false \
+    --output "$native" \
+    -p:PublishAot=true \
+    -p:PublishTrimmed=true \
+    -p:EnableTrimAnalyzer=true \
+    -p:ILLinkTreatWarningsAsErrors=true \
+    -p:IlcTreatWarningsAsErrors=true \
+    "-p:CppCompilerAndLinker=$compiler"
+
+native_results="$evidence/$test_name-native-results"
+mkdir -p "$native_results"
+run_logged "$evidence/$test_name.log" \
+    "$native/$test_name" --report-trx --results-directory "$native_results"
+
+for mode in managed native; do
+    results_variable="${mode}_results"
+    results_directory="${!results_variable}"
+    mapfile -t reports < <(find "$results_directory" -maxdepth 1 -type f -name '*.trx')
+    if (( ${#reports[@]} != 1 )); then
+        echo "Expected exactly one $mode AOT test TRX report." >&2
+        exit 1
+    fi
+
+    dotnet tool run governance -- test-results --trx "${reports[0]}" \
+        --output "$evidence/$test_name-$mode-evidence.json"
+    jq -e '
+        (.Tests | length == 1)
+        and (.Tests | all(.Status == "Passed" and .Passed == 1))
+        and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 1))
+        and ([.Requirements[]
+            | select(.Id | startswith("FEAT-13-"))
+            | select(.Status == "Passed" and .Passed == 1)] | length == 4)
+    ' "$evidence/$test_name-$mode-evidence.json" >/dev/null
+done
+
+sha256sum "$native/$test_name" | tee -a "$evidence/$test_name.log"
+
+echo "Trimmed examples and managed/NativeAOT test evidence: $evidence"

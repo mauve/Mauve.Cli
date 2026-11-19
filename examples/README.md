@@ -9,6 +9,6 @@ Mauve.Cli.
   positionals, and invocation.
 
 Both apps print the requested action; they do not save tasks or change files.
-The AOT verification scenario currently shares code with these apps so the
-same parser behavior can be published and run with trimming and NativeAOT.
-That scenario is a test fixture, not a user-facing example.
+Their small `--verify-aot` modes exercise the same models after trimming and
+NativeAOT publication. Comprehensive compatibility scenarios live in the
+focused test project under `tests/Mauve.Cli.Aot.Tests`.

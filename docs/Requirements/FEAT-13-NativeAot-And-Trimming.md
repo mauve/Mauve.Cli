@@ -71,8 +71,9 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Generated Todo.Cli, Linux x64 | Trimmed managed and NativeAOT publishes both ran the shared parser scenario successfully with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the generator or runtime. |
-| Explicit FileTool.Cli without a generator reference, Linux x64 | Trimmed managed and NativeAOT publishes both ran the same scenario successfully with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the runtime or conversion paths. |
+| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix passed once through managed MTP and once as a NativeAOT MTP executable. Both TRX reports contained exactly one passing FEAT-13 test and all four requirements. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs or invocation behavior. |
+| Generated Todo.Cli, Linux x64 | Managed trimmed and NativeAOT publishes ran a small check of the normal generated Todo model with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the generator or example model. |
+| Explicit FileTool.Cli without a generator reference, Linux x64 | Managed trimmed and NativeAOT publishes ran a small check of the normal explicit copy model with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the runtime or example model. |
 | Linux ARM64 and all other RIDs | Unverified. No support claim is made. | Add a native or cross-publish-plus-execution environment and retain its independent evidence before claiming support. |
 
 The host reports Ubuntu 26.04, `linux-x64`, .NET SDK 11.0.100, and Clang
@@ -90,9 +91,11 @@ then perform locked restore including those RID assets. New RIDs fail
 locked restore until this intentional update. Do not promise RID restore
 without any lock change or rewrite unrelated library/generator locks.
 Native publication can use previously built project references.
-Publish each representative application with NativeAOT and trimming/AOT
-warnings as errors; then execute the native binary, not its managed DLL.
-Also perform a distinct managed trimmed publish with PublishAot=false,
+Publish the focused AOT test project with NativeAOT and trimming/AOT warnings
+as errors, execute its native MTP binary, and compare its exact test count and
+Governance metadata with a normal managed MTP run. Publish each representative
+application with NativeAOT and execute the native binary, not its managed DLL.
+Also perform distinct managed trimmed application publishes with PublishAot=false,
 PublishTrimmed=true, TrimMode=link, SelfContained=true, the approved RID,
 EnableTrimAnalyzer=true, ILLinkTreatWarningsAsErrors=true and warnings as
 errors. Retain evidence that ILLink executed, then run that published output;
@@ -100,19 +103,20 @@ an ordinary managed build/run is not a trimmed gate. Use locked restored
 assets and --no-restore publish for both paths. Keep command inputs,
 stdout/stderr and exit/outcome evidence.
 
-The scenario application must actually access parsed values and invoke
-generated binding so the trimmer cannot erase the parser as unused.
+The focused AOT test must actually access parsed values and invoke generated
+binding so the trimmer cannot erase the parser as unused.
 Include a valid alias path with nondefault values, invalid integer/unknown
 option failures, a custom statically referenced converter, nested OptionPacks,
 inherited options, no-callback help/completion and two sequential parses
 with different values. Compare observable semantic assertions with JIT tests;
 the internal layout or exact binary size is not a correctness assertion.
-Use a distinct explicit-model project with no analyzer/generator ProjectReference
-or package; inspect dependency graphs and published artifacts for absence
-of generator assemblies. The generated consumer must register via actual
-emitted descriptors, with construction/handler/custom converters referenced
-only by those generated static factories. Neither consumer may satisfy the
-gate through hand-written duplicate registration of the other path.
+The explicit example must have no analyzer/generator ProjectReference or
+package; inspect published example artifacts for absence of generator
+assemblies. The generated paths must register through actual emitted
+descriptors, with construction and handlers referenced by generated static
+factories. The focused test may own richer acceptance-only declarations;
+examples must contain only their user-facing models and independent smoke
+checks.
 
 Missing compiler/headers/runtime packs or inability to execute the target is
 Unavailable evidence and blocks that row's support claim. Do not substitute
@@ -133,19 +137,24 @@ library does not promise arbitrary application code is trim-safe.
 ## Verification
 
 `bash scripts/verify-aot.sh` performs locked restore, strict Release builds,
-managed trimmed publish/run and NativeAOT publish/run for both consumers. The
-scenario checks valid nested alias binding, inherited and nested pack values,
-custom and enum conversion, nullable values, help/completion without handler
-dispatch, invalid input without dispatch, and sequential invocation isolation.
+managed trimmed publish/run and NativeAOT publish/run for both examples. It
+also runs the focused AOT test through managed MTP and as a NativeAOT MTP
+executable, imports both TRX reports, and requires exact one-test parity. The
+focused scenario checks valid nested alias binding, inherited and nested pack
+values, custom and enum conversion, nullable values, help/completion without
+handler dispatch, invalid input without dispatch, and sequential invocation
+isolation.
 
 Observed on Ubuntu 26.04, .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`.
-All four published artifacts printed `AOT scenarios passed.` The native
-artifact SHA-256 values were:
+Both example modes printed `AOT smoke check passed.` The managed and native
+focused test executions each reported one passing test and preserved
+FEAT-13-001 through FEAT-13-004. The latest artifact SHA-256 values were:
 
 | Consumer | Trimmed managed DLL | Native executable |
 | --- | --- | --- |
-| Todo.Cli | `c8179182b38c23f83a008c8d4dea98e161e461ff33b1beb6722264a0ef1642a5` | `0183a767215922865b5b04e3bd0373fe171cbcda2861df1b6cf8c1bab9bbeab3` |
-| FileTool.Cli | `7217d0cadd6220c0ce82e53274b5e212e68989e7096930b6f08e843780ac3e9b` | `753c6328e7e06ddf0e403a121c50836d888db102b940b9fdd75fd9bf62d8530b` |
+| Todo.Cli | `fa6f66a1a2e16a29dfb83014f0ac8dfd8ee4e3e7a774225e5d39e576af14b5ab` | `38c9fb3ebc23ba4c46422dee0a36827e5daf1fe9055062630dca2639ec7db978` |
+| FileTool.Cli | `2dd76aad4b2a24684975d1094f836cc48c758b22ecba076bd84849ca91c6dcad` | `e5284c2154716a45df6b121149ef9ebc2378547c3b89759f8491212ce3fb2040` |
+| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `0e560070fb3d8c4e41aa1a8732387d4ac44bafc4d2dfe44f0e4667039ac87569` |
 
 The metadata-bearing behavioral test is
 `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`. ARM64 and other
