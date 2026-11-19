@@ -3,6 +3,10 @@
     <TargetFramework>net11.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../examples/Aot.Scenarios/AotScenario.cs" Link="AotScenario.cs" />
+    <Compile Include="../../examples/Todo.Cli/AotDeclarations.cs" Link="AotDeclarations.cs" />
     <ProjectReference Include="../../src/Mauve.Cli/Mauve.Cli.csproj" />
+    <ProjectReference Include="../../src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

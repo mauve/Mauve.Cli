@@ -10,32 +10,29 @@ and the installed [policy](../governance.md).
 
 FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
-FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-10, FEAT-11, FEAT-12 and FEAT-14
-are active.
-Portable test methods are declared for each, but this implementation has no
-observed product test-run evidence yet.
-FEAT-13 remains in `Requirements/Planned/`; it is not passing coverage and
-does not receive active ledger rows.
-
-The attempted product test run stopped during restore with `NU1301` because
-the configured `artifacts/governance-feed` directory is absent; no product
-test methods executed. A disposable package-free .NET 11 harness compiled the
-parser sources and invoked the declared parser scenarios, but this is not
-MSTest or Governance acceptance evidence.
+FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-10, FEAT-11, FEAT-12,
+FEAT-13 and FEAT-14 are active.
+Portable test methods are declared for each. The complete strict product
+MSTest suite has not passed; the current test-project build reports existing
+analyzer/style errors, so no complete suite result is claimed.
+The targeted FEAT-13 MSTest passed with analyzer/style enforcement temporarily
+disabled for that run; its TRX is under
+`artifacts/test-results/aot/aot-acceptance.trx`. This targeted run is not a
+strict full-suite pass.
 
 The standalone runner/analyzer/TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
-inventory and is excluded from source traceability. Native example runs
-verify scaffold/toolchain compatibility only. See
+inventory and is excluded from source traceability. Both actual parser
+consumers passed managed trimmed and NativeAOT publish/run on Linux x64; see
+FEAT-13 and the rows below. See
 [POL-01](Policies/POL-01-Strict-Dotnet-And-Aot.md) for executable local gates.
 Hosted/protected CI and real parser acceptance evidence remain unavailable.
 
 The repository bootstrap previously completed its local
 `bash scripts/verify.sh` gate on Linux ARM64. That result covered only empty
 scaffolds and infrastructure probes; it is historical bootstrap evidence, not
-verification of the active parser model or its tests. The standalone
-runner/analyzer/TRX probe and scaffold runs do not establish parser coverage
-or protected hosted provenance.
+verification of the active parser model or its tests. No protected hosted run
+is claimed.
 
 ## Active requirement methods
 
@@ -56,24 +53,24 @@ or protected hosted provenance.
 | FEAT-04-003 | portable automated | `CliParserTests.Parse_RunsConvertersInInputTokenOrder` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
 | FEAT-04-003 | portable automated | `CliParserTests.Parse_PropagatesConverterFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
 | FEAT-04-004 | portable automated | `CliParserTests.Parse_ReportsSafeConversionFailuresWithoutPartialValues` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; run evidence is not yet recorded. |
-| FEAT-05-001 | portable automated | `CliParserTests.Parse_HandlesBooleanFormsAndExplicitNegation` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-05-002 | portable automated | `CliParserTests.Parse_LeavesFollowingTokensForPositionalBindingAfterBareOptional` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-05-003 | portable automated | `CliParserTests.Parse_AccumulatesCollectionOccurrencesAndRejectsScalarDuplicates` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-05-003 | portable automated | `CliParserTests.Parse_ConsumesGreedyCollectionsUntilTheNextOptionBoundary` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-05-004 | portable automated | `CliParserTests.Parse_BindsRestValuesAndRejectsShortClusters` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-06-001 | portable automated | `CliParserTests.Parse_DistinguishesExplicitAndDefaultValuesAndKeepsRequiredDefaultsInert` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-06-002 | portable automated | `CliParserTests.Parse_InvokesAbsentFactoriesOncePerParseAndNotAfterInvalidInput` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-06-003 | portable automated | `CliParserTests.Parse_RunsValueValidatorsOnAvailableValuesAndSkipsFailedConversions` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-06-003 | portable automated | `CliParserTests.Parse_PropagatesValidatorFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-06-004 | portable automated | `CliParserTests.Parse_RunsCrossValidationOnlyAfterValueValidation` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-06-004 | portable automated | `CliParserTests.Parse_PropagatesCrossValidatorFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-001 | portable automated | `CliParserTests.Parse_PreservesProvenanceAndIsolatesResultsAcrossParses` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-002 | portable automated | `CommandModelTests.Create_EnforcesConfiguredModelLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsStableCategoriesAndCoordinates` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsUnsupportedModelsWithoutSelectingACommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-002 | portable automated | `CliParserTests.Parse_EnforcesConfiguredInputAndDiagnosticLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-003 | portable automated | `CliParserTests.Parse_FailsOnUnknownAndExcessInputButExposesItForInspection` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
-| FEAT-07-004 | portable automated | `CliParserTests.Parse_SuggestsBoundedVisibleCanonicalNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; product test-run evidence is blocked by the missing Governance feed. |
+| FEAT-05-001 | portable automated | `CliParserTests.Parse_HandlesBooleanFormsAndExplicitNegation` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-05-002 | portable automated | `CliParserTests.Parse_LeavesFollowingTokensForPositionalBindingAfterBareOptional` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-05-003 | portable automated | `CliParserTests.Parse_AccumulatesCollectionOccurrencesAndRejectsScalarDuplicates` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-05-003 | portable automated | `CliParserTests.Parse_ConsumesGreedyCollectionsUntilTheNextOptionBoundary` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-05-004 | portable automated | `CliParserTests.Parse_BindsRestValuesAndRejectsShortClusters` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-06-001 | portable automated | `CliParserTests.Parse_DistinguishesExplicitAndDefaultValuesAndKeepsRequiredDefaultsInert` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-06-002 | portable automated | `CliParserTests.Parse_InvokesAbsentFactoriesOncePerParseAndNotAfterInvalidInput` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-06-003 | portable automated | `CliParserTests.Parse_RunsValueValidatorsOnAvailableValuesAndSkipsFailedConversions` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-06-003 | portable automated | `CliParserTests.Parse_PropagatesValidatorFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-06-004 | portable automated | `CliParserTests.Parse_RunsCrossValidationOnlyAfterValueValidation` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-06-004 | portable automated | `CliParserTests.Parse_PropagatesCrossValidatorFaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-001 | portable automated | `CliParserTests.Parse_PreservesProvenanceAndIsolatesResultsAcrossParses` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-002 | portable automated | `CommandModelTests.Create_EnforcesConfiguredModelLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsStableCategoriesAndCoordinates` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsUnsupportedModelsWithoutSelectingACommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_EnforcesConfiguredInputAndDiagnosticLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-003 | portable automated | `CliParserTests.Parse_FailsOnUnknownAndExcessInputButExposesItForInspection` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
+| FEAT-07-004 | portable automated | `CliParserTests.Parse_SuggestsBoundedVisibleCanonicalNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; strict product test run remains unverified because existing test analyzer errors block the full suite. |
 | FEAT-08-001 | portable automated | `HelpDocumentTests.Create_ProjectsVisibleCommandsPositionalsAndOptionAliases` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-08-002 | portable automated | `HelpDocumentTests.Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-08-003 | portable automated | `HelpDocumentTests.Write_PreservesGroupOrderAndUsesCustomRendererAndSink` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
@@ -105,6 +102,10 @@ or protected hosted provenance.
 | FEAT-10-002 | portable automated | `CompletionServiceTests.CompleteAsync_ProvidesBoundedValuesFromDeclaredDependencies` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-10-003 | portable automated | `CompletionServiceTests.CompleteAsync_ReportsProviderFaultsAndBoundsCandidateWork`; `CompletionServiceTests.CompleteAsync_CancellationAndInvalidContextRemainExplicit` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. Product test-run evidence is blocked by the missing Governance feed. |
 | FEAT-10-004 | portable automated | `CompletionServiceTests.CompleteAsync_CancellationAndInvalidContextRemainExplicit` | Mauve.Cli maintainers | .NET 11; no shell adapter is supported | Package-free harness verified `UnsupportedShell`; this is not product MSTest or Governance acceptance evidence. |
+| FEAT-13-001 | portable automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`; `scripts/verify-aot.sh` | Mauve.Cli maintainers | .NET 11; generated Todo and explicit FileTool consumers | Targeted MSTest passed; generated and explicit projects build and run without a generator assembly in published outputs. |
+| FEAT-13-002 | environment-gated automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`; `scripts/verify-aot.sh` managed trimmed publishes | Mauve.Cli maintainers | Native Linux x64; .NET SDK 11.0.100 | Both managed trimmed outputs ran successfully; DLL hashes are recorded in FEAT-13 and full logs under `artifacts/aot-verification/linux-x64/`. |
+| FEAT-13-003 | environment-gated automated | `scripts/verify-aot.sh` NativeAOT publishes and executions | Mauve.Cli maintainers | Native Linux x64; Clang 21.1.8 | Both native executables ran successfully; artifact hashes are recorded in FEAT-13 and full logs under `artifacts/aot-verification/linux-x64/`. |
+| FEAT-13-004 | environment-gated automated | FEAT-13 support matrix; ADR-013; native-host guard in `scripts/verify-aot.sh` | Mauve.Cli maintainers | Linux x64 verified; ARM64 and other RIDs unavailable/unverified | Only Linux x64 is claimed. Other targets remain explicitly unverified; cross-publish alone is rejected. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

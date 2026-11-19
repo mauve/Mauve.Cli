@@ -51,6 +51,7 @@ public sealed class CliModelGeneratorTests
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
     public async Task Generate_CompilesAndRunsNestedAliasBinding()
     {
         GeneratorResult generated = Generate(ValidDeclaration);

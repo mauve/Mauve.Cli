@@ -6,7 +6,7 @@
         "type": "Direct",
         "requested": "[0.14.0, )",
         "resolved": "0.14.0",
-        "contentHash": "0bG9k8Lfp9H4Sx4lE96FD9K/925V0MJypsn1pfr83JHtqJGRoWdM35+YAL+vgM2WKAqfOGvqhh++2gumqsUQgA=="
+        "contentHash": "GH8mZ42pj8FTSBh2xAPFe5yvPlDfWKO+fiCbScvHC8RAagIvKGAYop2sJ7FhVmEAB2/WpL1iPkmY3VbcOp6lrg=="
       },
       "Microsoft.DotNet.ILCompiler": {
         "type": "Direct",
@@ -24,20 +24,20 @@
         "type": "Project"
       }
     },
-    "net11.0/linux-arm64": {
+    "net11.0/linux-x64": {
       "Microsoft.DotNet.ILCompiler": {
         "type": "Direct",
         "requested": "[11.0.0, )",
         "resolved": "11.0.0",
         "contentHash": "lw6gUL92db6XPwYsQwaGwrJxgRM0X0qQKl0QkwuZIACMtgH0eFu6jmq6W+/L8qTxQZwggfV/dGjICyMqVHdehg==",
         "dependencies": {
-          "runtime.linux-arm64.Microsoft.DotNet.ILCompiler": "11.0.0"
+          "runtime.linux-x64.Microsoft.DotNet.ILCompiler": "11.0.0"
         }
       },
-      "runtime.linux-arm64.Microsoft.DotNet.ILCompiler": {
+      "runtime.linux-x64.Microsoft.DotNet.ILCompiler": {
         "type": "Transitive",
         "resolved": "11.0.0",
-        "contentHash": "VUJFdr7rzUc0z8BBamFt96rLndZsoW23Gz238NjXu5KgeiV3R9STf8jCOqMfTcH8YnL7fi81Lsk5bST5MOzoxg=="
+        "contentHash": "HMCCGxJ1Q41NF31M+yWB7h0OAWr0XpiS8ZYMOi/V5IU/864Yi00rLq3M1K3AhE2+q86YJA4V9KZ28NXE+Q/uxA=="
       }
     }
   }

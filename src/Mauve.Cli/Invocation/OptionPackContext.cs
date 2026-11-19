@@ -52,11 +52,8 @@ public sealed class OptionPackContext
     public bool TryGetOptionValue<T>(OptionDefinition option, out T? value)
     {
         ArgumentNullException.ThrowIfNull(option);
-        if (!_pack.ContainsOption(option))
-        {
-            throw new ArgumentException("The option handle is not part of this pack inclusion.", nameof(option));
-        }
-
-        return _parseResult.TryGetOptionValue(_owner, option, out value);
+        return !_pack.ContainsOption(option)
+            ? throw new ArgumentException("The option handle is not part of this pack inclusion.", nameof(option))
+            : _parseResult.TryGetOptionValue(_owner, option, out value);
     }
 }

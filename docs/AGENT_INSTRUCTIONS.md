@@ -41,6 +41,7 @@ rules in unmanaged documents and nested configs, never the managed root
 including reproductions and verification limits. Do not modify the sibling
 Governance checkout as part of parser work.
 
-Native scaffolds prove only bootstrap/toolchain compatibility. Later examples
-must exercise real generated/explicit APIs before claiming parser AOT support.
+`scripts/verify-aot.sh` exercises generated and explicit parser APIs under
+trimmed and NativeAOT publication. Linux x64 is verified; other RIDs remain
+unverified until their native outputs are executed.
 Hosted workflows remain opt-in; no protected/hosted run is currently claimed.

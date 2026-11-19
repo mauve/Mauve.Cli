@@ -31,7 +31,7 @@ public sealed class ConverterRegistryBuilder
     /// <returns>This builder.</returns>
     public ConverterRegistryBuilder RegisterCompletionSafe<T>(ValueConverter<T> converter)
     {
-        Register(converter);
+        _ = Register(converter);
         _ = _completionSafe.Add(typeof(T));
         return this;
     }
@@ -61,7 +61,7 @@ public sealed class ConverterRegistryBuilder
             throw new ArgumentException("An enum map must contain at least one name.", nameof(values));
         }
 
-        RegisterCompletionSafe<TEnum>((value, _) => map.TryGetValue(value, out TEnum result)
+        _ = RegisterCompletionSafe((value, _) => map.TryGetValue(value, out TEnum result)
             ? ValueConversion.FromValue(result)
             : ValueConversion.Failure<TEnum>("enum.unknown"));
         _enumNames.Add(typeof(TEnum), [.. names]);

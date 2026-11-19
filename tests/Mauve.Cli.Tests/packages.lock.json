@@ -6,19 +6,19 @@
         "type": "Direct",
         "requested": "[0.14.0, )",
         "resolved": "0.14.0",
-        "contentHash": "0bG9k8Lfp9H4Sx4lE96FD9K/925V0MJypsn1pfr83JHtqJGRoWdM35+YAL+vgM2WKAqfOGvqhh++2gumqsUQgA=="
+        "contentHash": "GH8mZ42pj8FTSBh2xAPFe5yvPlDfWKO+fiCbScvHC8RAagIvKGAYop2sJ7FhVmEAB2/WpL1iPkmY3VbcOp6lrg=="
       },
       "Mauve.Governance.Testing.Analyzers": {
         "type": "Direct",
         "requested": "[0.14.0, )",
         "resolved": "0.14.0",
-        "contentHash": "/tI8geBR1ZzEV/Ge3xjpYRbUPjHDLanWfKM7tNjESSqUbqe9jL7tGdhU1nBgJpagc0MGdDljWdd69EcVtIZsnQ=="
+        "contentHash": "2m7PtilV2UgmQ6EwyeXtAVkTxCA3VL967XsIrolIY51JIzxQqdJJYicm7BBoWLCrg8o0G7BiLHMRgo0Dl8056Q=="
       },
       "Mauve.Governance.Testing.MSTest": {
         "type": "Direct",
         "requested": "[0.14.0, )",
         "resolved": "0.14.0",
-        "contentHash": "jZG3wAYE9W3rB3PkIVHxnfUr4Gpuk/rV8VKJ/FHq7my51GbCe2KYLWKh/QZUpuB2PXKrgbjtgDd9YH4Orvzquw==",
+        "contentHash": "VADnrJ5E+B6T0WQqcP+xmE3QQRGXP1BcKOKg/HQq/QkVfDbpr3bBpFtOWRKw94NenHmnAyVBRE51WVUdTVXoCQ==",
         "dependencies": {
           "MSTest.TestFramework": "4.5.1",
           "Mauve.Governance.Testing": "0.14.0"
@@ -28,7 +28,7 @@
         "type": "Direct",
         "requested": "[0.14.0, )",
         "resolved": "0.14.0",
-        "contentHash": "lmeFJRU8oe6gBsXBq7GFzlk4hnmvbIfvFC9sW6TuLnhHjbOOoSjZ/mEoPPAd2npAponBs0soQtoNP7X6yb+K4Q==",
+        "contentHash": "ffAAxZTSNe6gYyDiLyAxuYFAAJ7wCy2Lgy9SKdCXp/DKztgN5FtlnMOddDejZq2cO7V9IZgrj3s5DEngb1+VEg==",
         "dependencies": {
           "Microsoft.TestPlatform.ObjectModel": "17.14.1"
         }
@@ -49,7 +49,7 @@
       "Mauve.Governance.Testing": {
         "type": "Transitive",
         "resolved": "0.14.0",
-        "contentHash": "SAAzlyutJ1diZp+FHzrArw097rj2T8Vqz6+V1vTRMUaa7a8qS6uTnosTwdaGRaj8WKU4UMd/T5/+RlCt8l3Xkw=="
+        "contentHash": "hEde5FcWwuKyCE5RQ9CmzqrZnPBepb3nk2aNRo03IQ8juEoCUaUyX3b/Pot8Dn1IOUV/DXoIU+kgcHcBsUW7Dw=="
       },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",

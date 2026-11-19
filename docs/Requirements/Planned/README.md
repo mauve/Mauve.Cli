@@ -10,35 +10,14 @@ This file is not manifest-owned and may be adapted to the repository.
 
 ## Planned parser backlog
 
-All requirements listed here are **PLANNED**. All requirements of
-[FEAT-01](../FEAT-01-Command-Model.md),
-[FEAT-02](../FEAT-02-Options-And-Arguments.md) and
-[FEAT-03](../FEAT-03-Token-Grammar.md), and all of
-[FEAT-04](../FEAT-04-Typed-Conversion.md),
-[FEAT-05](../FEAT-05-Cardinality-And-Special-Forms.md) and
-[FEAT-06](../FEAT-06-Defaults-And-Validation.md),
-[FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md), and
-[FEAT-08](../FEAT-08-Help-And-Usage.md),
-[FEAT-09](../FEAT-09-Invocation-Lifecycle.md),
-[FEAT-10](../FEAT-10-Completion.md),
-[FEAT-11](../FEAT-11-Declarative-Api-And-Generation.md), and
-[FEAT-12](../FEAT-12-Inherited-And-Global-Options.md) and
-[FEAT-14](../FEAT-14-OptionPacks.md) are active. The source-generation-first direction and
-explicit-model equivalence are recorded in the
-[project boundaries decision](../../Architecture/ADR-001-Project-Boundaries.md);
-[enrollment](../../Architecture/ADR-002-Governance-Enrollment.md) describes
-Governance, not parser behavior.
-
-1. [FEAT-13 NativeAOT and Trimming](FEAT-13-NativeAot-And-Trimming.md)
+No parser feature documents are currently planned. Active feature documents
+own the supported behavior; future proposals should be added here with a
+unique ID and **PLANNED** status before implementation.
 
 ## Staging and decisions
 
-The implemented sequence covers the model and definitions, parsing and
-conversion, cardinality, defaults/validation, parse results/diagnostics,
-help, invocation, command-path routing, inherited option scope and
-shell-independent completion. Next implement trimming/NativeAOT scenarios as
-prerequisites permit. Dependencies are linked in each feature; this order is not evidence
-that a stage has passed its required gate.
+Dependencies and evidence obligations are linked in each active feature.
+This index is a lifecycle list, not evidence that a feature's gate has passed.
 
 The documents record the approved behavior baselines, including name
 comparison, option ordering, optional values, repetitions, negation, short
@@ -71,7 +50,7 @@ and [ADR-011](../../Architecture/ADR-011-OptionPack-Composition.md).
 | Completion | Logical-token cursor API, scope-safe provider/context lookup and explicit bounded failures; no shell adapters are currently supported (10; ADR-012). |
 | Generation | Partial-class/property declarations, explicit semantic order metadata, instance-scoped binding, direct handlers and explicit-model parity (11; ADR-010). |
 | Packs | Inclusion-key identity, child-first flattening, nearest-title grouping, invocation-local views and generated parity (14; ADR-011/ADR-010). |
-| Compatibility | Real generated/explicit trimming/AOT scenarios; Linux ARM64 as first proposed product-verification row, other RIDs unverified (13). |
+| Compatibility | Real generated/explicit trimming/AOT scenarios; Linux x64 verified, other RIDs unverified (13; ADR-013). |
 
 ### Shared terminology and ownership
 

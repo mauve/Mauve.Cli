@@ -27,8 +27,9 @@ NativeAOT and deterministic validation.
   Governance tooling changes the product's .NET 11 requirement.
 - OptionPacks own reusable typed composition. Inherited/global visibility
   is separate. Pack values must be isolated between parses/invocations.
-- The examples exercise generated and explicit parser behavior. Trimmed and
-  NativeAOT publish/run support remains unverified.
+- The examples exercise generated and explicit parser behavior. Verified
+  trimmed and NativeAOT support is limited to Linux x64; see
+  [ADR-013](ADR-013-NativeAot-Support-Matrix.md).
 - Product assemblies are not publishable packages yet (`IsPackable=false`).
   Distribution/package layout is future work, not an accidental empty NuGet
   package contract.
@@ -47,5 +48,5 @@ Affected requirements include
 [FEAT-10](../Requirements/FEAT-10-Completion.md),
 [FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md),
 [FEAT-12](../Requirements/FEAT-12-Inherited-And-Global-Options.md),
-[FEAT-13](../Requirements/Planned/FEAT-13-NativeAot-And-Trimming.md) and
+[FEAT-13](../Requirements/FEAT-13-NativeAot-And-Trimming.md) and
 [FEAT-14](../Requirements/FEAT-14-OptionPacks.md).

@@ -123,7 +123,7 @@ public sealed class CompletionServiceTests
         OptionDefinition mode = new("--mode", typeof(Format), OptionArity.RequiredScalar);
         CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(mode));
         ConverterRegistry converters = new ConverterRegistryBuilder()
-            .RegisterEnum<Format>([
+            .RegisterEnum([
                 new KeyValuePair<string, Format>("plain", Format.Plain),
                 new KeyValuePair<string, Format>("pretty", Format.Pretty)
             ])
@@ -236,6 +236,7 @@ public sealed class CompletionServiceTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-003")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-004")]
     public async Task CompleteAsync_CancellationAndInvalidContextRemainExplicit()
     {
         OptionDefinition target = new("--target", typeof(string), OptionArity.RequiredScalar);
@@ -265,7 +266,7 @@ public sealed class CompletionServiceTests
         CompletionResult malformed = await service.CompleteAsync(
             new CompletionRequest(model, ["--unknown", string.Empty], 1, 0)).ConfigureAwait(false);
         ConverterRegistry enumConverters = new ConverterRegistryBuilder()
-            .RegisterEnum<Format>([
+            .RegisterEnum([
                 new KeyValuePair<string, Format>("plain", Format.Plain),
                 new KeyValuePair<string, Format>("pretty", Format.Pretty)
             ])
@@ -284,7 +285,7 @@ public sealed class CompletionServiceTests
         Assert.AreEqual(CompletionOutcome.Completed, secretValues.Outcome);
         Assert.AreEqual(0, secretValues.Candidates.Count);
         Assert.AreEqual(CompletionOutcome.UnsupportedShell, unsupportedShell.Outcome);
-        Assert.ThrowsException<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             new CompletionProviderRegistryBuilder().Register(
                 target,
                 static (_, _) => EmptyValues(),

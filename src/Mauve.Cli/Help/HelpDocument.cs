@@ -392,7 +392,7 @@ internal static class HelpTextSanitizer
     private static bool IsBidiControl(char character)
     {
         return character is '\u061c' or '\u200e' or '\u200f'
-            || character is >= '\u202a' and <= '\u202e'
-            || character is >= '\u2066' and <= '\u206f';
+            or (>= '\u202a' and <= '\u202e')
+            or (>= '\u2066' and <= '\u206f');
     }
 }

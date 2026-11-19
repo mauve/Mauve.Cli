@@ -1,7 +1,7 @@
 # FEAT-13: NativeAOT and Trimming
 
 ## Status
-**PLANNED**
+**IMPLEMENTED**
 
 ## Capability
 Make supported parser paths usable under trimming and NativeAOT, and verify
@@ -9,17 +9,14 @@ real generated and explicit applications by publishing and running them.
 
 ## Context
 Depends on [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-09](../FEAT-09-Invocation-Lifecycle.md) and
+[FEAT-09](FEAT-09-Invocation-Lifecycle.md) and
 [FEAT-11](FEAT-11-Declarative-Api-And-Generation.md). The build-time/runtime
-separation is in [ADR-001](../../Architecture/ADR-001-Project-Boundaries.md).
-Full integrated acceptance also requires results [FEAT-07](../FEAT-07-Parse-Results-And-Diagnostics.md),
-help [FEAT-08](../FEAT-08-Help-And-Usage.md), completion [FEAT-10](../FEAT-10-Completion.md),
-scope [FEAT-12](../FEAT-12-Inherited-And-Global-Options.md) and
-packs [FEAT-14](FEAT-14-OptionPacks.md). Gate incremental supported subsets
-as they activate, but do not claim the full feature while required scenarios
-remain planned.
-Evidence: `../maz/Console/Cli/CliCompletionProvider.cs` uses runtime
-reflection; this proposal does not import that discovery approach.
+separation is in [ADR-001](../Architecture/ADR-001-Project-Boundaries.md).
+Integrated acceptance also uses results [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md),
+help [FEAT-08](FEAT-08-Help-And-Usage.md), completion [FEAT-10](FEAT-10-Completion.md),
+scope [FEAT-12](FEAT-12-Inherited-And-Global-Options.md) and
+packs [FEAT-14](FEAT-14-OptionPacks.md). The verified support matrix currently
+contains Linux x64 only; see [ADR-013](../Architecture/ADR-013-NativeAot-Support-Matrix.md).
 
 ## Requirements
 ### FEAT-13-001 - Runtime and generator boundary
@@ -43,7 +40,7 @@ Publish the tested target/runtime matrix and limitations, including application-
 **Security:** Do not mask trimming warnings or substitute a managed run for native verification.
 
 ## Design
-#### Proposed compatibility boundary
+#### Compatibility boundary
 
 The runtime targets `net11.0`; its generator is a build-time Roslyn analyzer
 component, not a runtime dependency. The explicit model path must work without
@@ -74,20 +71,15 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Todo.Cli and FileTool.Cli examples, Linux ARM64 | Both examples exercise real parser APIs and compiled in the package-free generator harness; no trimmed or NativeAOT publish/run has been observed. The current host is Linux x64, not an ARM64 verification environment. | Run real generated and explicit trimmed/native publish and execution before claiming product AOT support. |
-| Generated parser consumer, Linux ARM64 | Planned, unverified. | Nested command/alias, built-ins and custom converter, pack composition, validation/error paths, handler cancellation and safe help/completion. |
-| Explicit-model parser consumer with no generator reference, Linux ARM64 | Planned, unverified. | Equivalent semantic fixtures and failure outcomes to generated consumer. |
-| Other RIDs / native compilers | Unverified; not an implicit support promise. | Approve a RID/compiler/native-prerequisite row, then publish and execute on that architecture before claiming support. |
+| Generated Todo.Cli, Linux x64 | Trimmed managed and NativeAOT publishes both ran the shared parser scenario successfully with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the generator or runtime. |
+| Explicit FileTool.Cli without a generator reference, Linux x64 | Trimmed managed and NativeAOT publishes both ran the same scenario successfully with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the runtime or conversion paths. |
+| Linux ARM64 and all other RIDs | Unverified. No support claim is made. | Add a native or cross-publish-plus-execution environment and retain its independent evidence before claiming support. |
 
-Linux ARM64 is the proposed first product-verification target, not a
-universal platform restriction. The current host reports `linux-x64` and has
-an x86-64 GCC compiler, but no ARM64 cross-compiler, ARM64 execution host or
-cached .NET 11 NativeAOT compiler pack. The missing Governance package feed
-also blocks product restore and its required gate. These are unavailable
-evidence, not passing checks. Expanding the product support matrix requires
-approval and evidence; cross-publishing without executing is not sufficient.
-Record the .NET runtime/SDK, RID, OS, compiler/linker, dependency lock
-identity, git/source snapshot and native artifact hash with each run.
+The host reports Ubuntu 26.04, `linux-x64`, .NET SDK 11.0.100, and Clang
+21.1.8. The verifier rejects a non-native `linux-x64` host, records the SDK,
+compiler, lockfile/source hashes, complete command output and artifact hashes
+under `artifacts/aot-verification/linux-x64/`, and never treats cross-publish
+or a managed run as native evidence.
 
 #### Gate procedure and assertions
 
@@ -128,23 +120,36 @@ a managed run, a generated-code text snapshot or zero-warning empty assembly
 for a real parser native run. Performance and binary-size budgets need
 separate measured baselines; no number is invented here.
 
-#### Source extraction and pending choices
+#### Verified support boundary
 
-Maz shows generated registration can remove much runtime discovery, but its
-completion and custom Parse paths still use reflection. Those implementation
-details are intentionally excluded; this document specifies the replacement
-boundary and test obligations without requiring source access.
-Approve the first product RID matrix and any narrow reflection exceptions;
-baseline has none. Public annotation/package design remains subject to API
-review and the generator host must not be confused with the product target.
+Linux x64 is the first verified product RID. Other architectures remain
+unverified until their own native artifacts are executed. Applications own
+the trimming/AOT safety of callbacks and custom types they register; the
+library does not promise arbitrary application code is trim-safe.
 
 ## Metrics Impact
 **Instruments:** none - planned compatibility validation adds no runtime metrics.
 
 ## Verification
-Future CI must retain publish/run outcomes for generated and explicit paths,
-including invalid input, trim warnings and unavailable environments. No
-parser AOT evidence exists yet.
+
+`bash scripts/verify-aot.sh` performs locked restore, strict Release builds,
+managed trimmed publish/run and NativeAOT publish/run for both consumers. The
+scenario checks valid nested alias binding, inherited and nested pack values,
+custom and enum conversion, nullable values, help/completion without handler
+dispatch, invalid input without dispatch, and sequential invocation isolation.
+
+Observed on Ubuntu 26.04, .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`.
+All four published artifacts printed `AOT scenarios passed.` The native
+artifact SHA-256 values were:
+
+| Consumer | Trimmed managed DLL | Native executable |
+| --- | --- | --- |
+| Todo.Cli | `c8179182b38c23f83a008c8d4dea98e161e461ff33b1beb6722264a0ef1642a5` | `0183a767215922865b5b04e3bd0373fe171cbcda2861df1b6cf8c1bab9bbeab3` |
+| FileTool.Cli | `7217d0cadd6220c0ce82e53274b5e212e68989e7096930b6f08e843780ac3e9b` | `753c6328e7e06ddf0e403a121c50836d888db102b940b9fdd75fd9bf62d8530b` |
+
+The metadata-bearing behavioral test is
+`AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`. ARM64 and other
+RIDs remain unverified.
 
 ## Diagrams
 

@@ -84,12 +84,9 @@ public sealed class ParseResult
         ArgumentNullException.ThrowIfNull(option);
         EnsureValidated();
         ParsedValue? entry = _values.FirstOrDefault(parsed => ReferenceEquals(parsed.Option, option));
-        if (entry is null)
-        {
-            throw new ArgumentException("The option handle is not part of this selected model path.", nameof(option));
-        }
-
-        return TryGet(entry, out value);
+        return entry is null
+            ? throw new ArgumentException("The option handle is not part of this selected model path.", nameof(option))
+            : TryGet(entry, out value);
     }
 
     /// <summary>Attempts to get a parsed positional value by its owning command and definition.</summary>

@@ -195,8 +195,8 @@ public sealed class CommandModel
         out int packNodeCount)
     {
         List<OptionDefinition> flattenedOptions = [];
-        groups = new Dictionary<OptionDefinition, OptionPackGroupMetadata>(ReferenceEqualityComparer.Instance);
-        HashSet<OptionPackBuilder> active = new(ReferenceEqualityComparer.Instance);
+        groups = [with(ReferenceEqualityComparer.Instance)];
+        HashSet<OptionPackBuilder> active = [with(ReferenceEqualityComparer.Instance)];
         packNodeCount = 0;
         OptionPackSnapshot[] snapshots = SnapshotPackInclusions(
             inclusions,
@@ -233,7 +233,7 @@ public sealed class CommandModel
             throw InvalidModel("The option-pack graph exceeds the configured nesting limit.");
         }
 
-        HashSet<string> siblingKeys = new(StringComparer.Ordinal);
+        HashSet<string> siblingKeys = [with(StringComparer.Ordinal)];
         List<OptionPackSnapshot> snapshots = [];
         foreach (OptionPackInclusionBuilder inclusion in inclusions)
         {
@@ -325,12 +325,7 @@ public sealed class CommandModel
         {
             string component = command.Path[index];
             CommandDefinition? child = current.Children.FirstOrDefault(candidate =>
-                string.Equals(candidate.Name, component, StringComparison.Ordinal));
-            if (child is null)
-            {
-                throw new ArgumentException("The command does not belong to this model.", nameof(command));
-            }
-
+                string.Equals(candidate.Name, component, StringComparison.Ordinal)) ?? throw new ArgumentException("The command does not belong to this model.", nameof(command));
             path.Add(child);
             current = child;
         }
@@ -348,7 +343,7 @@ public sealed class CommandModel
         {
             (CommandDefinition command, CommandDefinition[] path) = pending.Pop();
             IReadOnlyList<CommandOption> effective = GetEffectiveOptions(path);
-            HashSet<string> names = new(StringComparer.Ordinal);
+            HashSet<string> names = [with(StringComparer.Ordinal)];
             foreach (CommandOption option in effective)
             {
                 if (!names.Add(option.Definition.Name))
@@ -418,7 +413,7 @@ with(StringComparer.Ordinal),             command.Name
         }
 
         HashSet<string> optionNames = [with(StringComparer.Ordinal)];
-        Dictionary<string, (string Title, string Description)> displayGroups = new(StringComparer.Ordinal);
+        Dictionary<string, (string Title, string Description)> displayGroups = [with(StringComparer.Ordinal)];
         foreach (OptionDefinition option in options)
         {
             ValidateOption(option);

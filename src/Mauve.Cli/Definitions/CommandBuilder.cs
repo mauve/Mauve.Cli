@@ -16,7 +16,6 @@ public sealed class CommandBuilder
     private readonly List<OptionPackInclusionBuilder> _packs = [];
     private readonly List<PositionalDefinition> _positionals = [];
     private readonly List<CrossValueValidator> _crossValidators = [];
-    private CommandHandler? _handler;
 
     /// <summary>Creates a command builder.</summary>
     /// <param name="name">The canonical name or root display label.</param>
@@ -191,12 +190,12 @@ public sealed class CommandBuilder
 
     private void SetHandlerCore(CommandHandler handler)
     {
-        if (_handler is not null)
+        if (Handler is not null)
         {
             throw new InvalidOperationException("A command can have only one handler.");
         }
 
-        _handler = handler;
+        Handler = handler;
     }
 
     internal int ChildCount => _children.Count;
@@ -207,7 +206,7 @@ public sealed class CommandBuilder
 
     internal int PositionalCount => _positionals.Count;
 
-    internal CommandHandler? Handler => _handler;
+    internal CommandHandler? Handler { get; private set; }
 
     internal string[] CopyAliases()
     {

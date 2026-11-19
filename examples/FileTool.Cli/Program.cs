@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Examples.Aot;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
@@ -12,6 +14,15 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args is ["--verify-aot"])
+        {
+            CommandModel aotModel = AotScenario.CreateExplicitModel(out ScenarioHandles handles);
+            ConverterRegistry converters = AotScenario.CreateConverters();
+            await AotScenario.VerifyAsync(aotModel, handles, converters).ConfigureAwait(false);
+            Write("AOT scenarios passed.");
+            return 0;
+        }
+
         PositionalDefinition source = new("source", typeof(string));
         PositionalDefinition destination = new("destination", typeof(string));
         OptionDefinition overwrite = new(

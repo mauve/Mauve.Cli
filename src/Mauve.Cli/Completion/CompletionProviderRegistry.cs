@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using Mauve.Cli.Definitions;
 
 namespace Mauve.Cli.Completion;
@@ -10,7 +9,7 @@ namespace Mauve.Cli.Completion;
 public sealed class CompletionProviderRegistryBuilder
 {
     private readonly Dictionary<object, ProviderRegistration> _providers =
-        new(ReferenceEqualityComparer.Instance);
+        [with(ReferenceEqualityComparer.Instance)];
 
     /// <summary>Registers a provider for an option definition.</summary>
     public CompletionProviderRegistryBuilder Register(
@@ -50,7 +49,7 @@ public sealed class CompletionProviderRegistryBuilder
         CompletionDependency[] dependencies)
     {
         ArgumentNullException.ThrowIfNull(dependencies);
-        HashSet<object> seen = new(ReferenceEqualityComparer.Instance);
+        HashSet<object> seen = [with(ReferenceEqualityComparer.Instance)];
         List<CompletionDependency> copied = [];
         foreach (CompletionDependency dependency in dependencies)
         {
@@ -68,12 +67,9 @@ public sealed class CompletionProviderRegistryBuilder
             copied.Add(dependency);
         }
 
-        if (!_providers.TryAdd(target, new ProviderRegistration(provider, Array.AsReadOnly(copied.ToArray()))))
-        {
-            throw new InvalidOperationException("A completion provider is already registered for this definition.");
-        }
-
-        return this;
+        return !_providers.TryAdd(target, new ProviderRegistration(provider, Array.AsReadOnly(copied.ToArray())))
+            ? throw new InvalidOperationException("A completion provider is already registered for this definition.")
+            : this;
     }
 
     private static void ValidateTarget(bool isHidden, bool isSensitive, string parameterName)
@@ -98,8 +94,8 @@ public sealed class CompletionProviderRegistry
     /// <summary>Creates an empty provider registry.</summary>
     public static CompletionProviderRegistry Empty()
     {
-        return new CompletionProviderRegistry(new Dictionary<object, ProviderRegistration>(
-            ReferenceEqualityComparer.Instance));
+        return new CompletionProviderRegistry([with(
+            ReferenceEqualityComparer.Instance)]);
     }
 
     internal bool TryGet(object definition, out ProviderRegistration registration)

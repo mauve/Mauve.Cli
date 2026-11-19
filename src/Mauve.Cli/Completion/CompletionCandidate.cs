@@ -1,4 +1,3 @@
-using System;
 using Mauve.Cli.Definitions;
 
 namespace Mauve.Cli.Completion;

@@ -58,7 +58,7 @@ public sealed class CompletionService(
         Segment segment = scan.EndOfOptions
             ? new Segment(0, input.ActiveToken.Length, false, false, -1)
             : GetSegment(input.ActiveToken, request.CursorCharacterOffset);
-        string prefix = input.ActiveToken.Substring(segment.Start, request.CursorCharacterOffset - segment.Start);
+        string prefix = input.ActiveToken[segment.Start..request.CursorCharacterOffset];
 
         if (!scan.EndOfOptions
             && segment.IsOptionName
@@ -182,9 +182,8 @@ public sealed class CompletionService(
         if (scan.EndOfOptions)
         {
             PositionalDefinition? positional = GetNextPositional(scan.Command, scan.PositionalTokenCount);
-            if (positional is not null)
-            {
-                return await CompleteDefinitionAsync(
+            return positional is not null
+                ? await CompleteDefinitionAsync(
                     null,
                     positional,
                     prefix,
@@ -194,10 +193,8 @@ public sealed class CompletionService(
                     providers,
                     candidates,
                     unique,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            return new CompletionResult(CompletionOutcome.Completed, [], true);
+                    cancellationToken).ConfigureAwait(false)
+                : new CompletionResult(CompletionOutcome.Completed, [], true);
         }
 
         AddRouteCandidates(scan, prefix, segment, input.ActiveToken, candidates, unique,
@@ -210,14 +207,13 @@ public sealed class CompletionService(
         PositionalDefinition? nextPositional = GetNextPositional(scan.Command, scan.PositionalTokenCount);
         bool commandCandidateMatched = candidates.Any(static candidate =>
             candidate.Kind == CompletionCandidateKind.Command);
-        if (nextPositional is not null
+        return nextPositional is not null
             && !nextPositional.IsHidden
             && !nextPositional.IsSensitive
             && (!scan.CommandSelectionOpen
                 || scan.Command.Children.Count == 0
-                || !commandCandidateMatched))
-        {
-            return await CompleteDefinitionAsync(
+                || !commandCandidateMatched)
+            ? await CompleteDefinitionAsync(
                 null,
                 nextPositional,
                 prefix,
@@ -227,10 +223,8 @@ public sealed class CompletionService(
                 providers,
                 candidates,
                 unique,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        return LimitOrCompleted(candidates, candidates.Count > _maximumEmittedCandidates);
+                cancellationToken).ConfigureAwait(false)
+            : LimitOrCompleted(candidates, candidates.Count > _maximumEmittedCandidates);
     }
 
     /// <summary>Returns an explicit unsupported outcome for shell-specific completion requests.</summary>
@@ -245,12 +239,9 @@ public sealed class CompletionService(
     {
         ArgumentNullException.ThrowIfNull(shell);
         ArgumentNullException.ThrowIfNull(request);
-        if (shell.Length == 0)
-        {
-            throw new ArgumentException("A shell name cannot be empty.", nameof(shell));
-        }
-
-        return ValueTask.FromResult(new CompletionResult(
+        return shell.Length == 0
+            ? throw new ArgumentException("A shell name cannot be empty.", nameof(shell))
+            : ValueTask.FromResult(new CompletionResult(
             cancellationToken.IsCancellationRequested ? CompletionOutcome.Cancelled : CompletionOutcome.UnsupportedShell,
             [],
             false));
@@ -385,7 +376,7 @@ public sealed class CompletionService(
                 string? description = value.Description is null
                     ? null
                     : HelpTextSanitizer.Description(value.Description);
-                AddCandidate(
+                _ = AddCandidate(
                     value.InsertionText,
                     display,
                     description,
@@ -859,7 +850,7 @@ public sealed class CompletionService(
         List<(PositionalDefinition Definition, string Token, int Index)> values)
     {
         foreach (IGrouping<PositionalDefinition, (PositionalDefinition Definition, string Token, int Index)> group
-            in values.GroupBy(static value => value.Definition, ReferenceEqualityComparer.Instance))
+            in values.GroupBy(static value => value.Definition, ReferenceEqualityComparer.Instance).Cast<IGrouping<PositionalDefinition, (PositionalDefinition Definition, string Token, int Index)>>())
         {
             PositionalDefinition definition = group.Key;
             if (definition.IsHidden || definition.IsSensitive)
@@ -869,11 +860,11 @@ public sealed class CompletionService(
 
             (PositionalDefinition Definition, string Token, int Index)[] inputs = [.. group];
             if (!TryConvertValues(definition.ElementType ?? definition.ValueType,
-                inputs.Select(static input => input.Token).ToArray(),
+                [.. inputs.Select(static input => input.Token)],
                 definition.Name,
                 inputs[0].Index,
                 false,
-                definition.MaximumValues is null || definition.MaximumValues > 1,
+                definition.MaximumValues is null or > 1,
                 out object? converted))
             {
                 scan.FailureTokenIndex = inputs[0].Index;
@@ -1022,12 +1013,7 @@ public sealed class CompletionService(
         long totalLength = 0;
         for (int index = 0; index < tokenCount; index++)
         {
-            string? token = arguments[index];
-            if (token is null)
-            {
-                throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"arguments[{index}]"));
-            }
-
+            string? token = arguments[index] ?? throw new ArgumentNullException(string.Create(CultureInfo.InvariantCulture, $"arguments[{index}]"));
             if (token.Length > limits.MaximumTokenLength)
             {
                 return null;
@@ -1057,15 +1043,12 @@ public sealed class CompletionService(
     private static Segment GetSegment(string token, int cursor)
     {
         int equalsIndex = token.IndexOf('=', StringComparison.Ordinal);
-        if (equalsIndex >= 0
-            && token[..equalsIndex].StartsWith('-', StringComparison.Ordinal))
-        {
-            return cursor <= equalsIndex
+        return equalsIndex >= 0
+            && token[..equalsIndex].StartsWith('-', StringComparison.Ordinal)
+            ? cursor <= equalsIndex
                 ? new Segment(0, equalsIndex, true, false, equalsIndex)
-                : new Segment(equalsIndex + 1, token.Length - equalsIndex - 1, false, true, equalsIndex);
-        }
-
-        return new Segment(0, token.Length, token.StartsWith('-', StringComparison.Ordinal), false, -1);
+                : new Segment(equalsIndex + 1, token.Length - equalsIndex - 1, false, true, equalsIndex)
+            : new Segment(0, token.Length, token.StartsWith('-', StringComparison.Ordinal), false, -1);
     }
 
     private static CommandOption? FindVisibleOption(IReadOnlyList<CommandOption> options, string name)
@@ -1164,20 +1147,14 @@ public sealed class CompletionService(
         PositionalDefinition? Positional,
         Type ValueType);
 
-    private sealed class CompletionScan
+    private sealed class CompletionScan(CommandDefinition root)
     {
-        public CompletionScan(CommandDefinition root)
-        {
-            Command = root;
-            Path = [root];
-        }
+        public CommandDefinition Command { get; set; } = root;
 
-        public CommandDefinition Command { get; set; }
-
-        public List<CommandDefinition> Path { get; }
+        public List<CommandDefinition> Path { get; } = [root];
 
         public Dictionary<object, object?> Values { get; } =
-            new(ReferenceEqualityComparer.Instance);
+            [with(ReferenceEqualityComparer.Instance)];
 
         public bool CommandSelectionOpen { get; set; } = true;
 

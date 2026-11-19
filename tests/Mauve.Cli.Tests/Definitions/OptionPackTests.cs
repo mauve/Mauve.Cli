@@ -4,7 +4,6 @@ using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
-using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MSTestMetadata = Mauve.Governance.Testing.MSTest.Metadata;
 
@@ -57,7 +56,7 @@ public sealed class OptionPackTests
     {
         OptionPackBuilder cycle = new();
         _ = cycle.AddPack("self", cycle);
-        Assert.ThrowsException<System.ArgumentException>(() =>
+        _ = Assert.Throws<System.ArgumentException>(() =>
             CommandModel.Create(new CommandBuilder("tool").AddPack("cycle", cycle)));
 
         OptionDefinition first = new("--first", typeof(string), OptionArity.RequiredScalar, aliases: [new OptionAlias("-x")]);
@@ -65,7 +64,7 @@ public sealed class OptionPackTests
         OptionPackBuilder firstPack = new OptionPackBuilder().AddOption(first);
         OptionPackBuilder secondPack = new OptionPackBuilder().AddOption(second);
 
-        Assert.ThrowsException<System.ArgumentException>(() => CommandModel.Create(
+        _ = Assert.Throws<System.ArgumentException>(() => CommandModel.Create(
             new CommandBuilder("tool")
                 .AddPack("first", firstPack)
                 .AddPack("second", secondPack)));
@@ -140,7 +139,7 @@ public sealed class OptionPackTests
 
         Task<InvocationResult> first = invoker.InvokeAsync(model, ["--value=2"]).AsTask();
         Task<InvocationResult> second = invoker.InvokeAsync(model, ["--value=5"]).AsTask();
-        await Task.WhenAll(first, second).ConfigureAwait(false);
+        _ = await Task.WhenAll(first, second).ConfigureAwait(false);
 
         Assert.AreEqual(2, first.Result.ExitCode);
         Assert.AreEqual(5, second.Result.ExitCode);
