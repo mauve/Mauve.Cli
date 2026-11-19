@@ -1,46 +1,62 @@
 # Contributing
 
-Read [the repository agent instructions](docs/AGENT_INSTRUCTIONS.md), the
+Read [the repository instructions](docs/AGENT_INSTRUCTIONS.md), the
 [feature lifecycle](docs/Requirements/README.md), and the applicable feature
 and architecture documents before changing product behavior.
 
-## Requirements and tests
+## Feature changes
 
-Keep planned requirements in `docs/Requirements/Planned/`. Promote a
-requirement only with its implementation, focused tests, an active feature
-owner, and a row in `docs/validation-gaps.md`. Do not describe a planned
-requirement or source traceability as passing test evidence.
+Keep proposals in `docs/Requirements/Planned/`. Promote a requirement only
+with its implementation, focused tests, an active feature owner, and an entry
+in `docs/validation-gaps.md`. Keep each requirement ID in one feature
+document.
 
-Tests use MSTest and method-level Governance feature and requirement
-properties. Follow the existing test project conventions and preserve test
-parallelization and invocation isolation.
+Tests use MSTest and method-level Governance metadata:
 
-## Local checks
+```csharp
+[TestMethod]
+[TestProperty(Metadata.Feature, "FEAT-01")]
+[TestProperty(Metadata.Requirement, "FEAT-01-001")]
+public void CreatePreservesCommandOrder()
+{
+    // Assert observable behavior.
+}
+```
 
-Use .NET SDK 11.0.100. The Governance package feed is built from a trusted
-Mauve.Governance checkout:
+A declared test, a source index, or a skipped run is not passing evidence.
+Record actual test results and environment-gated checks separately. Keep
+callbacks, parse values, and invocation state isolated.
+
+Do not edit files listed in `.mauve-governance/manifest.json`. Do not add
+blanket analyzer suppressions, install global tools, or modify the sibling
+Mauve.Governance checkout.
+
+## Build and test
+
+Use .NET SDK 11.0.100. If the local Governance feed is missing, build it from
+a trusted checkout, then run the repository gate:
 
 ```sh
 bash scripts/bootstrap-governance.sh ../Mauve.Governance
 bash scripts/verify.sh
 ```
 
-The verification script runs the repository's Governance, restore, build,
-format, test, and native scaffold checks. It fails when required tools or the
-trusted package feed are unavailable; do not report skipped checks as passed.
-For focused development, build the runtime with:
+For focused work, build and test with:
 
 ```sh
-dotnet build src/Mauve.Cli/Mauve.Cli.csproj -c Release
+dotnet build src/Mauve.Cli/Mauve.Cli.csproj --configuration Release
+dotnet test tests/Mauve.Cli.Tests/Mauve.Cli.Tests.csproj --configuration Release
+dotnet test tests/Mauve.Cli.Generators.Tests/Mauve.Cli.Generators.Tests.csproj --configuration Release
 ```
 
-Run the runtime and generator tests with:
+NativeAOT verification requires a native C/C++ toolchain and platform
+development libraries. The current verified target is Linux x64 with Clang:
 
 ```sh
-dotnet test tests/Mauve.Cli.Tests/Mauve.Cli.Tests.csproj -c Release
-dotnet test tests/Mauve.Cli.Generators.Tests/Mauve.Cli.Generators.Tests.csproj -c Release
+bash scripts/verify-aot.sh
 ```
 
-Do not edit files listed in `.mauve-governance/manifest.json` directly. Do
-not add global analyzer suppressions, install global tools, or modify the
-sibling Governance checkout as part of parser work.
+ARM64 and other RIDs are unverified. A cross-publish without executing the
+target binary is not a passing result. Keep package lock changes intentional,
+run locked restore after dependency changes, and use one commit per feature
+or logical unit.

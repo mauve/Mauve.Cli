@@ -1,51 +1,56 @@
 # Mauve.Cli
 
-Mauve.Cli is a .NET library for building typed command-line applications. It
-provides an explicit command model and a source-generated declaration API.
-Both use the same parser and invocation pipeline.
+Mauve.Cli is a .NET library for typed command-line applications. You can
+define commands in C# or describe them with attributes and use the source
+generator. Both approaches use the same parser.
 
-## Highlights
+## Features
 
 - Nested commands, aliases, options, and positional arguments.
-- Typed conversion, defaults, validation, and structured parse errors.
-- Help documents and asynchronous command handlers.
-- Reusable nested option packs with invocation-local values.
-- Shell-independent command, option, enum, and provider-based completion.
-- Generated command models with no runtime generator dependency.
-- Bounded model and input processing.
+- Typed values, defaults, validation, and clear parse errors.
+- Built-in help and asynchronous command handlers.
+- Reusable nested option packs.
+- Shell-independent command, option, and value completion.
+- Generated bindings with no runtime generator dependency.
+- Trimming and NativeAOT support verified on Linux x64.
 
-Shell adapters and end-to-end NativeAOT verification are not yet supported.
+Other runtime targets are not yet verified. Shell adapters are not included.
+The library is not published as a NuGet package yet.
 
-## Explicit model
+## Try the examples
 
-Build a command model, parse the argument tokens, and read typed values:
+```sh
+dotnet run --project examples/Todo.Cli -- add "Buy milk"
+dotnet run --project examples/Todo.Cli -- --help
+dotnet run --project examples/FileTool.Cli -- copy source.txt backup.txt
+```
+
+`Todo.Cli` uses generated commands. `FileTool.Cli` builds a command model
+directly. These examples print the requested action; they do not manage files
+or save tasks.
+
+## Define a command directly
 
 ```csharp
+using System;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Parsing;
 
-CommandModel model = CommandModel.Create(
-    new CommandBuilder("greet")
-        .AddOption(new OptionDefinition(
-            "--name",
-            typeof(string),
-            OptionArity.RequiredScalar,
-            isRequired: true)));
-
+OptionDefinition name = new("--name", typeof(string), OptionArity.RequiredScalar, isRequired: true);
+CommandModel model = CommandModel.Create(new CommandBuilder("greet").AddOption(name));
 ParseResult result = new CliParser().Parse(model, ["--name", "Ada"]);
+
 if (result.Outcome == ParseOutcome.Validated
-    && result.TryGetOptionValue(model.Root.Options[0], out string? name))
+    && result.TryGetOptionValue(name, out string? value))
 {
-    Console.WriteLine($"Hello, {name}!");
+    Console.WriteLine($"Hello, {value}!");
 }
 ```
 
-## Generated commands
-
-Declare commands and options on partial classes. The generator creates the
-model factory and typed property bindings:
+## Generate a command
 
 ```csharp
+using System;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 
@@ -56,19 +61,22 @@ public partial class GreetCommand
     public partial string Name { get; }
 
     [CliHandler]
-    private int Run() => Name.Length;
+    private int Run()
+    {
+        Console.WriteLine($"Hello, {Name}!");
+        return 0;
+    }
 }
 ```
 
-Call `GreetCommand.CreateModel()` to create the model, then pass it to
-`CliInvoker` with the user's argument tokens.
+The generator adds `GreetCommand.CreateModel()`, typed bindings, and handler
+dispatch. Option packs can group reusable options in either API.
 
-## Option packs
+## Trimming and NativeAOT
 
-Option packs group reusable options and can contain nested packs. Explicit
-models use `OptionPackBuilder`; generated declarations use `CliOptionPack`,
-`CliPack`, and `CliPackOption`. A generated handler can read pack values from
-its `CommandInvocationContext`.
+Linux x64 is verified for both generated and direct models. Run
+`bash scripts/verify-aot.sh` to repeat the trimmed and NativeAOT publish/run
+checks. ARM64 and other targets remain unverified.
 
-See the [feature index](docs/Requirements/README.md) for implementation
-status and the [architecture decisions](docs/Architecture/) for API details.
+See the [examples](examples/), [feature specifications](docs/Requirements/README.md),
+and [contributor guide](CONTRIBUTING.md) for more information.
