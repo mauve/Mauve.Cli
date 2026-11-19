@@ -1,3 +1,4 @@
+// User-facing example of building and invoking an explicit command model.
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;

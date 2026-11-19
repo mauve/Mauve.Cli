@@ -1,3 +1,4 @@
+// Internal FEAT-13 acceptance fixture shared by both examples and the AOT test.
 using System;
 using System.Collections.Generic;
 using System.Globalization;

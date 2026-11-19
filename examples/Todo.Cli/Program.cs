@@ -1,3 +1,4 @@
+// User-facing example of generated nested commands and handler binding.
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;

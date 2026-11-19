@@ -1,3 +1,4 @@
+// Internal FEAT-13 fixture for generated-model trimming and NativeAOT checks.
 using System.Diagnostics.CodeAnalysis;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
