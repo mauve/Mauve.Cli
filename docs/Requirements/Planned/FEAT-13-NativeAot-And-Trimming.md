@@ -74,17 +74,20 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Todo.Cli and FileTool.Cli examples, Linux ARM64, SDK 11.0.100/GCC | Both examples now exercise real parser APIs and compiled in the package-free generator harness; no trimmed or NativeAOT publish/run has been observed. | Run real generated and explicit trimmed/native publish and execution before claiming product AOT support. |
+| Todo.Cli and FileTool.Cli examples, Linux ARM64 | Both examples exercise real parser APIs and compiled in the package-free generator harness; no trimmed or NativeAOT publish/run has been observed. The current host is Linux x64, not an ARM64 verification environment. | Run real generated and explicit trimmed/native publish and execution before claiming product AOT support. |
 | Generated parser consumer, Linux ARM64 | Planned, unverified. | Nested command/alias, built-ins and custom converter, pack composition, validation/error paths, handler cancellation and safe help/completion. |
 | Explicit-model parser consumer with no generator reference, Linux ARM64 | Planned, unverified. | Equivalent semantic fixtures and failure outcomes to generated consumer. |
 | Other RIDs / native compilers | Unverified; not an implicit support promise. | Approve a RID/compiler/native-prerequisite row, then publish and execute on that architecture before claiming support. |
 
-Linux ARM64 is the proposed first product-verification target because its
-toolchain exists here, not a universal platform restriction. Expanding the
-product support matrix requires approval and evidence; cross-publishing
-without executing is not sufficient. Record the .NET runtime/SDK, RID, OS,
-compiler/linker, dependency lock identity, git/source snapshot and native
-artifact hash with each run.
+Linux ARM64 is the proposed first product-verification target, not a
+universal platform restriction. The current host reports `linux-x64` and has
+an x86-64 GCC compiler, but no ARM64 cross-compiler, ARM64 execution host or
+cached .NET 11 NativeAOT compiler pack. The missing Governance package feed
+also blocks product restore and its required gate. These are unavailable
+evidence, not passing checks. Expanding the product support matrix requires
+approval and evidence; cross-publishing without executing is not sufficient.
+Record the .NET runtime/SDK, RID, OS, compiler/linker, dependency lock
+identity, git/source snapshot and native artifact hash with each run.
 
 #### Gate procedure and assertions
 
