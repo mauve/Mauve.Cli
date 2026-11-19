@@ -30,7 +30,7 @@ Validate nested composition for cycles, duplicate inclusion keys and duplicate v
 **Security:** Snapshot traversal is bounded by the configured model node and nesting limits.
 
 ### FEAT-14-003 - Generated and explicit parity
-Declare reusable packs with `CliOptionPack`, `CliPack` and `CliPackOption`, and generate a model that uses the shared runtime validation and invocation behavior.
+Declare reusable packs with `CliOptionPack`, generic `CliPack<TPack>` and generic `CliPackOption<TValue>`, infer inclusion/option order from source position and option arity from the value type, and generate a model that uses the shared runtime validation and invocation behavior.
 **Acceptance:** Equivalent nested packs created through generated and explicit APIs bind the same values and help groups; invalid pack aliases and cycles produce generator errors without root registration; an option added to the generated root builder works alongside generated packs.
 **Security:** Neither construction path bypasses definition validation or converter registration rules, and generated declarations never store invocation values in static state.
 
@@ -64,16 +64,21 @@ key and read values from the current invocation. A generated root also exposes
 `CommandModel.Create` validates the combined model. Completion and providers
 remain owned by FEAT-10.
 
+Pack inclusion keys and pack-option names remain explicit. Pack and option
+order follows compilation syntax-tree order and source span. Pack option
+`bool` values infer BooleanFlag, `IReadOnlyList<T>` values infer greedy
+repeatable collection semantics, and other values infer RequiredScalar unless
+an explicit named arity override is supplied.
+
 ## Metrics Impact
 **Instruments:** none - option-pack composition adds no runtime instrumentation.
 
 ## Verification
-Focused tests cover nested values, generated/explicit parity, manual root
-options, help grouping, empty packs, cycles, collisions, disjoint reuse and
-concurrent/sequential isolation. The package-free harness passed the explicit
-pack tests and generated parity scenarios; this is not product MSTest or
-Governance acceptance evidence. The product test run remains blocked by the
-missing trusted local Governance package feed.
+Focused tests cover nested values, generated/explicit parity, generic
+attributes, inferred source order and arity, nullable versus explicitly empty
+pack metadata, manual root options, help grouping, empty packs, cycles,
+collisions, disjoint reuse and concurrent/sequential isolation. Observed MTP
+evidence is recorded in the validation ledger.
 
 ## Diagrams
 

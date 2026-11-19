@@ -48,7 +48,7 @@ and [ADR-011](../../Architecture/ADR-011-OptionPack-Composition.md).
 | Results/safety | Typed outcome/provenance/coordinate semantics, proposed numeric bounds, deterministic errors and advisory suggestions (07). |
 | Help/invocation | Opt-in help helper with structural-error precedence, explicit non-dispatch outcomes, host-owned exceptions/process exit (08/09). |
 | Completion | Logical-token cursor API, scope-safe provider/context lookup and explicit bounded failures; no shell adapters are currently supported (10; ADR-012). |
-| Generation | Partial-class/property declarations, explicit semantic order metadata, instance-scoped binding, direct handlers and explicit-model parity (11; ADR-010). |
+| Generation | Partial-class/property declarations, generic type references, source-derived order, inferred kebab-case names/cardinality, instance-scoped binding, direct handlers and explicit-model parity (11; ADR-010). |
 | Packs | Inclusion-key identity, child-first flattening, nearest-title grouping, invocation-local views and generated parity (14; ADR-011/ADR-010). |
 | Compatibility | Real generated/explicit trimming/AOT scenarios; Linux x64 verified, other RIDs unverified (13; ADR-013). |
 

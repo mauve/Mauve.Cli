@@ -294,7 +294,7 @@ public sealed class CompletionService(
         if (valueType is not null)
         {
             bool candidateTooLong = false;
-            string description = option?.Description ?? positional?.Description ?? string.Empty;
+            string? description = option?.Description ?? positional?.Description;
             foreach (string name in _converters.GetEnumNames(valueType))
             {
                 AddValueCandidate(name, description, prefix, segment, activeToken,
@@ -491,7 +491,7 @@ public sealed class CompletionService(
                 if (child.Name.StartsWith(prefix, StringComparison.Ordinal))
                 {
                     candidateTooLong |= AddCandidate(child.Name, HelpTextSanitizer.SingleLine(child.Name),
-                    HelpTextSanitizer.Description(child.Description), CompletionCandidateKind.Command,
+                    HelpTextSanitizer.DescriptionOrNull(child.Description), CompletionCandidateKind.Command,
                     segment, activeToken, child, null, null, candidates, unique);
                 }
                 foreach (string alias in child.Aliases)
@@ -499,7 +499,7 @@ public sealed class CompletionService(
                     if (alias.StartsWith(prefix, StringComparison.Ordinal))
                     {
                         candidateTooLong |= AddCandidate(alias, HelpTextSanitizer.SingleLine(alias),
-                            HelpTextSanitizer.Description(child.Description), CompletionCandidateKind.Command,
+                            HelpTextSanitizer.DescriptionOrNull(child.Description), CompletionCandidateKind.Command,
                             segment, activeToken, child, null, null, candidates, unique);
                     }
                 }
@@ -545,7 +545,7 @@ public sealed class CompletionService(
             else
             {
                 candidateTooLong |= AddCandidate(option.Name, HelpTextSanitizer.SingleLine(option.Name),
-                    HelpTextSanitizer.Description(option.Description), CompletionCandidateKind.Option,
+                    HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
                     segment, activeToken, null, option, null, candidates, unique);
             }
             foreach (OptionAlias alias in option.Aliases)
@@ -554,7 +554,7 @@ public sealed class CompletionService(
                     && alias.Name.StartsWith(prefix, StringComparison.Ordinal))
                 {
                     candidateTooLong |= AddCandidate(alias.Name, HelpTextSanitizer.SingleLine(alias.Name),
-                        HelpTextSanitizer.Description(option.Description), CompletionCandidateKind.Option,
+                        HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
                         segment, activeToken, null, option, null, candidates, unique);
                 }
             }
@@ -563,7 +563,7 @@ public sealed class CompletionService(
 
     private static void AddValueCandidate(
         string value,
-        string description,
+        string? description,
         string prefix,
         Segment segment,
         string activeToken,
@@ -578,7 +578,7 @@ public sealed class CompletionService(
             candidateTooLong |= AddCandidate(
                 value,
                 HelpTextSanitizer.SingleLine(value),
-                HelpTextSanitizer.Description(description),
+                HelpTextSanitizer.DescriptionOrNull(description),
                 positional is null ? CompletionCandidateKind.Value : CompletionCandidateKind.Positional,
                 segment, activeToken, null, option, positional, candidates, unique);
         }

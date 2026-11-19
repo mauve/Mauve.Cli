@@ -29,8 +29,9 @@ ordinary definitions governed by existing scope, conversion and result rules.
   search is provided.
 - Keep bound values in the ordinary per-parse `ParseResult`; the pack
   blueprint and static definitions never store mutable invocation values.
-- Generated declarations use `CliOptionPack`, `CliPack` and
-  `CliPackOption`. Generated root builders expose `CreateBuilder()` so
+- Generated declarations use `CliOptionPack`, `CliPack<TPack>` and
+  `CliPackOption<TValue>`, with source-derived order and type-derived ordinary
+  arity. Generated root builders expose `CreateBuilder()` so
   callers can add explicit root-owned options before validation. Generated
   handlers use `CommandInvocationContext` to resolve pack views by inclusion
   key. Generated and explicit paths share runtime validation and parsing.

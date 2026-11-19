@@ -175,6 +175,42 @@ public sealed class CommandModelTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-02")]
+    [TestProperty(Metadata.Requirement, "FEAT-02-001")]
+    [TestProperty(Metadata.Requirement, "FEAT-02-002")]
+    public void Create_PreservesOmittedAndExplicitEmptyDisplayMetadata()
+    {
+        CommandBuilder root = new("tool");
+        _ = root.AddOption(new OptionDefinition(
+            "--omitted",
+            typeof(string),
+            OptionArity.RequiredScalar));
+        _ = root.AddOption(new OptionDefinition(
+            "--empty",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            description: string.Empty,
+            valueLabel: string.Empty));
+        _ = root.AddPositional(new PositionalDefinition("omitted", typeof(string)));
+        _ = root.AddPositional(new PositionalDefinition("empty", typeof(string), description: string.Empty));
+
+        CommandDefinition definition = CommandModel.Create(root).Root;
+
+        Assert.IsNull(definition.Description);
+        Assert.IsNull(definition.LongDescription);
+        Assert.IsNull(definition.Options[0].Description);
+        Assert.IsNull(definition.Options[0].ValueLabel);
+        Assert.AreEqual(string.Empty, definition.Options[1].Description);
+        Assert.AreEqual(string.Empty, definition.Options[1].ValueLabel);
+        Assert.IsNull(definition.Positionals[0].Description);
+        Assert.AreEqual(string.Empty, definition.Positionals[1].Description);
+        Assert.IsNull(new OptionDisplayGroup("omitted", "Title").Description);
+        Assert.AreEqual(
+            string.Empty,
+            new OptionDisplayGroup("empty", "Title", string.Empty).Description);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-02")]
     [TestProperty(Metadata.Requirement, "FEAT-02-002")]
     public void Create_PreservesPositionalDeclarationOrder()
     {

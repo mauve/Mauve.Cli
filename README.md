@@ -54,10 +54,10 @@ using System;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 
-[CliCommand("greet", IsRoot = true)]
+[CliCommand(IsRoot = true)]
 public partial class GreetCommand
 {
-    [CliOption("--name", OptionArity.RequiredScalar, 0, IsRequired = true)]
+    [CliOption(IsRequired = true)]
     public partial string Name { get; }
 
     [CliHandler]
@@ -70,7 +70,9 @@ public partial class GreetCommand
 ```
 
 The generator adds `GreetCommand.CreateModel()`, typed bindings, and handler
-dispatch. Option packs can group reusable options in either API.
+dispatch. It derives `greet` and `--name` from the C# identifiers and derives
+the scalar arity from `string`. Option packs can group reusable options in
+either API.
 
 ## Trimming and NativeAOT
 

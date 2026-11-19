@@ -29,6 +29,10 @@ registration and source generation.
 - Option and positional definitions carry explicit value type, arity,
   nullability, visibility, sensitivity, and descriptive metadata. Runtime
   parsing values and callbacks belong to later feature contracts.
+- Optional display metadata preserves omitted `null` separately from an
+  explicitly empty string in the validated snapshot. Help rendering may
+  normalize both to no visible text, but model and completion consumers can
+  distinguish them.
 - Model validation uses bounded iterative traversal. It rejects cycles,
   repeated ancestry, invalid names, local collisions, unsupported positional
   arity and incompatible option declarations before any argv processing.

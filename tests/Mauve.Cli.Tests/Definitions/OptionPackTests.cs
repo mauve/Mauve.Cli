@@ -14,6 +14,33 @@ public sealed class OptionPackTests
 {
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-004")]
+    public async Task InvokeAsync_PreservesOmittedAndExplicitEmptyPackMetadata()
+    {
+        OptionPackBuilder omitted = new();
+        OptionPackBuilder empty = new();
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool")
+                .AddPack("omitted", omitted)
+                .AddPack("empty", empty, string.Empty, string.Empty)
+                .SetHandler((context, _) =>
+                {
+                    OptionPackContext omittedContext = context.GetOptionPack("omitted");
+                    OptionPackContext emptyContext = context.GetOptionPack("empty");
+                    Assert.IsNull(omittedContext.Title);
+                    Assert.IsNull(omittedContext.Description);
+                    Assert.AreEqual(string.Empty, emptyContext.Title);
+                    Assert.AreEqual(string.Empty, emptyContext.Description);
+                    return 0;
+                }));
+
+        InvocationResult result = await new CliInvoker().InvokeAsync(model, []).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-001")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-004")]
     public async Task InvokeAsync_BindsNestedPackValuesAndGroupsHelpByNearestTitle()

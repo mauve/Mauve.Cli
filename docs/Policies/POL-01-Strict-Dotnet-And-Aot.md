@@ -57,6 +57,6 @@ unverified; see
 [FEAT-13](../Requirements/FEAT-13-NativeAot-And-Trimming.md) and
 [ADR-013](../Architecture/ADR-013-NativeAot-Support-Matrix.md).
 
-The strict solution build and 77-test MTP suite pass locally. The independent
+The strict solution build and 83-test MTP suite pass locally. The independent
 probe's TRX lives under `artifacts/obj/governance-probe/`; it must not populate
 the active parser ledger or source-only index.

@@ -29,10 +29,10 @@ public sealed class CommandBuilder
     public string Name { get; }
 
     /// <summary>Gets or sets the short description.</summary>
-    public string Description { get; set; } = string.Empty;
+    public string? Description { get; set; }
 
     /// <summary>Gets or sets the long description.</summary>
-    public string LongDescription { get; set; } = string.Empty;
+    public string? LongDescription { get; set; }
 
     /// <summary>Gets or sets whether ordinary help and completion hide this command.</summary>
     public bool IsHidden { get; set; }
@@ -81,7 +81,7 @@ public sealed class CommandBuilder
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(pack);
-        _packs.Add(new OptionPackInclusionBuilder(key, pack, title ?? string.Empty, description ?? string.Empty));
+        _packs.Add(new OptionPackInclusionBuilder(key, pack, title, description));
         return this;
     }
 

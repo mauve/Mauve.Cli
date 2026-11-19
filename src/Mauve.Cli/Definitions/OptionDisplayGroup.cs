@@ -12,7 +12,7 @@ public sealed class OptionDisplayGroup(string key, string title, string? descrip
     public string Title { get; } = title ?? throw new ArgumentNullException(nameof(title));
 
     /// <summary>Gets the optional group description.</summary>
-    public string Description { get; } = description ?? string.Empty;
+    public string? Description { get; } = description;
 
     private static string Validate(string value, string parameterName)
     {

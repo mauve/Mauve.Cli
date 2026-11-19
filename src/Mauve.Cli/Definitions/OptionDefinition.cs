@@ -65,8 +65,8 @@ public sealed class OptionDefinition
         ElementType = elementType;
         AllowsNull = allowsNull;
         IsRequired = isRequired;
-        Description = description ?? string.Empty;
-        ValueLabel = valueLabel ?? string.Empty;
+        Description = description;
+        ValueLabel = valueLabel;
         IsHidden = isHidden;
         IsSensitive = isSensitive;
         BareValuePolicy = bareValuePolicy;
@@ -117,10 +117,10 @@ public sealed class OptionDefinition
     public bool IsRequired { get; }
 
     /// <summary>Gets the display description.</summary>
-    public string Description { get; }
+    public string? Description { get; }
 
     /// <summary>Gets the display label for a value.</summary>
-    public string ValueLabel { get; }
+    public string? ValueLabel { get; }
 
     /// <summary>Gets whether ordinary help and completion hide this option.</summary>
     public bool IsHidden { get; }

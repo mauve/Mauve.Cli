@@ -29,7 +29,7 @@ public sealed class OptionPackContext
     public string? Title => _pack.Title;
 
     /// <summary>Gets the help-group description on this inclusion.</summary>
-    public string Description => _pack.Description;
+    public string? Description => _pack.Description;
 
     /// <summary>Gets a directly nested pack by its inclusion key.</summary>
     /// <param name="key">The nested inclusion key.</param>

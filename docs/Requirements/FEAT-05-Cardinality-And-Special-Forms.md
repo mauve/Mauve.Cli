@@ -67,6 +67,11 @@ The initial grammar has no short clusters or count stacking:
 `-ab`, `-vv` and `-v3` are unknown options. Applications wanting verbosity
 counts can use `--verbosity=3` or a future separately designed counting mode.
 Neither long nor short aliases get repetition semantics from their spelling.
+Generated declarations infer BooleanFlag for nonnullable `bool`,
+GreedyCollection for supported `IReadOnlyList<T>` option properties, and
+RequiredScalar for other option properties. A named arity override may select
+another compatible mode; inference does not weaken the same runtime
+validation used by explicit definitions.
 Boolean space syntax intentionally wins over a literal child/path named
 true/false; this ambiguity is an explicit approval item, not hidden greed.
 For literal paths use `--`, and for a following child named true/false use

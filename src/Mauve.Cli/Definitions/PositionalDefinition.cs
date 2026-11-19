@@ -50,7 +50,7 @@ public sealed class PositionalDefinition
         MaximumValues = maximumValues;
         ElementType = elementType;
         AllowsNull = allowsNull;
-        Description = description ?? string.Empty;
+        Description = description;
         IsHidden = isHidden;
         IsSensitive = isSensitive;
         DefaultValuePolicy = defaultValuePolicy;
@@ -85,7 +85,7 @@ public sealed class PositionalDefinition
     public bool AllowsNull { get; }
 
     /// <summary>Gets the display description.</summary>
-    public string Description { get; }
+    public string? Description { get; }
 
     /// <summary>Gets whether ordinary help and completion hide this argument.</summary>
     public bool IsHidden { get; }

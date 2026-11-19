@@ -33,8 +33,8 @@ public sealed class CommandDefinition
         Dictionary<OptionDefinition, OptionPackGroupMetadata> packGroups)
     {
         Name = builder.Name;
-        Description = builder.Description ?? string.Empty;
-        LongDescription = builder.LongDescription ?? string.Empty;
+        Description = builder.Description;
+        LongDescription = builder.LongDescription;
         IsHidden = builder.IsHidden;
         _aliases = Array.AsReadOnly(aliases);
         _children = Array.AsReadOnly(children);
@@ -63,10 +63,10 @@ public sealed class CommandDefinition
     public IReadOnlyList<string> Aliases => _aliases;
 
     /// <summary>Gets the short description.</summary>
-    public string Description { get; }
+    public string? Description { get; }
 
     /// <summary>Gets the long description.</summary>
-    public string LongDescription { get; }
+    public string? LongDescription { get; }
 
     /// <summary>Gets whether ordinary help and completion hide this command.</summary>
     public bool IsHidden { get; }

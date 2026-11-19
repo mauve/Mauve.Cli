@@ -33,7 +33,7 @@ public sealed class OptionPackBuilder
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(pack);
-        _packs.Add(new OptionPackInclusionBuilder(key, pack, title ?? string.Empty, description ?? string.Empty));
+        _packs.Add(new OptionPackInclusionBuilder(key, pack, title, description));
         return this;
     }
 
@@ -55,15 +55,15 @@ public sealed class OptionPackBuilder
 internal sealed record OptionPackInclusionBuilder(
     string Key,
     OptionPackBuilder Pack,
-    string Title,
-    string Description);
+    string? Title,
+    string? Description);
 
 internal sealed class OptionPackSnapshot(
     string key,
     OptionDefinition[] options,
     OptionPackSnapshot[] nestedPacks,
     string? title,
-    string description)
+    string? description)
 {
     public string Key { get; } = key;
 
@@ -73,7 +73,7 @@ internal sealed class OptionPackSnapshot(
 
     public string? Title { get; } = title;
 
-    public string Description { get; } = description;
+    public string? Description { get; } = description;
 
     public bool ContainsOption(OptionDefinition option)
     {

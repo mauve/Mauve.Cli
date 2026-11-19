@@ -17,12 +17,12 @@ schema and validation boundary are recorded in
 ## Requirements
 ### FEAT-02-001 - Option definitions
 Options must define a canonical name, zero or more aliases, a value type and descriptive/visibility metadata.
-**Acceptance:** A `--output` option with `-o` alias and hidden metadata is discoverable in the model through either name; empty or malformed names are rejected.
+**Acceptance:** A `--output` option with `-o` alias and hidden metadata is discoverable in the model through either name; omitted and explicitly empty descriptive metadata remain distinguishable; empty or malformed names are rejected.
 **Security:** Hidden metadata is a presentation choice, not access control; untrusted descriptions are never executed.
 
 ### FEAT-02-002 - Positional definitions
 Commands must define named, typed positionals in a stable declaration order, with descriptions and visibility metadata.
-**Acceptance:** Declaring `source` then `destination` retains that order; duplicate or empty positional names fail validation.
+**Acceptance:** Declaring `source` then `destination` retains that order; omitted and explicitly empty descriptions remain distinguishable; duplicate or empty positional names fail validation.
 **Security:** Invalid definitions fail before input is bound rather than assigning a value to an unintended argument.
 
 ### FEAT-02-003 - Local alias integrity
@@ -129,8 +129,10 @@ display metadata does not establish a generic config-provider feature.
 
 The approved name syntax, positional ordering, and collection result shape are
 implemented in the explicit definitions. FEAT-11 must lower declarations to
-this schema without adding different inference rules. No maz source is needed
-to implement this contract.
+this schema. Its compile-time inference selects supported names/order/arity
+before constructing the same explicit definitions; runtime reflection does
+not infer or repair metadata. No maz source is needed to implement this
+contract.
 
 ## Metrics Impact
 **Instruments:** none - immutable option definitions do not add runtime metrics.

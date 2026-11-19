@@ -16,13 +16,13 @@ namespace Mauve.Cli.Generators;
 public sealed class CliModelGenerator : IIncrementalGenerator
 {
     private const string _commandAttributeName = "Mauve.Cli.Declarations.CliCommandAttribute";
-    private const string _childAttributeName = "Mauve.Cli.Declarations.CliChildAttribute";
+    private const string _childAttributeName = "Mauve.Cli.Declarations.CliChildAttribute`1";
     private const string _optionAttributeName = "Mauve.Cli.Declarations.CliOptionAttribute";
     private const string _argumentAttributeName = "Mauve.Cli.Declarations.CliArgumentAttribute";
     private const string _handlerAttributeName = "Mauve.Cli.Declarations.CliHandlerAttribute";
     private const string _optionPackAttributeName = "Mauve.Cli.Declarations.CliOptionPackAttribute";
-    private const string _packAttributeName = "Mauve.Cli.Declarations.CliPackAttribute";
-    private const string _packOptionAttributeName = "Mauve.Cli.Declarations.CliPackOptionAttribute";
+    private const string _packAttributeName = "Mauve.Cli.Declarations.CliPackAttribute`1";
+    private const string _packOptionAttributeName = "Mauve.Cli.Declarations.CliPackOptionAttribute`1";
     private const string _contextType = "global::Mauve.Cli.Invocation.CommandInvocationContext";
 
     private static readonly DiagnosticDescriptor _invalidDeclaration = new(
@@ -64,16 +64,26 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 static (node, _) => node is TypeDeclarationSyntax,
                 static (attributeContext, _) => (INamedTypeSymbol)attributeContext.TargetSymbol);
         context.RegisterSourceOutput(
-            commandDeclarations.Collect().Combine(packDeclarations.Collect()),
-            static (productionContext, declarations) =>
-                Generate(productionContext, declarations.Left, declarations.Right));
+            commandDeclarations.Collect()
+                .Combine(packDeclarations.Collect())
+                .Combine(context.CompilationProvider),
+            static (productionContext, input) =>
+                Generate(productionContext, input.Left.Left, input.Left.Right, input.Right));
     }
 
     private static void Generate(
         SourceProductionContext context,
         ImmutableArray<INamedTypeSymbol> declaredTypes,
-        ImmutableArray<INamedTypeSymbol> declaredPackTypes)
+        ImmutableArray<INamedTypeSymbol> declaredPackTypes,
+        Compilation compilation)
     {
+        Dictionary<SyntaxTree, int> syntaxTreeOrder = [];
+        int syntaxTreeIndex = 0;
+        foreach (SyntaxTree syntaxTree in compilation.SyntaxTrees)
+        {
+            syntaxTreeOrder.Add(syntaxTree, syntaxTreeIndex++);
+        }
+
         Dictionary<INamedTypeSymbol, CommandInfo> commands = [with(SymbolEqualityComparer.Default)];
         Dictionary<INamedTypeSymbol, PackInfo> packs = [with(SymbolEqualityComparer.Default)];
         foreach (INamedTypeSymbol? type in declaredPackTypes.Distinct(SymbolEqualityComparer.Default)
@@ -84,7 +94,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 AttributeData? attribute = FindAttribute(type, _optionPackAttributeName);
                 if (attribute is not null)
                 {
-                    packs.Add(type, CreatePackInfo(context, type, attribute));
+                    packs.Add(type, CreatePackInfo(context, type, attribute, syntaxTreeOrder));
                 }
             }
         }
@@ -103,20 +113,20 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            CommandInfo command = CreateCommandInfo(context, type, attribute);
+            CommandInfo command = CreateCommandInfo(context, type, attribute, syntaxTreeOrder);
             commands.Add(type, command);
         }
 
         foreach (PackInfo pack in packs.Values)
         {
-            ReadPackInclusions(context, pack, packs);
+            ReadPackInclusions(context, pack, packs, syntaxTreeOrder);
         }
 
         foreach (CommandInfo command in commands.Values.OrderBy(static item =>
             item.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
         {
-            ReadChildren(context, command, commands);
-            ReadCommandPacks(context, command, packs);
+            ReadChildren(context, command, commands, syntaxTreeOrder);
+            ReadCommandPacks(context, command, packs, syntaxTreeOrder);
         }
 
         List<CommandInfo> validRoots = [];
@@ -198,17 +208,18 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private static CommandInfo CreateCommandInfo(
         SourceProductionContext context,
         INamedTypeSymbol symbol,
-        AttributeData attribute)
+        AttributeData attribute,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
-        string name = GetConstructorString(attribute, 0) ?? string.Empty;
+        string name = GetConstructorString(attribute, 0) ?? DeriveCommandName(symbol.Name);
         bool isRoot = GetNamedBoolean(attribute, "IsRoot");
         CommandInfo command = new(
             symbol,
             attribute,
             name,
             isRoot,
-            GetNamedString(attribute, "Description") ?? string.Empty,
-            GetNamedString(attribute, "LongDescription") ?? string.Empty,
+            GetNamedString(attribute, "Description"),
+            GetNamedString(attribute, "LongDescription"),
             GetNamedBoolean(attribute, "IsHidden"),
             GetNamedStrings(attribute, "Aliases"));
 
@@ -263,21 +274,22 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            int order = GetConstructorInt(optionAttribute ?? argumentAttribute!, 2 - (argumentAttribute is null ? 0 : 1));
+            SourceOrder sourceOrder = GetSourceOrder(
+                optionAttribute ?? argumentAttribute!,
+                property,
+                syntaxTreeOrder);
             if (optionAttribute is not null)
             {
-                command.Options.Add(new OptionInfo(property, optionAttribute, order));
+                command.Options.Add(new OptionInfo(property, optionAttribute, sourceOrder));
             }
             else
             {
-                command.Arguments.Add(new ArgumentInfo(property, argumentAttribute!, order));
+                command.Arguments.Add(new ArgumentInfo(property, argumentAttribute!, sourceOrder));
             }
         }
 
-        command.Options.Sort(static (left, right) => left.Order.CompareTo(right.Order));
-        command.Arguments.Sort(static (left, right) => left.Order.CompareTo(right.Order));
-        command.IsValid &= ValidateOrders(context, [.. command.Options.Select(static item => (item.Order, GetLocation(item.Attribute, item.Property)))], command.Name);
-        command.IsValid &= ValidateOrders(context, [.. command.Arguments.Select(static item => (item.Order, GetLocation(item.Attribute, item.Property)))], command.Name);
+        command.Options.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
+        command.Arguments.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
 
         IMethodSymbol[] handlers = [.. symbol.GetMembers().OfType<IMethodSymbol>().Where(static method => FindAttribute(method, _handlerAttributeName) is not null)];
         if (handlers.Length > 1)
@@ -308,7 +320,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private static PackInfo CreatePackInfo(
         SourceProductionContext context,
         INamedTypeSymbol symbol,
-        AttributeData attribute)
+        AttributeData attribute,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
         PackInfo pack = new(symbol, attribute);
         if (symbol.TypeKind != TypeKind.Class
@@ -331,25 +344,22 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
 
         foreach (AttributeData optionAttribute in symbol.GetAttributes()
-            .Where(static item => item.AttributeClass?.ToDisplayString() == _packOptionAttributeName))
+            .Where(static item => IsAttribute(item, _packOptionAttributeName)))
         {
-            ITypeSymbol? valueType = optionAttribute.ConstructorArguments.Length > 1
-                ? optionAttribute.ConstructorArguments[1].Value as ITypeSymbol
-                : null;
+            ITypeSymbol? valueType = GetAttributeTypeArgument(optionAttribute);
             if (valueType is null || !ValidatePackOption(context, optionAttribute, valueType))
             {
                 pack.IsValid = false;
                 continue;
             }
 
-            pack.Options.Add(new PackOptionInfo(optionAttribute, valueType, GetConstructorInt(optionAttribute, 3)));
+            pack.Options.Add(new PackOptionInfo(
+                optionAttribute,
+                valueType,
+                GetSourceOrder(optionAttribute, symbol, syntaxTreeOrder)));
         }
 
-        pack.Options.Sort(static (left, right) => left.Order.CompareTo(right.Order));
-        pack.IsValid &= ValidateOrders(
-            context,
-            [.. pack.Options.Select(item => (item.Order, GetLocation(item.Attribute, pack.Symbol)))],
-            pack.Name);
+        pack.Options.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
 
         string[] fieldNames = [.. pack.Options.Select((_, index) => string.Concat("Option", index.ToString(CultureInfo.InvariantCulture)))];
         if (fieldNames.Any(fieldName => symbol.GetMembers(fieldName).Length > 0)
@@ -369,7 +379,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     {
         string name = GetConstructorString(attribute, 0) ?? string.Empty;
         string[] spellings = [name, .. GetNamedStrings(attribute, "Aliases")];
-        int arity = GetConstructorInt(attribute, 2);
+        int arity = GetOptionArity(attribute, valueType);
         int bareValuePolicy = GetNamedInt(attribute, "BareValuePolicy");
         bool collection = arity is 3 or 4;
         bool scalar = arity is 0 or 1;
@@ -399,15 +409,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private static void ReadPackInclusions(
         SourceProductionContext context,
         PackInfo pack,
-        Dictionary<INamedTypeSymbol, PackInfo> packs)
+        Dictionary<INamedTypeSymbol, PackInfo> packs,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
         foreach (AttributeData attribute in pack.Symbol.GetAttributes()
-            .Where(static item => item.AttributeClass?.ToDisplayString() == _packAttributeName))
+            .Where(static item => IsAttribute(item, _packAttributeName)))
         {
-            INamedTypeSymbol? packType = attribute.ConstructorArguments.Length > 0
-                ? attribute.ConstructorArguments[0].Value as INamedTypeSymbol
-                : null;
-            if (packType is null || !packs.TryGetValue(packType, out PackInfo? child))
+            if (GetAttributeTypeArgument(attribute) is not INamedTypeSymbol packType
+                || !packs.TryGetValue(packType, out PackInfo? child))
             {
                 Report(context, _invalidHierarchy, GetLocation(attribute, pack.Symbol), "Every nested pack type must have a CliOptionPack declaration in this compilation.");
                 pack.IsValid = false;
@@ -417,32 +426,27 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             pack.Inclusions.Add(new PackInclusionInfo(
                 pack.Symbol,
                 child,
-                GetConstructorString(attribute, 1) ?? string.Empty,
-                GetConstructorInt(attribute, 2),
-                GetNamedString(attribute, "Title") ?? string.Empty,
-                GetNamedString(attribute, "Description") ?? string.Empty,
+                GetConstructorString(attribute, 0) ?? string.Empty,
+                GetSourceOrder(attribute, pack.Symbol, syntaxTreeOrder),
+                GetNamedString(attribute, "Title"),
+                GetNamedString(attribute, "Description"),
                 attribute));
         }
 
-        pack.Inclusions.Sort(static (left, right) => left.Order.CompareTo(right.Order));
-        pack.IsValid &= ValidateOrders(
-            context,
-            [.. pack.Inclusions.Select(static item => (item.Order, GetLocation(item.Attribute, item.ParentSymbol)))],
-            pack.Name);
+        pack.Inclusions.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
     }
 
     private static void ReadCommandPacks(
         SourceProductionContext context,
         CommandInfo command,
-        Dictionary<INamedTypeSymbol, PackInfo> packs)
+        Dictionary<INamedTypeSymbol, PackInfo> packs,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
         foreach (AttributeData attribute in command.Symbol.GetAttributes()
-            .Where(static item => item.AttributeClass?.ToDisplayString() == _packAttributeName))
+            .Where(static item => IsAttribute(item, _packAttributeName)))
         {
-            INamedTypeSymbol? packType = attribute.ConstructorArguments.Length > 0
-                ? attribute.ConstructorArguments[0].Value as INamedTypeSymbol
-                : null;
-            if (packType is null || !packs.TryGetValue(packType, out PackInfo? pack))
+            if (GetAttributeTypeArgument(attribute) is not INamedTypeSymbol packType
+                || !packs.TryGetValue(packType, out PackInfo? pack))
             {
                 Report(context, _invalidHierarchy, GetLocation(attribute, command.Symbol), "Every included pack type must have a CliOptionPack declaration in this compilation.");
                 command.IsValid = false;
@@ -452,18 +456,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             command.Packs.Add(new PackInclusionInfo(
                 command.Symbol,
                 pack,
-                GetConstructorString(attribute, 1) ?? string.Empty,
-                GetConstructorInt(attribute, 2),
-                GetNamedString(attribute, "Title") ?? string.Empty,
-                GetNamedString(attribute, "Description") ?? string.Empty,
+                GetConstructorString(attribute, 0) ?? string.Empty,
+                GetSourceOrder(attribute, command.Symbol, syntaxTreeOrder),
+                GetNamedString(attribute, "Title"),
+                GetNamedString(attribute, "Description"),
                 attribute));
         }
 
-        command.Packs.Sort(static (left, right) => left.Order.CompareTo(right.Order));
-        command.IsValid &= ValidateOrders(
-            context,
-            [.. command.Packs.Select(static item => (item.Order, GetLocation(item.Attribute, item.ParentSymbol)))],
-            command.Name);
+        command.Packs.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
     }
 
     private static bool ValidateProperty(
@@ -471,8 +471,10 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         IPropertySymbol property,
         AttributeData attribute)
     {
-        string declaredName = GetConstructorString(attribute, 0) ?? string.Empty;
-        if (string.Equals(attribute.AttributeClass?.ToDisplayString(), _optionAttributeName, StringComparison.Ordinal))
+        bool isOption = IsAttribute(attribute, _optionAttributeName);
+        string declaredName = GetConstructorString(attribute, 0)
+            ?? (isOption ? DeriveOptionName(property.Name) : DeriveMemberName(property.Name));
+        if (isOption)
         {
             string[] spellings = [declaredName, .. GetNamedStrings(attribute, "Aliases")];
             if (!IsValidLongOptionName(declaredName)
@@ -526,9 +528,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             return false;
         }
 
-        if (string.Equals(attribute.AttributeClass?.ToDisplayString(), _optionAttributeName, StringComparison.Ordinal))
+        if (isOption)
         {
-            int arity = GetConstructorInt(attribute, 1);
+            int arity = GetOptionArity(attribute, property.Type);
             int bareValuePolicy = GetNamedInt(attribute, "BareValuePolicy");
             bool collection = arity is 3 or 4;
             if ((collection && !TryGetCollectionElementType(property.Type, out _))
@@ -552,8 +554,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
         else
         {
-            int minimum = GetNamedInt(attribute, "MinimumValues", 1);
-            int maximum = GetNamedInt(attribute, "MaximumValues", 1);
+            (int minimum, int maximum) = GetArgumentBounds(attribute, property.Type);
             bool isRest = maximum == -1;
             bool isScalar = maximum == 1;
             bool typeMismatch = isRest
@@ -625,16 +626,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private static void ReadChildren(
         SourceProductionContext context,
         CommandInfo command,
-        Dictionary<INamedTypeSymbol, CommandInfo> commands)
+        Dictionary<INamedTypeSymbol, CommandInfo> commands,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
         foreach (AttributeData attribute in command.Symbol.GetAttributes()
-            .Where(static item => item.AttributeClass?.ToDisplayString() == _childAttributeName))
+            .Where(static item => IsAttribute(item, _childAttributeName)))
         {
-            INamedTypeSymbol? childType = attribute.ConstructorArguments.Length > 0
-                ? attribute.ConstructorArguments[0].Value as INamedTypeSymbol
-                : null;
-            int order = GetConstructorInt(attribute, 1);
-            if (childType is null || !commands.TryGetValue(childType, out CommandInfo? child))
+            if (GetAttributeTypeArgument(attribute) is not INamedTypeSymbol childType
+                || !commands.TryGetValue(childType, out CommandInfo? child))
             {
                 Report(context, _invalidHierarchy, GetLocation(attribute, command.Symbol), "Every child type must have a CliCommand declaration in this compilation.");
                 command.IsValid = false;
@@ -648,14 +647,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            command.Children.Add(new ChildInfo(command, child, attribute, order));
+            command.Children.Add(new ChildInfo(
+                command,
+                child,
+                attribute,
+                GetSourceOrder(attribute, command.Symbol, syntaxTreeOrder)));
         }
 
-        command.Children.Sort(static (left, right) => left.Order.CompareTo(right.Order));
-        command.IsValid &= ValidateOrders(
-            context,
-            [.. command.Children.Select(static item => (item.Order, GetLocation(item.Attribute, item.Parent.Symbol)))],
-            command.Name);
+        command.Children.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
     }
 
     private static bool ValidateTree(
@@ -695,17 +694,19 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         HashSet<string> inheritedForChildren = new(inheritedNames, StringComparer.Ordinal);
         foreach (OptionInfo option in command.Options)
         {
+            string optionName = GetConstructorString(option.Attribute, 0)
+                ?? DeriveOptionName(option.Property.Name);
             valid &= AddVisibleOption(
                 context,
                 option.Attribute,
                 option.Property,
-                GetConstructorString(option.Attribute, 0) ?? string.Empty,
+                optionName,
                 GetNamedStrings(option.Attribute, "Aliases"),
                 effective);
             if (GetNamedInt(option.Attribute, "Scope") == 1)
             {
                 AddOptionSpellings(
-                    GetConstructorString(option.Attribute, 0) ?? string.Empty,
+                    optionName,
                     GetNamedStrings(option.Attribute, "Aliases"),
                     inheritedForChildren);
             }
@@ -1035,13 +1036,17 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static string GenerateOption(OptionInfo option)
     {
-        return GenerateOption(option.Attribute, option.Property.Type);
+        return GenerateOption(option.Attribute, option.Property.Type, option.Property.Name);
     }
 
-    private static string GenerateOption(AttributeData attribute, ITypeSymbol valueType)
+    private static string GenerateOption(
+        AttributeData attribute,
+        ITypeSymbol valueType,
+        string? inferredMemberName = null)
     {
-        string name = GetConstructorString(attribute, 0) ?? string.Empty;
-        int arityValue = GetConstructorInt(attribute, attribute.AttributeClass?.ToDisplayString() == _packOptionAttributeName ? 2 : 1);
+        string name = GetConstructorString(attribute, 0)
+            ?? (inferredMemberName is null ? string.Empty : DeriveOptionName(inferredMemberName));
+        int arityValue = GetOptionArity(attribute, valueType);
         string arity = EnumName("OptionArity", arityValue);
         string typeForTypeof = FormatTypeForTypeof(valueType);
         string elementType = string.Empty;
@@ -1073,9 +1078,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", isRequired: ",
             GetNamedBoolean(attribute, "IsRequired") ? "true" : "false",
             ", description: ",
-            Literal(GetNamedString(attribute, "Description") ?? string.Empty),
+            Literal(GetNamedString(attribute, "Description")),
             ", valueLabel: ",
-            Literal(GetNamedString(attribute, "ValueLabel") ?? string.Empty),
+            Literal(GetNamedString(attribute, "ValueLabel")),
             ", isHidden: ",
             GetNamedBoolean(attribute, "IsHidden") ? "true" : "false",
             ", isSensitive: ",
@@ -1088,8 +1093,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static string GenerateArgument(ArgumentInfo argument)
     {
-        string name = GetConstructorString(argument.Attribute, 0) ?? string.Empty;
-        int maximum = GetNamedInt(argument.Attribute, "MaximumValues", 1);
+        string name = GetConstructorString(argument.Attribute, 0)
+            ?? DeriveMemberName(argument.Property.Name);
+        (int minimum, int maximum) = GetArgumentBounds(argument.Attribute, argument.Property.Type);
         string maximumText = maximum < 0 ? "null" : maximum.ToString(CultureInfo.InvariantCulture);
         string typeForTypeof = FormatTypeForTypeof(argument.Property.Type);
         string element = maximum != 1
@@ -1101,14 +1107,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", typeof(",
             typeForTypeof,
             "), minimumValues: ",
-            GetNamedInt(argument.Attribute, "MinimumValues", 1).ToString(CultureInfo.InvariantCulture),
+            minimum.ToString(CultureInfo.InvariantCulture),
             ", maximumValues: ",
             maximumText,
             element,
             ", allowsNull: ",
             GetNamedBoolean(argument.Attribute, "AllowsNull") || IsNullable(argument.Property.Type) ? "true" : "false",
             ", description: ",
-            Literal(GetNamedString(argument.Attribute, "Description") ?? string.Empty),
+            Literal(GetNamedString(argument.Attribute, "Description")),
             ", isHidden: ",
             GetNamedBoolean(argument.Attribute, "IsHidden") ? "true" : "false",
             ", isSensitive: ",
@@ -1214,25 +1220,6 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         _ = builder.AppendLine("    }");
     }
 
-    private static bool ValidateOrders(
-        SourceProductionContext context,
-        (int Order, Location Location)[] values,
-        string ownerName)
-    {
-        HashSet<int> orders = [];
-        bool valid = true;
-        foreach ((int order, Location location) in values)
-        {
-            if (order < 0 || !orders.Add(order))
-            {
-                Report(context, _invalidMember, location, $"Order values on '{ownerName}' must be unique and nonnegative.");
-                valid = false;
-            }
-        }
-
-        return valid;
-    }
-
     private static string GetCollectionElementType(ITypeSymbol type)
     {
         return TryGetCollectionElementType(type, out ITypeSymbol? elementType) && elementType is not null
@@ -1317,9 +1304,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 
-    private static string Literal(string value)
+    private static string Literal(string? value)
     {
-        return SymbolDisplay.FormatLiteral(value, quote: true);
+        return value is null ? "null" : SymbolDisplay.FormatLiteral(value, quote: true);
     }
 
     private static string EnumName(string enumName, int value)
@@ -1382,8 +1369,24 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static AttributeData? FindAttribute(ISymbol symbol, string metadataName)
     {
-        return symbol.GetAttributes().FirstOrDefault(attribute =>
-            string.Equals(attribute.AttributeClass?.ToDisplayString(), metadataName, StringComparison.Ordinal));
+        return symbol.GetAttributes().FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
+    }
+
+    private static bool IsAttribute(AttributeData attribute, string metadataName)
+    {
+        INamedTypeSymbol? attributeClass = attribute.AttributeClass?.OriginalDefinition;
+        if (attributeClass is null)
+        {
+            return false;
+        }
+
+        string namespaceName = attributeClass.ContainingNamespace.IsGlobalNamespace
+            ? string.Empty
+            : attributeClass.ContainingNamespace.ToDisplayString();
+        string fullName = namespaceName.Length == 0
+            ? attributeClass.MetadataName
+            : string.Concat(namespaceName, ".", attributeClass.MetadataName);
+        return string.Equals(fullName, metadataName, StringComparison.Ordinal);
     }
 
     private static Location GetLocation(AttributeData? attribute, ISymbol fallback)
@@ -1400,11 +1403,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             : null;
     }
 
-    private static int GetConstructorInt(AttributeData attribute, int index)
+    private static ITypeSymbol? GetAttributeTypeArgument(AttributeData attribute)
     {
-        return attribute.ConstructorArguments.Length > index
-            ? Convert.ToInt32(attribute.ConstructorArguments[index].Value, CultureInfo.InvariantCulture)
-            : -1;
+        return attribute.AttributeClass is { TypeArguments.Length: 1 } attributeClass
+            ? attributeClass.TypeArguments[0]
+            : null;
     }
 
     private static string? GetNamedString(AttributeData attribute, string name)
@@ -1418,6 +1421,91 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return value.Key is null
             ? defaultValue
             : Convert.ToInt32(value.Value.Value, CultureInfo.InvariantCulture);
+    }
+
+    private static bool HasNamedArgument(AttributeData attribute, string name)
+    {
+        return attribute.NamedArguments.Any(argument => argument.Key == name);
+    }
+
+    private static int GetOptionArity(AttributeData attribute, ITypeSymbol valueType)
+    {
+        return HasNamedArgument(attribute, "Arity")
+            ? GetNamedInt(attribute, "Arity")
+            : valueType.SpecialType == SpecialType.System_Boolean && !IsNullable(valueType)
+                ? 2
+                : TryGetCollectionElementType(valueType, out _) ? 4 : 0;
+    }
+
+    private static (int Minimum, int Maximum) GetArgumentBounds(
+        AttributeData attribute,
+        ITypeSymbol valueType)
+    {
+        bool collection = TryGetCollectionElementType(valueType, out _);
+        return (
+            GetNamedInt(attribute, "MinimumValues", 1),
+            GetNamedInt(attribute, "MaximumValues", collection ? -1 : 1));
+    }
+
+    private static string DeriveCommandName(string typeName)
+    {
+        const string suffix = "Command";
+        string name = typeName.EndsWith(suffix, StringComparison.Ordinal)
+            ? typeName.Substring(0, typeName.Length - suffix.Length)
+            : typeName;
+        return DeriveMemberName(name);
+    }
+
+    private static string DeriveOptionName(string memberName)
+    {
+        return string.Concat("--", DeriveMemberName(memberName));
+    }
+
+    private static string DeriveMemberName(string identifier)
+    {
+        StringBuilder builder = new(identifier.Length + 4);
+        for (int index = 0; index < identifier.Length; index++)
+        {
+            char character = identifier[index];
+            if (character == '_')
+            {
+                _ = builder.Append('-');
+                continue;
+            }
+
+            bool upper = char.IsUpper(character);
+            if (upper
+                && index > 0
+                && identifier[index - 1] != '_'
+                && (char.IsLower(identifier[index - 1])
+                    || char.IsDigit(identifier[index - 1])
+                    || (index + 1 < identifier.Length && char.IsLower(identifier[index + 1]))))
+            {
+                _ = builder.Append('-');
+            }
+
+            _ = builder.Append(char.ToLowerInvariant(character));
+        }
+
+        return builder.ToString();
+    }
+
+    private static SourceOrder GetSourceOrder(
+        AttributeData attribute,
+        ISymbol fallback,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+    {
+        SyntaxReference? syntaxReference = attribute.ApplicationSyntaxReference
+            ?? fallback.DeclaringSyntaxReferences.FirstOrDefault();
+        if (syntaxReference is null)
+        {
+            return new SourceOrder(int.MaxValue, int.MaxValue);
+        }
+
+        int treeOrder = syntaxTreeOrder.TryGetValue(syntaxReference.SyntaxTree, out int value)
+            ? value
+            : int.MaxValue;
+        return new SourceOrder(treeOrder, syntaxReference.Span.Start);
     }
 
     private static bool GetNamedBoolean(AttributeData attribute, string name)
@@ -1447,8 +1535,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         AttributeData attribute,
         string name,
         bool isRoot,
-        string description,
-        string longDescription,
+        string? description,
+        string? longDescription,
         bool isHidden,
         string[] aliases)
     {
@@ -1460,9 +1548,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public bool IsRoot { get; } = isRoot;
 
-        public string Description { get; } = description;
+        public string? Description { get; } = description;
 
-        public string LongDescription { get; } = longDescription;
+        public string? LongDescription { get; } = longDescription;
 
         public bool IsHidden { get; } = isHidden;
 
@@ -1496,22 +1584,25 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         public bool IsValid { get; set; } = true;
     }
 
-    private sealed class PackOptionInfo(AttributeData attribute, ITypeSymbol valueType, int order)
+    private sealed class PackOptionInfo(
+        AttributeData attribute,
+        ITypeSymbol valueType,
+        SourceOrder sourceOrder)
     {
         public AttributeData Attribute { get; } = attribute;
 
         public ITypeSymbol ValueType { get; } = valueType;
 
-        public int Order { get; } = order;
+        public SourceOrder SourceOrder { get; } = sourceOrder;
     }
 
     private sealed class PackInclusionInfo(
         INamedTypeSymbol parentSymbol,
         PackInfo pack,
         string key,
-        int order,
-        string title,
-        string description,
+        SourceOrder sourceOrder,
+        string? title,
+        string? description,
         AttributeData attribute)
     {
         public INamedTypeSymbol ParentSymbol { get; } = parentSymbol;
@@ -1520,22 +1611,25 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public string Key { get; } = key;
 
-        public int Order { get; } = order;
+        public SourceOrder SourceOrder { get; } = sourceOrder;
 
-        public string Title { get; } = title;
+        public string? Title { get; } = title;
 
-        public string Description { get; } = description;
+        public string? Description { get; } = description;
 
         public AttributeData Attribute { get; } = attribute;
     }
 
-    private sealed class OptionInfo(IPropertySymbol property, AttributeData attribute, int order)
+    private sealed class OptionInfo(
+        IPropertySymbol property,
+        AttributeData attribute,
+        SourceOrder sourceOrder)
     {
         public IPropertySymbol Property { get; } = property;
 
         public AttributeData Attribute { get; } = attribute;
 
-        public int Order { get; } = order;
+        public SourceOrder SourceOrder { get; } = sourceOrder;
 
         public static string FieldName(string suffix, int index)
         {
@@ -1543,13 +1637,16 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
     }
 
-    private sealed class ArgumentInfo(IPropertySymbol property, AttributeData attribute, int order)
+    private sealed class ArgumentInfo(
+        IPropertySymbol property,
+        AttributeData attribute,
+        SourceOrder sourceOrder)
     {
         public IPropertySymbol Property { get; } = property;
 
         public AttributeData Attribute { get; } = attribute;
 
-        public int Order { get; } = order;
+        public SourceOrder SourceOrder { get; } = sourceOrder;
 
         public static string FieldName(string suffix, int index)
         {
@@ -1557,7 +1654,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
     }
 
-    private sealed class ChildInfo(CommandInfo parent, CommandInfo child, AttributeData attribute, int order)
+    private sealed class ChildInfo(
+        CommandInfo parent,
+        CommandInfo child,
+        AttributeData attribute,
+        SourceOrder sourceOrder)
     {
         public CommandInfo Parent { get; } = parent;
 
@@ -1565,7 +1666,21 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public AttributeData Attribute { get; } = attribute;
 
-        public int Order { get; } = order;
+        public SourceOrder SourceOrder { get; } = sourceOrder;
 
+    }
+
+    private readonly struct SourceOrder(int syntaxTreeOrder, int spanStart)
+        : IComparable<SourceOrder>
+    {
+        private int SyntaxTreeOrder { get; } = syntaxTreeOrder;
+
+        private int SpanStart { get; } = spanStart;
+
+        public int CompareTo(SourceOrder other)
+        {
+            int treeComparison = SyntaxTreeOrder.CompareTo(other.SyntaxTreeOrder);
+            return treeComparison != 0 ? treeComparison : SpanStart.CompareTo(other.SpanStart);
+        }
     }
 }

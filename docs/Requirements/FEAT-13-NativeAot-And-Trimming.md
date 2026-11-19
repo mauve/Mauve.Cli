@@ -152,9 +152,9 @@ FEAT-13-001 through FEAT-13-004. The latest artifact SHA-256 values were:
 
 | Consumer | Trimmed managed DLL | Native executable |
 | --- | --- | --- |
-| Todo.Cli | `fa6f66a1a2e16a29dfb83014f0ac8dfd8ee4e3e7a774225e5d39e576af14b5ab` | `38c9fb3ebc23ba4c46422dee0a36827e5daf1fe9055062630dca2639ec7db978` |
-| FileTool.Cli | `2dd76aad4b2a24684975d1094f836cc48c758b22ecba076bd84849ca91c6dcad` | `e5284c2154716a45df6b121149ef9ebc2378547c3b89759f8491212ce3fb2040` |
-| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `0e560070fb3d8c4e41aa1a8732387d4ac44bafc4d2dfe44f0e4667039ac87569` |
+| Todo.Cli | `4bbd93e3f3e7711eedd843b46097a919d9435230337212a4fb3413345f33c933` | `830f5b13ad8f40235ce170f7f613c7b009b489e33c94fad27222718f8c840061` |
+| FileTool.Cli | `6b76c7b8c715c9786897abcb15d06056eb456b1eb6b8235be8a9f1790be82d83` | `18e68e0aaf71be6f8218a0eba1e3faea915221c4ad23d387e17637394218c6b3` |
+| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `4792e959bfdd350d281b1b4fa851e1a67ebbc659203fa83260ba7d333d9f4763` |
 
 The metadata-bearing behavioral test is
 `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`. ARM64 and other

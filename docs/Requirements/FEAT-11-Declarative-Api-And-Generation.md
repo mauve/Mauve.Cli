@@ -17,13 +17,13 @@ are recorded in [ADR-010](../Architecture/ADR-010-Declarative-Generation.md).
 
 ## Requirements
 ### FEAT-11-001 - Declarative registration
-Attributes declare a root, explicitly ordered children, options, positional arguments and an optional handler. The generator emits a `CreateModel` factory and typed binding accessors.
-**Acceptance:** A nested declaration with an alias, typed option and positional argument compiles and invokes its handler.
+Attributes declare a root, generic child inclusions, options, positional arguments and an optional handler. Names, order and ordinary cardinality are inferred from symbols, source position and property types unless explicitly overridden. The generator emits a `CreateModel` factory and typed binding accessors.
+**Acceptance:** A nested declaration with an alias, inferred kebab-case names, typed option and positional argument compiles and invokes its handler; `--arg 1 2 3 --arg 4` binds one ordered collection.
 **Security:** Generation uses direct type and method references; it does not scan assemblies or evaluate declaration text.
 
 ### FEAT-11-002 - Incremental generation
-Use Roslyn incremental generation with stable hint names, explicit semantic ordering and updated output when declaration metadata changes.
-**Acceptance:** Unchanged input yields identical generated text, and changing a command alias updates registration while generated source still compiles.
+Use Roslyn incremental generation with stable hint names, deterministic syntax-tree/source-span ordering and updated output when declaration metadata changes.
+**Acceptance:** Unchanged input yields identical generated text, changing a command alias updates registration, and members split across partial declarations retain compilation syntax-tree order.
 **Security:** Invalid declarations do not produce a usable root model or stale root binding.
 
 ### FEAT-11-003 - Explicit-model equivalence
@@ -38,10 +38,19 @@ Reject unsupported class/property/handler shapes and hierarchy collisions at the
 
 ## Design
 The public declarations live in `Mauve.Cli.Declarations`. Commands are
-top-level, non-generic partial classes. Children and members have explicit,
-unique, nonnegative order values. Bound properties are partial, get-only
-instance properties. A handler is a direct instance method with no parameters
-or one `CancellationToken`, and uses a return shape supported by FEAT-09.
+top-level, non-generic partial classes. Children and members have
+source-derived order. Bound properties are partial, get-only instance
+properties. Command types, option properties and positional properties derive
+kebab-case names when omitted. A handler is a direct instance method with no
+parameters or one `CancellationToken`, and uses a return shape supported by
+FEAT-09.
+
+`bool` properties infer BooleanFlag, `IReadOnlyList<T>` options infer the
+existing greedy collection mode (which also appends repeated occurrences),
+and other option properties infer RequiredScalar. Collection positionals
+infer `1..N`; scalar positionals infer `1..1`. Explicit option arity and
+positional bounds are supported named overrides. Nullable types do not imply
+OptionalScalar token syntax.
 
 The generator emits deterministic partial sources and `CreateModel` and
 `CreateBuilder` factories for each valid root. It builds ordinary immutable
@@ -53,7 +62,7 @@ created for parse-only operations.
 `MCLI001` identifies invalid command declarations, `MCLI002` invalid members,
 and `MCLI003` hierarchy or visible-name conflicts. Unsupported shapes are
 compiler errors rather than runtime fallback. Packs are declared using
-`CliOptionPack`, `CliPack` and `CliPackOption` as specified by
+`CliOptionPack`, `CliPack<TPack>` and `CliPackOption<TValue>` as specified by
 [FEAT-14](FEAT-14-OptionPacks.md). Handlers may accept no parameter, a
 `CancellationToken`, or a `CommandInvocationContext`. Defaults inferred from
 source initializers, generated converter registration and completion
@@ -67,10 +76,10 @@ either model path.
 ## Verification
 Generator-driver tests compile and execute a nested generated consumer,
 compare its invocation outcome with an explicit model, verify unchanged and
-edited output, and check that unsupported or colliding declarations suppress
-root generation. The local package-free harness passed these scenarios.
-Product MSTest and Governance evidence remains unavailable until the trusted
-local Governance package feed is restored.
+edited output, verify inferred names/cardinality and cross-file source order,
+and check that unsupported or colliding declarations suppress root
+generation. The strict MTP suite records the observed results in the
+validation ledger.
 
 ## Diagrams
 

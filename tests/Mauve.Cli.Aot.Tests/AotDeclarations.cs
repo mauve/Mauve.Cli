@@ -6,8 +6,8 @@ using Mauve.Cli.Invocation;
 namespace Mauve.Cli.Aot.Tests;
 
 [CliCommand("aot-todo", IsRoot = true)]
-[CliChild(typeof(AotAddCommand), 0)]
-[CliPack(typeof(GlobalPack), "global", 0, Title = "Global")]
+[CliChild<AotAddCommand>]
+[CliPack<GlobalPack>("global", Title = "Global")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
@@ -17,17 +17,17 @@ internal sealed partial class AotRootCommand
 }
 
 [CliCommand("add", Aliases = ["new"])]
-[CliPack(typeof(NetworkPack), "network", 0, Title = "Network")]
+[CliPack<NetworkPack>("network", Title = "Network")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
     Justification = "The generated dispatcher instantiates this command at invocation.")]
 internal sealed partial class AotAddCommand
 {
-    [CliOption("--count", OptionArity.RequiredScalar, 0, IsRequired = true)]
+    [CliOption(IsRequired = true)]
     public partial int Count { get; }
 
-    [CliArgument("text", 0)]
+    [CliArgument]
     public partial string Text { get; }
 
     [CliHandler]
@@ -49,14 +49,11 @@ internal sealed partial class AotAddCommand
 }
 
 [CliOptionPack]
-[CliPackOption(
+[CliPackOption<string>(
     "--workspace",
-    typeof(string),
-    OptionArity.RequiredScalar,
-    0,
     IsRequired = true,
     Scope = OptionScope.Inherited)]
-[CliPackOption("--verbose", typeof(bool), OptionArity.BooleanFlag, 1, Scope = OptionScope.Inherited)]
+[CliPackOption<bool>("--verbose", Scope = OptionScope.Inherited)]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
@@ -66,12 +63,12 @@ internal sealed partial class GlobalPack
 }
 
 [CliOptionPack]
-[CliPack(typeof(RetryPack), "retry", 0, Title = "Retry")]
-[CliPackOption("--tag", typeof(string), OptionArity.RequiredScalar, 0, IsRequired = true)]
-[CliPackOption("--priority", typeof(Priority), OptionArity.RequiredScalar, 1, IsRequired = true)]
-[CliPackOption("--backup-priority", typeof(Priority?), OptionArity.RequiredScalar, 2, IsRequired = true)]
-[CliPackOption("--code", typeof(BuildCode), OptionArity.RequiredScalar, 3, IsRequired = true)]
-[CliPackOption("--limit", typeof(int?), OptionArity.RequiredScalar, 4, IsRequired = true)]
+[CliPack<RetryPack>("retry", Title = "Retry")]
+[CliPackOption<string>("--tag", IsRequired = true)]
+[CliPackOption<Priority>("--priority", IsRequired = true)]
+[CliPackOption<Priority?>("--backup-priority", IsRequired = true)]
+[CliPackOption<BuildCode>("--code", IsRequired = true)]
+[CliPackOption<int?>("--limit", IsRequired = true)]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
@@ -81,7 +78,7 @@ internal sealed partial class NetworkPack
 }
 
 [CliOptionPack]
-[CliPackOption("--retries", typeof(int), OptionArity.RequiredScalar, 0, IsRequired = true)]
+[CliPackOption<int>("--retries", IsRequired = true)]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",

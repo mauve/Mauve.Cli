@@ -100,7 +100,7 @@ public sealed class HelpDocument
                     [.. ownedOption.Owner.Path.Select(HelpTextSanitizer.SingleLine)],
                     key,
                     HelpTextSanitizer.SingleLine(displayGroup?.Title ?? packGroup.Title ?? "Options"),
-                    HelpTextSanitizer.Description(displayGroup?.Description ?? packGroup.Description ?? string.Empty));
+                    HelpTextSanitizer.Description(displayGroup?.Description ?? packGroup.Description));
                 groupsByKey.Add(groupIdentity, group);
                 groups.Add(group);
             }
@@ -361,8 +361,13 @@ internal static class HelpTextSanitizer
         return builder.ToString();
     }
 
-    public static string Description(string value)
+    public static string Description(string? value)
     {
+        if (value is null)
+        {
+            return string.Empty;
+        }
+
         StringBuilder builder = new(value.Length);
         for (int index = 0; index < value.Length; index++)
         {
@@ -387,6 +392,11 @@ internal static class HelpTextSanitizer
         }
 
         return builder.ToString();
+    }
+
+    public static string? DescriptionOrNull(string? value)
+    {
+        return value is null ? null : Description(value);
     }
 
     private static bool IsBidiControl(char character)

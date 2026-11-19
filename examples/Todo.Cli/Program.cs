@@ -10,9 +10,9 @@ using Mauve.Cli.Parsing;
 
 namespace Todo.Cli;
 
-[CliCommand("todo", IsRoot = true, Description = "Manage a small task list.")]
-[CliChild(typeof(AddCommand), 0)]
-[CliChild(typeof(ListCommand), 1)]
+[CliCommand(IsRoot = true, Description = "Manage a small task list.")]
+[CliChild<AddCommand>]
+[CliChild<ListCommand>]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
@@ -21,14 +21,14 @@ internal sealed partial class TodoCommand
 {
 }
 
-[CliCommand("add", Aliases = ["new"], Description = "Add a task.")]
+[CliCommand(Aliases = ["new"], Description = "Add a task.")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
     Justification = "The generated dispatcher instantiates this command at invocation.")]
 internal sealed partial class AddCommand
 {
-    [CliArgument("text", 0, Description = "Task text.")]
+    [CliArgument(Description = "Task text.")]
     public partial string Text { get; }
 
     [CliHandler]
@@ -48,7 +48,7 @@ internal sealed partial class AddCommand
     }
 }
 
-[CliCommand("list", Description = "List tasks.")]
+[CliCommand(Description = "List tasks.")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",

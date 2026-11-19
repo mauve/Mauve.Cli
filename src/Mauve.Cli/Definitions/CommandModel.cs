@@ -261,7 +261,7 @@ public sealed class CommandModel
             string[] inclusionPath = [.. parentPath, inclusion.Key];
             string inclusionPathKey = string.Join('/', inclusionPath);
             string groupPathKey = string.Concat("@pack/", inclusionPathKey);
-            OptionPackGroupMetadata? currentGroup = inclusion.Title.Length > 0
+            OptionPackGroupMetadata? currentGroup = inclusion.Title is not null
                 ? new OptionPackGroupMetadata(
                     inclusionPathKey,
                     groupPathKey,
@@ -299,7 +299,7 @@ public sealed class CommandModel
                 inclusion.Key,
                 ownOptions,
                 nestedPacks,
-                inclusion.Title.Length > 0 ? inclusion.Title : null,
+                inclusion.Title,
                 inclusion.Description));
         }
 
@@ -413,7 +413,7 @@ with(StringComparer.Ordinal),             command.Name
         }
 
         HashSet<string> optionNames = [with(StringComparer.Ordinal)];
-        Dictionary<string, (string Title, string Description)> displayGroups = [with(StringComparer.Ordinal)];
+        Dictionary<string, (string? Title, string? Description)> displayGroups = [with(StringComparer.Ordinal)];
         foreach (OptionDefinition option in options)
         {
             ValidateOption(option);
@@ -435,10 +435,10 @@ with(StringComparer.Ordinal),             command.Name
                 ? hasPackGroup ? string.Concat("@pack/", packGroup.InclusionPathKey, "#", explicitGroup.Key) : explicitGroup.Key
                 : packGroup.GroupKey;
             string? groupTitle = option.DisplayGroup?.Title ?? packGroup.Title;
-            string groupDescription = option.DisplayGroup?.Description ?? packGroup.Description ?? string.Empty;
+            string? groupDescription = option.DisplayGroup?.Description ?? packGroup.Description;
             if (groupKey is not null)
             {
-                if (displayGroups.TryGetValue(groupKey, out (string Title, string Description) existingGroup)
+                if (displayGroups.TryGetValue(groupKey, out (string? Title, string? Description) existingGroup)
                     && (!string.Equals(existingGroup.Title, groupTitle, StringComparison.Ordinal)
                         || !string.Equals(existingGroup.Description, groupDescription, StringComparison.Ordinal)))
                 {
@@ -447,7 +447,7 @@ with(StringComparer.Ordinal),             command.Name
                         $"Command '{command.Name}' declares conflicting metadata for a help group."));
                 }
 
-                _ = displayGroups.TryAdd(groupKey, (groupTitle ?? string.Empty, groupDescription));
+                _ = displayGroups.TryAdd(groupKey, (groupTitle, groupDescription));
             }
         }
 

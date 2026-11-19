@@ -46,6 +46,33 @@ public sealed class CompletionServiceTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-001")]
+    public async Task CompleteAsync_PreservesOmittedAndExplicitEmptyDescriptions()
+    {
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool")
+                .AddOption(new OptionDefinition(
+                    "--omitted",
+                    typeof(string),
+                    OptionArity.RequiredScalar))
+                .AddOption(new OptionDefinition(
+                    "--empty",
+                    typeof(string),
+                    OptionArity.RequiredScalar,
+                    description: string.Empty)));
+        CompletionService service = new();
+
+        CompletionResult omitted = await service.CompleteAsync(
+            new CompletionRequest(model, ["--o"], 0, 3)).ConfigureAwait(false);
+        CompletionResult empty = await service.CompleteAsync(
+            new CompletionRequest(model, ["--e"], 0, 3)).ConfigureAwait(false);
+
+        Assert.IsNull(omitted.Candidates.Single().Description);
+        Assert.AreEqual(string.Empty, empty.Candidates.Single().Description);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-002")]
     public async Task CompleteAsync_ProvidesBoundedValuesFromDeclaredDependencies()
     {
