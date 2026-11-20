@@ -216,10 +216,7 @@ public sealed class HelpDocument
     {
         public List<HelpOptionItem> Options { get; } = [];
 
-        public HelpOptionGroup Build()
-        {
-            return new HelpOptionGroup(ownerPath, key, title, description, [.. Options]);
-        }
+        public HelpOptionGroup Build() => new(ownerPath, key, title, description, [.. Options]);
     }
 }
 
@@ -394,10 +391,7 @@ internal static class HelpTextSanitizer
         return builder.ToString();
     }
 
-    public static string? DescriptionOrNull(string? value)
-    {
-        return value is null ? null : Description(value);
-    }
+    public static string? DescriptionOrNull(string? value) => value is null ? null : Description(value);
 
     private static bool IsBidiControl(char character)
     {

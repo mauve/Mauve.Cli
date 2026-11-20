@@ -27,13 +27,13 @@ Return the selected canonical command/path and typed values with explicit, defau
 
 ### FEAT-07-002 - Structured errors
 Return deterministic structured categories and relevant definition/token-position context for malformed definitions, missing values, conversion and validation errors.
-**Acceptance:** An invalid integer and a missing value are distinguishable, with stable locations across identical runs; parse-time unsupported definitions and oversized input have structured failures, and positive configured model limits reject oversized graphs.
-**Security:** Public error details must not include raw secret values or unbounded exception text.
+**Acceptance:** An invalid integer and a missing value are distinguishable, with stable locations across identical runs; formatted missing-input diagnostics name visible required options or arguments. Parse-time unsupported definitions and oversized input have structured failures, and positive configured model limits reject oversized graphs.
+**Security:** Base messages and formatting with `includeArgumentText: false` do not include raw input. Never render callback exception text.
 
 ### FEAT-07-003 - Unmatched input
 Expose unmatched tokens as failures by default and define any explicit permissive mode without treating unmatched input as recognized.
 **Acceptance:** Unknown `--wat` and excess positional input fail by default; unmatched tokens remain explicitly inspectable on invalid results and never make a parse dispatchable.
-**Security:** Never silently discard unknown input or leak its contents in default diagnostics.
+**Security:** Never silently discard unknown input. Default display quotes only unexpected positional input, with escaping and a length bound. Hosts must suppress argument text when output may contain secrets or be logged.
 
 ### FEAT-07-004 - Bounded suggestions
 Where suggestions are offered, derive them from visible declared names and limit candidate count and work.
@@ -92,8 +92,15 @@ For `--count=x`, both option/value index are that token and the value offset
 is the UTF-16 code-unit index after its first `=`. Defaults have no token coordinates.
 Descriptions/messages contain safe declared names and bounded reason text,
 not raw values, exception messages or `ToString()` of application objects.
-Raw unmatched text is available only through explicit caller inspection,
-never automatic safe-message formatting.
+`ParseDiagnostic.ToString()` adds a one-based argument position when known
+(preferring the value token for value errors), and appends any bounded
+visible suggestions. Missing required input names the visible selected command
+and declared option or argument without inventing a position.
+`ParseDiagnostic.ToString()` and `ParseResult.FormatDiagnostics()` both quote
+escaped unexpected positional text by default, using at most 128 UTF-16 code
+units of the token before escaping. Pass `includeArgumentText: false` to
+either formatter to omit it; the unmodified token remains inspectable on the
+result. Unknown command and option text is not echoed.
 Callback validation failures supply a bounded reason identifier (at most
 64 ASCII letters/digits/dot/underscore/hyphen), not display text. The default
 formatter uses only its own category templates and safe declared names,

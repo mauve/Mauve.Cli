@@ -51,10 +51,7 @@ public sealed class CommandInvocationContext
     /// <summary>Gets an option-pack view included by the selected command.</summary>
     /// <param name="key">The top-level pack inclusion key.</param>
     /// <returns>The invocation-local pack view.</returns>
-    public OptionPackContext GetOptionPack(string key)
-    {
-        return GetOptionPack(Command, key);
-    }
+    public OptionPackContext GetOptionPack(string key) => GetOptionPack(Command, key);
 
     /// <summary>Gets an option-pack view included by a command on the selected path.</summary>
     /// <param name="owner">The command that declared the inclusion.</param>

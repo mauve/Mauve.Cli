@@ -98,10 +98,7 @@ public sealed class CompletionProviderRegistry
             ReferenceEqualityComparer.Instance)]);
     }
 
-    internal bool TryGet(object definition, out ProviderRegistration registration)
-    {
-        return _providers.TryGetValue(definition, out registration!);
-    }
+    internal bool TryGet(object definition, out ProviderRegistration registration) => _providers.TryGetValue(definition, out registration!);
 }
 
 internal sealed record ProviderRegistration(

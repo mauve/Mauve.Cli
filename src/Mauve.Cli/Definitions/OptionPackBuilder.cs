@@ -37,15 +37,9 @@ public sealed class OptionPackBuilder
         return this;
     }
 
-    internal OptionDefinition[] CopyOptions()
-    {
-        return [.. _options];
-    }
+    internal OptionDefinition[] CopyOptions() => [.. _options];
 
-    internal OptionPackInclusionBuilder[] CopyPacks()
-    {
-        return [.. _packs];
-    }
+    internal OptionPackInclusionBuilder[] CopyPacks() => [.. _packs];
 
     internal int OptionCount => _options.Count;
 

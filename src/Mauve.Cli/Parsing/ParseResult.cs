@@ -43,6 +43,11 @@ public sealed class ParseResult
     /// <summary>Gets diagnostics in deterministic processing order.</summary>
     public IReadOnlyList<ParseDiagnostic> Diagnostics => _diagnostics;
 
+    /// <summary>Formats diagnostics in processing order.</summary>
+    /// <param name="includeArgumentText">Whether to quote escaped unexpected positional input. Use false when output may be logged.</param>
+    /// <returns>One formatted string per diagnostic.</returns>
+    public IEnumerable<string> FormatDiagnostics(bool includeArgumentText = true) => _diagnostics.Select(diagnostic => diagnostic.ToString(includeArgumentText));
+
     /// <summary>Gets tokens that were not assigned to a definition.</summary>
     public IReadOnlyList<UnmatchedToken> UnmatchedTokens => _unmatchedTokens;
 

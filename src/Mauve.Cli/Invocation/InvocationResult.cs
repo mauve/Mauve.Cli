@@ -46,10 +46,7 @@ public sealed class InvocationResult
         return new InvocationResult(InvocationOutcome.NoHandler, parseResult, null);
     }
 
-    internal static InvocationResult Cancelled(ParseResult? parseResult = null)
-    {
-        return new InvocationResult(InvocationOutcome.Cancelled, parseResult, null);
-    }
+    internal static InvocationResult Cancelled(ParseResult? parseResult = null) => new(InvocationOutcome.Cancelled, parseResult, null);
 
     private static void RequireOutcome(ParseResult parseResult, ParseOutcome expected)
     {

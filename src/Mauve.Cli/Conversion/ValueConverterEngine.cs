@@ -413,10 +413,7 @@ internal static class ValueConverterEngine
         return typedValues.AsReadOnly();
     }
 
-    private static bool IsAsciiLetter(char character)
-    {
-        return character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
-    }
+    private static bool IsAsciiLetter(char character) => character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
     private delegate bool TryParse<T>(
         string value,

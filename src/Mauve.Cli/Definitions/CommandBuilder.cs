@@ -208,33 +208,15 @@ public sealed class CommandBuilder
 
     internal CommandHandler? Handler { get; private set; }
 
-    internal string[] CopyAliases()
-    {
-        return [.. _aliases];
-    }
+    internal string[] CopyAliases() => [.. _aliases];
 
-    internal CommandBuilder[] CopyChildren()
-    {
-        return [.. _children];
-    }
+    internal CommandBuilder[] CopyChildren() => [.. _children];
 
-    internal OptionDefinition[] CopyOptions()
-    {
-        return [.. _options];
-    }
+    internal OptionDefinition[] CopyOptions() => [.. _options];
 
-    internal OptionPackInclusionBuilder[] CopyPacks()
-    {
-        return [.. _packs];
-    }
+    internal OptionPackInclusionBuilder[] CopyPacks() => [.. _packs];
 
-    internal PositionalDefinition[] CopyPositionals()
-    {
-        return [.. _positionals];
-    }
+    internal PositionalDefinition[] CopyPositionals() => [.. _positionals];
 
-    internal CrossValueValidator[] CopyCrossValidators()
-    {
-        return [.. _crossValidators];
-    }
+    internal CrossValueValidator[] CopyCrossValidators() => [.. _crossValidators];
 }

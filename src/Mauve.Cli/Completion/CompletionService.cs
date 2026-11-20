@@ -1103,10 +1103,7 @@ public sealed class CompletionService(
                 || (ValueConverterEngine.IsNumericType(valueType) && IsNegativeNumericCandidate(token)));
     }
 
-    private static bool IsOptionCandidate(string token)
-    {
-        return token.Length > 1 && token[0] == '-';
-    }
+    private static bool IsOptionCandidate(string token) => token.Length > 1 && token[0] == '-';
 
     private static bool IsNegativeNumericCandidate(string token)
     {

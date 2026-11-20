@@ -253,10 +253,7 @@ public static class HelpTextRenderer
         }
     }
 
-    private static void AppendLine(StringBuilder output, string line)
-    {
-        _ = output.Append(line).Append('\n');
-    }
+    private static void AppendLine(StringBuilder output, string line) => _ = output.Append(line).Append('\n');
 
     private sealed record HelpDisplayItem(string Label, string Description);
 }

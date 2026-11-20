@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
-using Mauve.Cli.Parsing;
 
 namespace FileTool.Cli;
 
@@ -30,9 +29,9 @@ internal static class Program
 
         if (result.Outcome == InvocationOutcome.InvalidInput && result.ParseResult is not null)
         {
-            foreach (ParseDiagnostic diagnostic in result.ParseResult.Diagnostics)
+            foreach (string line in result.ParseResult.FormatDiagnostics())
             {
-                Write(diagnostic.Message);
+                await Console.Error.WriteLineAsync(line).ConfigureAwait(false);
             }
 
             return 2;
@@ -95,8 +94,5 @@ internal static class Program
         "Globalization",
         "CA1303:Do not pass literals as localized parameters",
         Justification = "This small example uses English output.")]
-    private static void Write(string message)
-    {
-        Console.WriteLine(message);
-    }
+    private static void Write(string message) => Console.WriteLine(message);
 }

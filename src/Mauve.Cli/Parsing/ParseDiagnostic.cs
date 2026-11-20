@@ -1,17 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text.Encodings.Web;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Help;
 
 namespace Mauve.Cli.Parsing;
 
-/// <summary>A safe, structured parse diagnostic with original token coordinates.</summary>
+/// <summary>A structured parse diagnostic with original token coordinates.</summary>
 public sealed class ParseDiagnostic
 {
     private readonly ReadOnlyCollection<string> _definitionPath;
     private readonly ReadOnlyCollection<string> _suggestions;
+    private readonly string? _unexpectedArgumentText;
 
-    internal ParseDiagnostic(
+    private ParseDiagnostic(
         ParseDiagnosticCode code,
         string message,
         int? tokenIndex,
@@ -21,7 +25,8 @@ public sealed class ParseDiagnostic
         string[] definitionPath,
         string? failureCode,
         string[] suggestions,
-        int orderingPhase)
+        int orderingPhase,
+        string? unexpectedArgumentText = null)
     {
         Code = code;
         Message = message;
@@ -33,6 +38,7 @@ public sealed class ParseDiagnostic
         FailureCode = failureCode;
         _suggestions = Array.AsReadOnly(suggestions);
         OrderingPhase = orderingPhase;
+        _unexpectedArgumentText = unexpectedArgumentText;
     }
 
     /// <summary>Gets the diagnostic category.</summary>
@@ -62,6 +68,27 @@ public sealed class ParseDiagnostic
     /// <summary>Gets bounded visible canonical candidates for unknown names.</summary>
     public IReadOnlyList<string> Suggestions => _suggestions;
 
+    /// <summary>Formats the diagnostic, including escaped text for an unexpected positional argument.</summary>
+    /// <returns>Human-readable diagnostic text that may contain user input.</returns>
+    public override string ToString() => ToString(includeArgumentText: true);
+
+    /// <summary>Formats the diagnostic with a one-based argument position and visible suggestions, when available.</summary>
+    /// <param name="includeArgumentText">Whether to quote escaped unexpected positional input. Use false when output may be logged.</param>
+    /// <returns>Human-readable diagnostic text.</returns>
+    public string ToString(bool includeArgumentText)
+    {
+        string message = includeArgumentText && _unexpectedArgumentText is string argument
+            ? $"Unexpected positional argument \"{EscapeArgument(argument)}\"."
+            : Message;
+        int? index = ValueTokenIndex ?? TokenIndex;
+        string text = index is int tokenIndex
+            ? string.Create(CultureInfo.InvariantCulture, $"Argument {tokenIndex + 1L}: {message}")
+            : message;
+        return Suggestions.Count == 0
+            ? text
+            : $"{text} Did you mean: {string.Join(", ", Suggestions)}?";
+    }
+
     internal int OrderingPhase { get; }
 
     internal static ParseDiagnostic ForOption(
@@ -71,25 +98,24 @@ public sealed class ParseDiagnostic
         int? tokenIndex,
         int? valueTokenIndex = null,
         int? valueOffset = null,
-        string? failureCode = null)
+        string? failureCode = null,
+        CommandDefinition? selectedCommand = null)
     {
         string name = option.IsHidden ? "hidden option" : option.Name;
         string message = code switch
         {
-            ParseDiagnosticCode.InvalidModel => $"Option definition '{name}' is invalid.",
+            ParseDiagnosticCode.InvalidModel => $"Option '{name}' has an unsupported value type or converter.",
             ParseDiagnosticCode.MissingValue => $"Option '{name}' requires a value.",
-            ParseDiagnosticCode.UnexpectedValue => $"Option '{name}' does not accept that value form.",
+            ParseDiagnosticCode.UnexpectedValue => $"The negating form of option '{name}' does not accept a value.",
             ParseDiagnosticCode.DuplicateOption => $"Option '{name}' cannot be repeated.",
             ParseDiagnosticCode.InvalidValue => $"The value for option '{name}' is invalid.",
             ParseDiagnosticCode.ValidationFailed => $"The value for option '{name}' failed validation.",
-            ParseDiagnosticCode.MissingRequired => $"Required option '{name}' is missing.",
+            ParseDiagnosticCode.MissingRequired => WithCommand($"Required option '{name}' is missing.", selectedCommand ?? owner),
             ParseDiagnosticCode.OptionOutOfScope => $"Option '{name}' is not available for the selected command.",
-            ParseDiagnosticCode.UnknownCommand => "The token does not name a child command.",
-            ParseDiagnosticCode.UnknownOption => "The token does not name a visible option.",
-            ParseDiagnosticCode.UnexpectedArgument => "The token cannot be assigned to a positional argument.",
-            ParseDiagnosticCode.InputLimitExceeded => "The argument vector exceeds an input limit.",
-            ParseDiagnosticCode.DiagnosticLimitExceeded => "The parse result exceeded the maximum diagnostic count.",
-            _ => throw new NotImplementedException()
+            ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption or ParseDiagnosticCode.UnexpectedArgument
+                or ParseDiagnosticCode.InputLimitExceeded or ParseDiagnosticCode.DiagnosticLimitExceeded =>
+                throw new ArgumentException("Expected an option diagnostic.", nameof(code)),
+            _ => throw new ArgumentOutOfRangeException(nameof(code), code, "Not an option diagnostic.")
         };
         return new ParseDiagnostic(
             code,
@@ -116,20 +142,15 @@ public sealed class ParseDiagnostic
         string name = positional.IsHidden ? "hidden argument" : positional.Name;
         string message = code switch
         {
-            ParseDiagnosticCode.InvalidModel => $"Argument definition '{name}' is invalid.",
+            ParseDiagnosticCode.InvalidModel => $"Argument '{name}' has an unsupported value type or converter.",
             ParseDiagnosticCode.InvalidValue => $"The value for argument '{name}' is invalid.",
             ParseDiagnosticCode.ValidationFailed => $"The value for argument '{name}' failed validation.",
-            ParseDiagnosticCode.MissingRequired => $"Required argument '{name}' is missing.",
-            ParseDiagnosticCode.MissingValue => $"Argument '{name}' requires a value.",
-            ParseDiagnosticCode.UnexpectedValue => $"Argument '{name}' does not accept that value form.",
-            ParseDiagnosticCode.DuplicateOption => $"Argument '{name}' cannot be repeated.",
-            ParseDiagnosticCode.OptionOutOfScope => $"Argument '{name}' is not available for the selected command.",
-            ParseDiagnosticCode.UnknownCommand => "The token does not name a child command.",
-            ParseDiagnosticCode.UnknownOption => "The token does not name a visible option.",
-            ParseDiagnosticCode.UnexpectedArgument => "The token cannot be assigned to a positional argument.",
-            ParseDiagnosticCode.InputLimitExceeded => "The argument vector exceeds an input limit.",
-            ParseDiagnosticCode.DiagnosticLimitExceeded => "The parse result exceeded the maximum diagnostic count.",
-            _ => throw new NotImplementedException()
+            ParseDiagnosticCode.MissingRequired => WithCommand($"Required argument '{name}' is missing.", owner),
+            ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption or ParseDiagnosticCode.UnexpectedArgument
+                or ParseDiagnosticCode.MissingValue or ParseDiagnosticCode.UnexpectedValue or ParseDiagnosticCode.DuplicateOption
+                or ParseDiagnosticCode.OptionOutOfScope or ParseDiagnosticCode.InputLimitExceeded or ParseDiagnosticCode.DiagnosticLimitExceeded =>
+                throw new ArgumentException("Expected a positional diagnostic.", nameof(code)),
+            _ => throw new ArgumentOutOfRangeException(nameof(code), code, "Not a positional diagnostic.")
         };
         return new ParseDiagnostic(
             code,
@@ -142,6 +163,22 @@ public sealed class ParseDiagnostic
             failureCode,
             [],
             GetOrderingPhase(code));
+    }
+
+    internal static ParseDiagnostic ForUnexpectedArgument(UnmatchedToken token)
+    {
+        return new ParseDiagnostic(
+            ParseDiagnosticCode.UnexpectedArgument,
+            "Unexpected positional argument.",
+            token.Index,
+            null,
+            null,
+            string.Empty,
+            [],
+            null,
+            [],
+            GetOrderingPhase(ParseDiagnosticCode.UnexpectedArgument),
+            token.Value);
     }
 
     internal static ParseDiagnostic ForInput(
@@ -168,7 +205,7 @@ public sealed class ParseDiagnostic
         CommandDefinition command,
         string failureCode)
     {
-        string name = command.IsHidden ? "hidden command" : command.Name;
+        string name = command.IsHidden ? "hidden command" : HelpTextSanitizer.SingleLine(command.Name);
         return new ParseDiagnostic(
             ParseDiagnosticCode.ValidationFailed,
             $"Values for command '{name}' failed validation.",
@@ -201,5 +238,19 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.DiagnosticLimitExceeded => 5,
             _ => 0
         };
+    }
+
+    private static string WithCommand(string message, CommandDefinition command) => command.IsHidden ? message : $"Command '{HelpTextSanitizer.SingleLine(command.Name)}': {message}";
+
+    private static string EscapeArgument(string argument)
+    {
+        const int maximumLength = 128;
+        if (argument.Length <= maximumLength)
+        {
+            return JavaScriptEncoder.Default.Encode(argument);
+        }
+
+        int length = char.IsHighSurrogate(argument[maximumLength - 1]) ? maximumLength - 1 : maximumLength;
+        return string.Concat(JavaScriptEncoder.Default.Encode(argument[..length]), "...");
     }
 }

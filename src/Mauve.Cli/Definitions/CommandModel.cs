@@ -707,10 +707,7 @@ with(StringComparer.Ordinal),             option.Name
             && valueType.GetGenericArguments()[0] == elementType;
     }
 
-    private static bool CanRepresentNull(Type valueType)
-    {
-        return !valueType.IsValueType || Nullable.GetUnderlyingType(valueType) is not null;
-    }
+    private static bool CanRepresentNull(Type valueType) => !valueType.IsValueType || Nullable.GetUnderlyingType(valueType) is not null;
 
     private static void ValidateDefaultValue(
         string name,
@@ -758,10 +755,7 @@ with(StringComparer.Ordinal),             option.Name
         }
     }
 
-    private static bool IsImmutableDefault(object value)
-    {
-        return value.GetType().IsValueType || value is string or Uri;
-    }
+    private static bool IsImmutableDefault(object value) => value.GetType().IsValueType || value is string or Uri;
 
     private static bool IsCompatibleValue(Type valueType, object value)
     {
@@ -821,20 +815,11 @@ with(StringComparer.Ordinal),             option.Name
         ValidateLongOptionName(name);
     }
 
-    private static bool IsAsciiAlphaNumeric(char character)
-    {
-        return IsAsciiLetter(character) || character is >= '0' and <= '9';
-    }
+    private static bool IsAsciiAlphaNumeric(char character) => IsAsciiLetter(character) || character is >= '0' and <= '9';
 
-    private static bool IsAsciiLetter(char character)
-    {
-        return character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
-    }
+    private static bool IsAsciiLetter(char character) => character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
-    private static ArgumentException InvalidModel(string message)
-    {
-        return new ArgumentException(message);
-    }
+    private static ArgumentException InvalidModel(string message) => new(message);
 
     private sealed record NodeSnapshot(
         string[] Aliases,

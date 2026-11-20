@@ -33,9 +33,10 @@ consistent across all parses and safe for untrusted argv.
   and edit distance at most two, and return at most five unique canonical
   names. Prefix matches are ranked first. Suggestions never alter parse
   outcome.
-- Keep unmatched text available only through the explicit `UnmatchedTokens`
-  property. Safe messages never interpolate input text, failure identifiers
-  or callback exception messages.
+- Keep original unmatched text explicitly inspectable through `UnmatchedTokens`.
+  Human-readable formatting can quote bounded, escaped unexpected positional
+  arguments; hosts can disable this for logs. Base messages never interpolate
+  input text, failure identifiers or callback exception messages.
 
 ## Consequences
 

@@ -24,18 +24,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     /// <returns>An immutable parse result.</returns>
     /// <exception cref="ArgumentNullException">The model, vector, or a token is null.</exception>
     /// <exception cref="ArgumentException">The vector has an invalid shape.</exception>
-    public ParseResult Parse(CommandModel model, IReadOnlyList<string> arguments)
-    {
-        return ParseCore(model, arguments, CancellationToken.None);
-    }
+    public ParseResult Parse(CommandModel model, IReadOnlyList<string> arguments) => ParseCore(model, arguments, CancellationToken.None);
 
     internal ParseResult ParseForInvocation(
         CommandModel model,
         IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
-    {
-        return ParseCore(model, arguments, cancellationToken);
-    }
+        CancellationToken cancellationToken) => ParseCore(model, arguments, cancellationToken);
 
     private ParseResult ParseCore(
         CommandModel model,
@@ -102,7 +96,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                     ParseDiagnosticCode.UnknownCommand,
-                    "The token does not name a child command.",
+                    "Unknown command.",
                     index,
                     suggestions: SuggestCommands(current, token)));
                 unmatched.Add(new UnmatchedToken(index, token));
@@ -223,7 +217,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         {
             diagnostic = ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.InputLimitExceeded,
-                "The argument vector exceeds the maximum token count.",
+                string.Create(CultureInfo.InvariantCulture, $"Too many arguments; the limit is {limits.MaximumArgumentCount}."),
                 limits.MaximumArgumentCount);
             return [];
         }
@@ -238,7 +232,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 diagnostic = ParseDiagnostic.ForInput(
                     ParseDiagnosticCode.InputLimitExceeded,
-                    "An argument token exceeds the maximum length.",
+                    string.Create(CultureInfo.InvariantCulture, $"This argument exceeds the limit of {limits.MaximumTokenLength} UTF-16 code units."),
                     index);
                 return [];
             }
@@ -248,7 +242,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 diagnostic = ParseDiagnostic.ForInput(
                     ParseDiagnosticCode.InputLimitExceeded,
-                    "The argument vector exceeds the maximum total length.",
+                    string.Create(CultureInfo.InvariantCulture, $"The combined argument length exceeds the limit of {limits.MaximumTotalCodeUnits} UTF-16 code units."),
                     index);
                 return [];
             }
@@ -325,7 +319,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         {
             AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.UnknownOption,
-                "The token does not name a visible option.",
+                "Unknown option.",
                 optionIndex,
                 suggestions: SuggestOptions(visibleOptions, name)));
             unmatched.Add(new UnmatchedToken(optionIndex, token));
@@ -520,7 +514,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     ParseDiagnosticCode.MissingRequired,
                     option,
                     ownedOption.Owner,
-                    null));
+                    null,
+                    selectedCommand: selectedCommand));
             }
         }
 
@@ -563,11 +558,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         while (nextOccurrence < occurrences.Count)
         {
             PositionalOccurrence occurrence = occurrences[nextOccurrence++];
-            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
-                ParseDiagnosticCode.UnexpectedArgument,
-                "The token cannot be assigned to a positional argument.",
-                occurrence.Index));
-            unmatched.Add(new UnmatchedToken(occurrence.Index, occurrence.Value));
+            UnmatchedToken token = new(occurrence.Index, occurrence.Value);
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForUnexpectedArgument(token));
+            unmatched.Add(token);
         }
 
         return assignments;
@@ -1098,10 +1091,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return convertedByTokenIndex;
     }
 
-    private object CreateCollection(Type elementType, List<object?> values)
-    {
-        return ValueConverterEngine.CreateReadOnlyCollection(elementType, values, _converters);
-    }
+    private object CreateCollection(Type elementType, List<object?> values) => ValueConverterEngine.CreateReadOnlyCollection(elementType, values, _converters);
 
     private static object? InvokeFactory(Func<object?> factory, CancellationToken cancellationToken)
     {
@@ -1119,10 +1109,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     || Nullable.GetUnderlyingType(type)?.IsInstanceOfType(value) == true));
     }
 
-    private static bool IsCollection(OptionArity arity)
-    {
-        return arity is OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection;
-    }
+    private static bool IsCollection(OptionArity arity) => arity is OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection;
 
     private static bool CanConsumeValue(string token, Type valueType)
     {
@@ -1131,10 +1118,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 || (ValueConverterEngine.IsNumericType(valueType) && IsNegativeNumericCandidate(token)));
     }
 
-    private static bool IsOptionCandidate(string token)
-    {
-        return token.Length > 1 && token[0] == '-';
-    }
+    private static bool IsOptionCandidate(string token) => token.Length > 1 && token[0] == '-';
 
     private static bool IsNegativeNumericCandidate(string token)
     {
@@ -1368,15 +1352,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return previous[right.Length];
     }
 
-    private static void AddDiagnostic(DiagnosticBuffer diagnostics, ParseDiagnostic diagnostic)
-    {
-        diagnostics.Add(diagnostic);
-    }
+    private static void AddDiagnostic(DiagnosticBuffer diagnostics, ParseDiagnostic diagnostic) => diagnostics.Add(diagnostic);
 
-    private static ParseResult InvalidResult(string[] arguments, ParseDiagnostic diagnostic)
-    {
-        return InvalidResult(arguments, [], [diagnostic], []);
-    }
+    private static ParseResult InvalidResult(string[] arguments, ParseDiagnostic diagnostic) => InvalidResult(arguments, [], [diagnostic], []);
 
     private static ParseResult InvalidResult(
         string[] arguments,
@@ -1399,10 +1377,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
         public int Count => _items.Count;
 
-        public bool Exists(Predicate<ParseDiagnostic> predicate)
-        {
-            return _items.Exists(predicate);
-        }
+        public bool Exists(Predicate<ParseDiagnostic> predicate) => _items.Exists(predicate);
 
         public void Add(ParseDiagnostic diagnostic)
         {
@@ -1449,7 +1424,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         {
             return ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.DiagnosticLimitExceeded,
-                "The parse result exceeded the maximum diagnostic count.");
+                "Too many errors; further diagnostics were omitted.");
         }
     }
 

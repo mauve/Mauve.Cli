@@ -222,6 +222,7 @@ public sealed class CliParserTests
         ParseResult spaceFalse = new CliParser().Parse(model, ["--verbose", "false"]);
         ParseResult invalid = new CliParser().Parse(model, ["--verbose=maybe"]);
         ParseResult repeated = new CliParser().Parse(model, ["--verbose", "--no-verbose"]);
+        ParseResult unexpectedValue = new CliParser().Parse(model, ["--no-verbose=true"]);
 
         Assert.IsTrue(enabled.TryGetOptionValue(model.Root, model.Root.Options[0], out bool trueValue));
         Assert.IsTrue(trueValue);
@@ -231,6 +232,11 @@ public sealed class CliParserTests
         Assert.IsFalse(spaceFalseValue);
         Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalid.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, repeated.Diagnostics[0].Code);
+        Assert.AreEqual("Argument 2: Option '--verbose' cannot be repeated.", repeated.Diagnostics[0].ToString());
+        Assert.AreEqual(ParseDiagnosticCode.UnexpectedValue, unexpectedValue.Diagnostics[0].Code);
+        Assert.AreEqual(
+            "Argument 1: The negating form of option '--verbose' does not accept a value.",
+            unexpectedValue.Diagnostics[0].ToString());
 
         CommandBuilder collidingNames = new CommandBuilder("tool")
             .AddOption(new OptionDefinition(
@@ -494,6 +500,8 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, conflict.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalidValue.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, valueRejected.Diagnostics[0].Code);
+        Assert.AreEqual("Values for command 'tool' failed validation.", conflict.Diagnostics[0].ToString());
+        Assert.AreEqual("Argument 1: The value for option '--left' failed validation.", valueRejected.Diagnostics[0].ToString());
         Assert.AreEqual(ParseOutcome.Validated, single.Outcome);
         Assert.AreEqual(2, crossCalls);
     }
@@ -596,6 +604,10 @@ public sealed class CliParserTests
         Assert.AreEqual(8, invalidValue.Diagnostics[0].ValueOffset);
         Assert.IsFalse(invalidValue.Diagnostics[0].Message.Contains("bad", StringComparison.Ordinal));
         Assert.AreEqual(ParseDiagnosticCode.MissingValue, missingValue.Diagnostics[0].Code);
+        Assert.AreEqual("Argument 1: The value for option '--count' is invalid.", invalidValue.Diagnostics[0].ToString());
+        Assert.AreEqual("Argument 1: Option '--count' requires a value.", missingValue.Diagnostics[0].ToString());
+        ParseResult separateValue = parser.Parse(model, ["--count", "secret"]);
+        Assert.AreEqual("Argument 2: The value for option '--count' is invalid.", separateValue.Diagnostics[0].ToString());
         Assert.AreEqual(invalidValue.Diagnostics[0].Code, repeatedInvalidValue.Diagnostics[0].Code);
         Assert.AreEqual(invalidValue.Diagnostics[0].TokenIndex, repeatedInvalidValue.Diagnostics[0].TokenIndex);
 
@@ -611,6 +623,23 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.MissingRequired, ordered.Diagnostics[1].Code);
         Assert.AreEqual(0, ordered.Diagnostics[0].ValueTokenIndex);
         Assert.IsNull(ordered.Diagnostics[1].TokenIndex);
+        Assert.AreEqual("Command 'tool': Required option '--required' is missing.", ordered.Diagnostics[1].ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Parse_NamesMissingVisibleArgumentsWithoutInventingPositions()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("copy")
+            .AddPositional(new PositionalDefinition("source", typeof(string)))
+            .AddPositional(new PositionalDefinition("destination", typeof(string)))
+            .AddPositional(new PositionalDefinition("internal-name", typeof(string), isHidden: true)));
+        ParseResult missing = new CliParser().Parse(model, ["source.txt"]);
+
+        Assert.AreSequenceEqual(
+            ["Command 'copy': Required argument 'destination' is missing.", "Command 'copy': Required argument 'hidden argument' is missing."],
+            [.. missing.FormatDiagnostics()]);
     }
 
     [TestMethod]
@@ -628,6 +657,7 @@ public sealed class CliParserTests
         Assert.IsEmpty(result.SelectedPath);
         Assert.IsNull(result.Diagnostics[0].TokenIndex);
         Assert.AreEqual("--date", result.Diagnostics[0].DefinitionName);
+        Assert.AreEqual("Option '--date' has an unsupported value type or converter.", result.Diagnostics[0].ToString());
     }
 
     [TestMethod]
@@ -642,6 +672,7 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, tooManyArguments.Diagnostics[0].Code);
         Assert.AreEqual(1, tooManyArguments.Diagnostics[0].TokenIndex);
         Assert.IsEmpty(tooManyArguments.SelectedPath);
+        Assert.AreEqual("Argument 2: Too many arguments; the limit is 1.", tooManyArguments.Diagnostics[0].ToString());
 
         CommandModel tokenLimitedModel = CommandModel.Create(
             new CommandBuilder("tool"),
@@ -649,6 +680,7 @@ public sealed class CliParserTests
         ParseResult longToken = new CliParser().Parse(tokenLimitedModel, ["long"]);
         Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, longToken.Diagnostics[0].Code);
         Assert.AreEqual(0, longToken.Diagnostics[0].TokenIndex);
+        Assert.AreEqual("Argument 1: This argument exceeds the limit of 3 UTF-16 code units.", longToken.Diagnostics[0].ToString());
 
         CommandModel totalLimitedModel = CommandModel.Create(
             new CommandBuilder("tool"),
@@ -656,6 +688,7 @@ public sealed class CliParserTests
         ParseResult longVector = new CliParser().Parse(totalLimitedModel, ["ab", "cd"]);
         Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, longVector.Diagnostics[0].Code);
         Assert.AreEqual(1, longVector.Diagnostics[0].TokenIndex);
+        Assert.AreEqual("Argument 2: The combined argument length exceeds the limit of 3 UTF-16 code units.", longVector.Diagnostics[0].ToString());
 
         CommandModel diagnosticLimitedModel = CommandModel.Create(
             new CommandBuilder("tool"),
@@ -664,6 +697,7 @@ public sealed class CliParserTests
         Assert.HasCount(2, manyErrors.Diagnostics);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, manyErrors.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.DiagnosticLimitExceeded, manyErrors.Diagnostics[1].Code);
+        Assert.AreEqual("Too many errors; further diagnostics were omitted.", manyErrors.Diagnostics[1].ToString());
     }
 
     [TestMethod]
@@ -678,6 +712,7 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknownOption.Diagnostics[0].Code);
         Assert.AreEqual("--wat", unknownOption.UnmatchedTokens[0].Value);
         Assert.IsFalse(unknownOption.Diagnostics[0].Message.Contains("--wat", StringComparison.Ordinal));
+        Assert.AreEqual("Argument 1: Unknown option.", unknownOption.Diagnostics[0].ToString());
 
         CommandModel positionalModel = CommandModel.Create(new CommandBuilder("tool")
             .AddPositional(new PositionalDefinition("name", typeof(string))));
@@ -685,6 +720,14 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.UnexpectedArgument, excess.Diagnostics[0].Code);
         Assert.AreEqual("secret", excess.UnmatchedTokens[0].Value);
         Assert.IsFalse(excess.Diagnostics[0].Message.Contains("secret", StringComparison.Ordinal));
+        Assert.AreEqual("Argument 2: Unexpected positional argument \"secret\".", excess.Diagnostics[0].ToString());
+        Assert.AreEqual("Argument 2: Unexpected positional argument.", excess.Diagnostics[0].ToString(includeArgumentText: false));
+        Assert.AreSequenceEqual(["Argument 2: Unexpected positional argument."], [.. excess.FormatDiagnostics(includeArgumentText: false)]);
+
+        ParseResult escaped = new CliParser().Parse(positionalModel, ["first", "extra\nline", new string('x', 128) + "truncated"]);
+        Assert.AreSequenceEqual(
+            ["Argument 2: Unexpected positional argument \"extra\\nline\".", $"Argument 3: Unexpected positional argument \"{new string('x', 128)}...\"."],
+            [.. escaped.FormatDiagnostics()]);
     }
 
     [TestMethod]
@@ -708,6 +751,9 @@ public sealed class CliParserTests
         Assert.AreSequenceEqual(["--output"], [.. optionTypo.Diagnostics[0].Suggestions]);
         Assert.IsEmpty(hiddenTypo.Diagnostics[0].Suggestions);
         Assert.IsEmpty(overlongTypo.Diagnostics[0].Suggestions);
+        Assert.AreEqual("Argument 1: Unknown command. Did you mean: copy?", commandTypo.Diagnostics[0].ToString());
+        Assert.AreEqual("Argument 1: Unknown option. Did you mean: --output?", optionTypo.Diagnostics[0].ToString());
+        Assert.AreEqual("Argument 1: Unknown option.", hiddenTypo.Diagnostics[0].ToString());
 
         CommandBuilder options = new("tool");
         for (int index = 0; index < 8; index++)
@@ -793,6 +839,9 @@ public sealed class CliParserTests
         Assert.AreSequenceEqual(
             ["tool", "copy"], [.. optionBeforeChild.SelectedPath.Select(static command => command.Name)]);
         Assert.AreEqual(ParseDiagnosticCode.OptionOutOfScope, optionBeforeChild.Diagnostics[0].Code);
+        Assert.AreEqual(
+            $"Argument 1: Option '{optionBeforeChild.Diagnostics[0].DefinitionName}' is not available for the selected command.",
+            optionBeforeChild.Diagnostics[0].ToString());
         Assert.AreEqual(0, optionBeforeChild.Diagnostics[0].TokenIndex);
     }
 

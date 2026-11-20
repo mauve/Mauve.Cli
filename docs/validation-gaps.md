@@ -13,8 +13,8 @@ FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
 FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-10, FEAT-11, FEAT-12,
 FEAT-13 and FEAT-14 are active.
 Portable test methods are declared for each. The strict Release solution build
-passes with no warnings, and the repository-wide MTP run passes 86 tests:
-72 runtime tests, 13 generator tests and 1 focused AOT test.
+passes with no warnings, and the repository-wide MTP run passes 87 tests:
+73 runtime tests, 13 generator tests and 1 focused AOT test.
 
 The standalone runner/analyzer/MTP TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
@@ -64,9 +64,10 @@ is claimed.
 | FEAT-07-001 | portable automated | `CliParserTests.Parse_PreservesProvenanceAndIsolatesResultsAcrossParses` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
 | FEAT-07-002 | portable automated | `CommandModelTests.Create_EnforcesConfiguredModelLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
 | FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsStableCategoriesAndCoordinates` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
+| FEAT-07-002 | portable automated | `CliParserTests.Parse_NamesMissingVisibleArgumentsWithoutInventingPositions` | Mauve.Cli maintainers | .NET 11; no privileged environment | Missing positional names and hidden-name redaction passed in the strict 87-test MTP suite. |
 | FEAT-07-002 | portable automated | `CliParserTests.Parse_ReportsUnsupportedModelsWithoutSelectingACommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
 | FEAT-07-002 | portable automated | `CliParserTests.Parse_EnforcesConfiguredInputAndDiagnosticLimits` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
-| FEAT-07-003 | portable automated | `CliParserTests.Parse_FailsOnUnknownAndExcessInputButExposesItForInspection` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
+| FEAT-07-003 | portable automated | `CliParserTests.Parse_FailsOnUnknownAndExcessInputButExposesItForInspection` | Mauve.Cli maintainers | .NET 11; no privileged environment | Bounded, escaped positional text and its suppression passed in the strict 87-test MTP suite. |
 | FEAT-07-004 | portable automated | `CliParserTests.Parse_SuggestsBoundedVisibleCanonicalNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test method is declared; also passed in the strict 83-test MTP suite. |
 | FEAT-08-001 | portable automated | `HelpDocumentTests.Create_ProjectsVisibleCommandsPositionalsAndOptionAliases` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. The test also passed in the strict 83-test MTP suite. |
 | FEAT-08-002 | portable automated | `HelpDocumentTests.Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; this is not product MSTest or Governance acceptance evidence. The test also passed in the strict 83-test MTP suite. |

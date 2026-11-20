@@ -6,7 +6,6 @@ using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
-using Mauve.Cli.Parsing;
 
 namespace Todo.Cli;
 
@@ -32,10 +31,7 @@ internal sealed partial class AddCommand
     public partial string Text { get; }
 
     [CliHandler]
-    internal int Run()
-    {
-        return Write($"Added: {Text}");
-    }
+    internal int Run() => Write($"Added: {Text}");
 
     [SuppressMessage(
         "Globalization",
@@ -60,10 +56,7 @@ internal sealed partial class ListCommand
         "Performance",
         "CA1822:Mark members as static",
         Justification = "Generated command handlers are instance methods.")]
-    internal int Run()
-    {
-        return Write("No tasks yet.");
-    }
+    internal int Run() => Write("No tasks yet.");
 
     [SuppressMessage(
         "Globalization",
@@ -97,9 +90,9 @@ internal static class Program
 
         if (result.Outcome == InvocationOutcome.InvalidInput && result.ParseResult is not null)
         {
-            foreach (ParseDiagnostic diagnostic in result.ParseResult.Diagnostics)
+            foreach (string line in result.ParseResult.FormatDiagnostics())
             {
-                Write(diagnostic.Message);
+                await Console.Error.WriteLineAsync(line).ConfigureAwait(false);
             }
 
             return 2;
@@ -130,8 +123,5 @@ internal static class Program
         "Globalization",
         "CA1303:Do not pass literals as localized parameters",
         Justification = "This small example uses English output.")]
-    private static void Write(string message)
-    {
-        Console.WriteLine(message);
-    }
+    private static void Write(string message) => Console.WriteLine(message);
 }

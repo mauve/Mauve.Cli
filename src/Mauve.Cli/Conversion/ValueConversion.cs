@@ -31,10 +31,7 @@ public static class ValueConversion
     /// <typeparam name="T">The converted value type.</typeparam>
     /// <param name="value">The converted value.</param>
     /// <returns>A successful result.</returns>
-    public static ValueConversion<T> FromValue<T>(T? value)
-    {
-        return new ValueConversion<T>(true, value, null);
-    }
+    public static ValueConversion<T> FromValue<T>(T? value) => new(true, value, null);
 
     /// <summary>Creates a failed conversion result.</summary>
     /// <typeparam name="T">The expected value type.</typeparam>

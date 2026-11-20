@@ -98,10 +98,7 @@ public sealed class ConverterRegistry
 
     /// <summary>Creates an empty converter registry.</summary>
     /// <returns>An empty registry.</returns>
-    public static ConverterRegistry Empty()
-    {
-        return new ConverterRegistry([], [], []);
-    }
+    public static ConverterRegistry Empty() => new([], [], []);
 
     internal bool IsCompletionSafe(Type targetType)
     {
@@ -146,10 +143,7 @@ public sealed class ConverterRegistry
         return underlying is not null && _converters.ContainsKey(underlying);
     }
 
-    internal bool ContainsExact(Type targetType)
-    {
-        return _converters.ContainsKey(targetType);
-    }
+    internal bool ContainsExact(Type targetType) => _converters.ContainsKey(targetType);
 
     internal bool TryCreateReadOnlyCollection(
         Type elementType,

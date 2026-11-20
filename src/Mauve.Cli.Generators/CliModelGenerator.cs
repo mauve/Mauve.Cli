@@ -1034,10 +1034,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             .Append(Literal(inclusion.Description)).AppendLine(");");
     }
 
-    private static string GenerateOption(OptionInfo option)
-    {
-        return GenerateOption(option.Attribute, option.Property.Type, option.Property.Name);
-    }
+    private static string GenerateOption(OptionInfo option) => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name);
 
     private static string GenerateOption(
         AttributeData attribute,
@@ -1254,15 +1251,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             || IsValidLongOptionName(name);
     }
 
-    private static bool IsAsciiAlphaNumeric(char character)
-    {
-        return IsAsciiLetter(character) || character is >= '0' and <= '9';
-    }
+    private static bool IsAsciiAlphaNumeric(char character) => IsAsciiLetter(character) || character is >= '0' and <= '9';
 
-    private static bool IsAsciiLetter(char character)
-    {
-        return character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
-    }
+    private static bool IsAsciiLetter(char character) => character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
     private static bool TryGetCollectionElementType(ITypeSymbol type, out ITypeSymbol? elementType)
     {
@@ -1304,10 +1295,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 
-    private static string Literal(string? value)
-    {
-        return value is null ? "null" : SymbolDisplay.FormatLiteral(value, quote: true);
-    }
+    private static string Literal(string? value) => value is null ? "null" : SymbolDisplay.FormatLiteral(value, quote: true);
 
     private static string EnumName(string enumName, int value)
     {
@@ -1367,10 +1355,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return string.Concat(name, "_", GetStableSuffix(symbol), suffix, ".g.cs");
     }
 
-    private static AttributeData? FindAttribute(ISymbol symbol, string metadataName)
-    {
-        return symbol.GetAttributes().FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
-    }
+    private static AttributeData? FindAttribute(ISymbol symbol, string metadataName) => symbol.GetAttributes().FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
 
     private static bool IsAttribute(AttributeData attribute, string metadataName)
     {
@@ -1410,10 +1395,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             : null;
     }
 
-    private static string? GetNamedString(AttributeData attribute, string name)
-    {
-        return attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value.Value as string;
-    }
+    private static string? GetNamedString(AttributeData attribute, string name) => attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value.Value as string;
 
     private static int GetNamedInt(AttributeData attribute, string name, int defaultValue = 0)
     {
@@ -1423,10 +1405,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             : Convert.ToInt32(value.Value.Value, CultureInfo.InvariantCulture);
     }
 
-    private static bool HasNamedArgument(AttributeData attribute, string name)
-    {
-        return attribute.NamedArguments.Any(argument => argument.Key == name);
-    }
+    private static bool HasNamedArgument(AttributeData attribute, string name) => attribute.NamedArguments.Any(argument => argument.Key == name);
 
     private static int GetOptionArity(AttributeData attribute, ITypeSymbol valueType)
     {
@@ -1456,10 +1435,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return DeriveMemberName(name);
     }
 
-    private static string DeriveOptionName(string memberName)
-    {
-        return string.Concat("--", DeriveMemberName(memberName));
-    }
+    private static string DeriveOptionName(string memberName) => string.Concat("--", DeriveMemberName(memberName));
 
     private static string DeriveMemberName(string identifier)
     {
@@ -1508,10 +1484,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return new SourceOrder(treeOrder, syntaxReference.Span.Start);
     }
 
-    private static bool GetNamedBoolean(AttributeData attribute, string name)
-    {
-        return attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value.Value is true;
-    }
+    private static bool GetNamedBoolean(AttributeData attribute, string name) => attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value.Value is true;
 
     private static string[] GetNamedStrings(AttributeData attribute, string name)
     {
@@ -1525,10 +1498,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         SourceProductionContext context,
         DiagnosticDescriptor descriptor,
         Location location,
-        string message)
-    {
-        context.ReportDiagnostic(Diagnostic.Create(descriptor, location, message));
-    }
+        string message) => context.ReportDiagnostic(Diagnostic.Create(descriptor, location, message));
 
     private sealed class CommandInfo(
         INamedTypeSymbol symbol,
@@ -1631,10 +1601,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public SourceOrder SourceOrder { get; } = sourceOrder;
 
-        public static string FieldName(string suffix, int index)
-        {
-            return string.Concat("__mauveOption_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
-        }
+        public static string FieldName(string suffix, int index) => string.Concat("__mauveOption_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
     }
 
     private sealed class ArgumentInfo(
@@ -1648,10 +1615,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public SourceOrder SourceOrder { get; } = sourceOrder;
 
-        public static string FieldName(string suffix, int index)
-        {
-            return string.Concat("__mauveArgument_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
-        }
+        public static string FieldName(string suffix, int index) => string.Concat("__mauveArgument_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
     }
 
     private sealed class ChildInfo(

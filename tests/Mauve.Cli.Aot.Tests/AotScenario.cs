@@ -287,6 +287,11 @@ internal static class AotScenario
             && _handlerInvocations == calledBeforeInvalid,
             "Unknown option input was dispatched or accepted.");
 
+        ParseResult excess = new CliParser(converters).Parse(model, [.. firstArguments, "extra\nline"]);
+        Require(excess.Outcome == ParseOutcome.Invalid
+            && string.Join(" ", excess.FormatDiagnostics()) == "Argument 12: Unexpected positional argument \"extra\\nline\".",
+            "The extra argument was not identified and escaped.");
+
         InvocationResult help = await invoker.InvokeAsync(model, ["new", "--help"]).ConfigureAwait(false);
         Require(help.Outcome == InvocationOutcome.HelpRequested
             && _handlerInvocations == calledBeforeInvalid,

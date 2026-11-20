@@ -88,10 +88,7 @@ public sealed class CommandDefinition
 
     internal CommandHandler? Handler { get; }
 
-    internal bool TryGetPackGroup(OptionDefinition option, out OptionPackGroupMetadata group)
-    {
-        return _packGroups.TryGetValue(option, out group);
-    }
+    internal bool TryGetPackGroup(OptionDefinition option, out OptionPackGroupMetadata group) => _packGroups.TryGetValue(option, out group);
 
     /// <summary>Gets the canonical path components from the root to this command.</summary>
     public IReadOnlyList<string> Path => _path;
