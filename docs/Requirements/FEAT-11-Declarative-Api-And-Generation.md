@@ -74,12 +74,14 @@ either model path.
 **Instruments:** none - source generation adds no runtime instrumentation.
 
 ## Verification
-Generator-driver tests compile and execute a nested generated consumer,
-compare its invocation outcome with an explicit model, verify unchanged and
-edited output, verify inferred names/cardinality and cross-file source order,
-and check that unsupported or colliding declarations suppress root
-generation. The strict MTP suite records the observed results in the
-validation ledger.
+Generator-driver tests compile and execute nested generated consumers,
+compare an invocation outcome with an explicit model, and verify all
+supported asynchronous handler return shapes (`Task`, `Task<int>`,
+`ValueTask`, and `ValueTask<int>`), parameter forwarding, cancellation and
+unsupported async signature diagnostics. They also verify unchanged and
+edited output, inferred names/cardinality, cross-file source order, and that
+unsupported or colliding declarations suppress root generation. The strict
+MTP suite records the observed results in the validation ledger.
 
 ## Diagrams
 

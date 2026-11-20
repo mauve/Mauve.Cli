@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
@@ -90,6 +91,194 @@ public sealed class CliModelGeneratorTests
         Assert.AreEqual(explicitResult.ExitCode, generatedResult.ExitCode);
         Assert.AreEqual("tool copy", string.Join(" ", generatedResult.ParseResult!.SelectedCommand!.Path));
         Assert.AreEqual(11, generatedResult.ExitCode);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    public async Task Generate_CompilesAndAwaitsAllSupportedAsyncHandlerShapes()
+    {
+        const string declaration = """
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Invocation;
+
+            namespace AsyncHandlerFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            [CliChild<TaskCommand>]
+            [CliChild<TaskWithCodeCommand>]
+            [CliChild<ValueTaskCommand>]
+            [CliChild<ValueTaskWithCodeCommand>]
+            public partial class Root
+            {
+            }
+
+            [CliCommand]
+            public partial class TaskCommand
+            {
+                [CliHandler]
+                private async Task Run()
+                {
+                    await Task.Yield();
+                }
+            }
+
+            [CliCommand]
+            public partial class TaskWithCodeCommand
+            {
+                [CliHandler]
+                private async Task<int> Run(CancellationToken cancellationToken)
+                {
+                    await Task.Yield();
+                    return cancellationToken.CanBeCanceled ? 17 : -1;
+                }
+            }
+
+            [CliCommand]
+            public partial class ValueTaskCommand
+            {
+                [CliHandler]
+                private async ValueTask Run(CommandInvocationContext context)
+                {
+                    await Task.Yield();
+                    if (context.Command.Name != "value-task")
+                    {
+                        throw new System.InvalidOperationException("The generated invocation context is incorrect.");
+                    }
+                }
+            }
+
+            [CliCommand]
+            public partial class ValueTaskWithCodeCommand
+            {
+                [CliHandler]
+                private async ValueTask<int> Run()
+                {
+                    await Task.Yield();
+                    return 23;
+                }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type rootType = fixture.GetType("AsyncHandlerFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        using CancellationTokenSource handlerCancellation = new();
+        InvocationResult task = await new CliInvoker()
+            .InvokeAsync(model, ["task"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        InvocationResult taskWithCode = await new CliInvoker()
+            .InvokeAsync(model, ["task-with-code"], handlerCancellation.Token)
+            .ConfigureAwait(false);
+        InvocationResult valueTask = await new CliInvoker()
+            .InvokeAsync(model, ["value-task"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        InvocationResult valueTaskWithCode = await new CliInvoker()
+            .InvokeAsync(model, ["value-task-with-code"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, task.Outcome);
+        Assert.AreEqual(0, task.ExitCode);
+        Assert.AreEqual(InvocationOutcome.Completed, taskWithCode.Outcome);
+        Assert.AreEqual(17, taskWithCode.ExitCode);
+        Assert.AreEqual(InvocationOutcome.Completed, valueTask.Outcome);
+        Assert.AreEqual(0, valueTask.ExitCode);
+        Assert.AreEqual(InvocationOutcome.Completed, valueTaskWithCode.Outcome);
+        Assert.AreEqual(23, valueTaskWithCode.ExitCode);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    public async Task Generate_ForwardCancellationTokenToAsyncHandler()
+    {
+        const string declaration = """
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Mauve.Cli.Declarations;
+
+            namespace AsyncCancellationFixture;
+
+            [CliCommand("wait", IsRoot = true)]
+            public partial class WaitCommand
+            {
+                [CliHandler]
+                private async Task<int> Run(CancellationToken cancellationToken)
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return 1;
+                }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type rootType = fixture.GetType("AsyncCancellationFixture.WaitCommand", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        using CancellationTokenSource cancellationSource = new();
+        Task<InvocationResult> running = new CliInvoker()
+            .InvokeAsync(model, [], cancellationSource.Token)
+            .AsTask();
+
+        await cancellationSource.CancelAsync().ConfigureAwait(false);
+        InvocationResult result = await running.ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Cancelled, result.Outcome);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsAsyncVoidAndUnsupportedAsyncResultTypes()
+    {
+        const string asyncVoidDeclaration = """
+            using System.Threading.Tasks;
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class AsyncVoidCommand
+            {
+                [CliHandler]
+                private async void Run()
+                {
+                    await Task.Yield();
+                }
+            }
+            """;
+        const string unsupportedResultDeclaration = """
+            using System.Threading.Tasks;
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class UnsupportedResultCommand
+            {
+                [CliHandler]
+                private async Task<string> Run()
+                {
+                    await Task.Yield();
+                    return "unsupported";
+                }
+            }
+            """;
+
+        GeneratorResult asyncVoid = Generate(asyncVoidDeclaration);
+        GeneratorResult unsupportedResult = Generate(unsupportedResultDeclaration);
+
+        Assert.IsTrue(asyncVoid.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
+        Assert.DoesNotContain(
+            static source => source.HintName.Contains("AsyncVoidCommand", StringComparison.Ordinal),
+            asyncVoid.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        Assert.IsTrue(unsupportedResult.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
+        Assert.DoesNotContain(
+            static source => source.HintName.Contains("UnsupportedResultCommand", StringComparison.Ordinal),
+            unsupportedResult.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
     [TestMethod]

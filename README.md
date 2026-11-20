@@ -51,6 +51,7 @@ if (result.Outcome == ParseOutcome.Validated
 
 ```csharp
 using System;
+using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 
@@ -61,8 +62,9 @@ public partial class GreetCommand
     public partial string Name { get; }
 
     [CliHandler]
-    private int Run()
+    private async Task<int> Run()
     {
+        await Task.Yield();
         Console.WriteLine($"Hello, {Name}!");
         return 0;
     }
@@ -72,7 +74,8 @@ public partial class GreetCommand
 The generator adds `GreetCommand.CreateModel()`, typed bindings, and handler
 dispatch. It derives `greet` and `--name` from the C# identifiers and derives
 the scalar arity from `string`. Option packs can group reusable options in
-either API.
+either API. Generated handlers may return `void`, `int`, `Task`, `Task<int>`,
+`ValueTask`, or `ValueTask<int>`; async-void handlers are unsupported.
 
 ## Trimming and NativeAOT
 
