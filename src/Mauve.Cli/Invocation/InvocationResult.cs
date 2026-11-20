@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Mauve.Cli.Definitions;
 using Mauve.Cli.Parsing;
 
 namespace Mauve.Cli.Invocation;
@@ -16,11 +18,23 @@ public sealed class InvocationResult
     /// <summary>Gets the invocation outcome.</summary>
     public InvocationOutcome Outcome { get; }
 
+    /// <summary>Returns true if the help was requested during invocation.</summary>
+    public bool IsHelpRequested => Outcome == InvocationOutcome.HelpRequested;
+
+    /// <summary>Returns true if the invocation resulted in invalid input.</summary>
+    public bool IsInvalidInput => Outcome == InvocationOutcome.InvalidInput;
+
     /// <summary>Gets the parse result when parsing completed.</summary>
     public ParseResult? ParseResult { get; }
 
+    /// <summary>Gets the selected command definition when parsing completed.</summary>
+    public CommandDefinition? SelectedCommand => ParseResult?.SelectedCommand;
+
     /// <summary>Gets the handler's exact exit code when it completed.</summary>
     public int? ExitCode { get; }
+
+    /// <summary>Formats the diagnostics from the parse result, if available.</summary>
+    public IEnumerable<string> FormatDiagnostics(bool includeArgumentText = true) => ParseResult?.FormatDiagnostics(includeArgumentText) ?? [];
 
     internal static InvocationResult Completed(ParseResult parseResult, int exitCode)
     {

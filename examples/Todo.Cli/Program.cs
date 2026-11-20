@@ -82,15 +82,15 @@ internal static class Program
         }
 
         InvocationResult result = await new CliInvoker().InvokeAsync(model, args).ConfigureAwait(false);
-        if (result.Outcome == InvocationOutcome.HelpRequested && result.ParseResult?.SelectedCommand is not null)
+        if (result.IsHelpRequested)
         {
-            Write(HelpTextRenderer.Render(HelpDocument.Create(model, result.ParseResult.SelectedCommand)));
+            Write(HelpTextRenderer.Render(HelpDocument.Create(model, result.SelectedCommand)));
             return 0;
         }
 
-        if (result.Outcome == InvocationOutcome.InvalidInput && result.ParseResult is not null)
+        if (result.IsInvalidInput)
         {
-            foreach (string line in result.ParseResult.FormatDiagnostics())
+            foreach (string line in result.FormatDiagnostics())
             {
                 await Console.Error.WriteLineAsync(line).ConfigureAwait(false);
             }
