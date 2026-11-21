@@ -26,6 +26,29 @@ public sealed class CliCommandAttribute(string? name = null) : Attribute
     public bool IsHidden { get; set; }
 }
 
+/// <summary>Declares a standalone directive or a method directive on a command root.</summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = false)]
+public sealed class CliDirectiveAttribute(string? name = null) : Attribute
+{
+    /// <summary>Gets the explicit directive name, or null to infer it from a type name.</summary>
+    public string? Name { get; } = name;
+
+    /// <summary>Gets or sets the display description.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Gets or sets whether help and completion hide this directive.</summary>
+    public bool IsHidden { get; set; }
+}
+
+/// <summary>Includes a standalone directive in a generated command root.</summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class CliDirectiveAttribute<TDirective> : Attribute
+    where TDirective : class
+{
+    /// <summary>Gets the included directive declaration type.</summary>
+    public Type DirectiveType => typeof(TDirective);
+}
+
 /// <summary>Declares an ordered child command type.</summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class CliChildAttribute<TCommand> : Attribute

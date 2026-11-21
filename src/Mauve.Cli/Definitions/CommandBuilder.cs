@@ -12,6 +12,7 @@ public sealed class CommandBuilder
 {
     private readonly List<string> _aliases = [];
     private readonly List<CommandBuilder> _children = [];
+    private readonly List<DirectiveBuilder> _directives = [];
     private readonly List<OptionDefinition> _options = [];
     private readonly List<OptionPackInclusionBuilder> _packs = [];
     private readonly List<PositionalDefinition> _positionals = [];
@@ -64,6 +65,16 @@ public sealed class CommandBuilder
     {
         ArgumentNullException.ThrowIfNull(option);
         _options.Add(option);
+        return this;
+    }
+
+    /// <summary>Adds a directive available across the command tree.</summary>
+    /// <param name="directive">The directive registration.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder AddDirective(DirectiveBuilder directive)
+    {
+        ArgumentNullException.ThrowIfNull(directive);
+        _directives.Add(directive);
         return this;
     }
 
@@ -200,6 +211,8 @@ public sealed class CommandBuilder
 
     internal int ChildCount => _children.Count;
 
+    internal int DirectiveCount => _directives.Count;
+
     internal int OptionCount => _options.Count;
 
     internal int PackCount => _packs.Count;
@@ -207,6 +220,8 @@ public sealed class CommandBuilder
     internal int PositionalCount => _positionals.Count;
 
     internal CommandHandler? Handler { get; private set; }
+
+    internal DirectiveBuilder[] CopyDirectives() => [.. _directives];
 
     internal string[] CopyAliases() => [.. _aliases];
 

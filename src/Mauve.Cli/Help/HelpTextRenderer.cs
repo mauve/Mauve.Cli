@@ -42,6 +42,13 @@ public static class HelpTextRenderer
             AppendSection(output, "Arguments", string.Empty, positionals, width);
         }
 
+        if (document.Directives.Count > 0)
+        {
+            List<HelpDisplayItem> directives = [.. document.Directives.Select(static directive =>
+                new HelpDisplayItem(directive.Syntax, directive.Description))];
+            AppendSection(output, "Directives", string.Empty, directives, width);
+        }
+
         foreach (HelpOptionGroup group in document.OptionGroups)
         {
             List<HelpDisplayItem> options = [.. group.Options.Select(static option =>

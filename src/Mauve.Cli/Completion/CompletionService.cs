@@ -60,6 +60,28 @@ public sealed class CompletionService(
             : GetSegment(input.ActiveToken, request.CursorCharacterOffset);
         string prefix = input.ActiveToken[segment.Start..request.CursorCharacterOffset];
 
+        bool activeDirective = input.ActiveToken.StartsWith('[', StringComparison.Ordinal)
+            || scan.PendingDirective is not null;
+        if (scan.DirectivePhaseOpen
+            && !scan.EndOfOptions
+            && !segment.IsOptionName
+            && !segment.IsOptionValue
+            && (activeDirective || input.ActiveToken.Length == 0))
+        {
+            bool tooLong = AddDirectiveCandidates(
+                scan,
+                input.ActiveToken,
+                prefix,
+                request.CursorCharacterOffset,
+                segment,
+                candidates,
+                unique);
+            if (activeDirective)
+            {
+                return LimitOrCompleted(candidates, tooLong);
+            }
+        }
+
         if (!scan.EndOfOptions
             && segment.IsOptionName
             && input.ActiveToken.StartsWith('-', StringComparison.Ordinal))
@@ -639,7 +661,7 @@ public sealed class CompletionService(
 
     private CompletionScan ScanCompletedTokens(CommandModel model, string[] tokens)
     {
-        CompletionScan scan = new(model.Root);
+        CompletionScan scan = new(model);
         List<CommandOption> occurrences = [];
         List<(PositionalDefinition Definition, string Token, int Index)> positionals = [];
         OptionDefinition? pending = null;
@@ -697,6 +719,20 @@ public sealed class CompletionService(
             {
                 scan.EndOfOptions = true;
                 scan.CommandSelectionOpen = false;
+                scan.DirectivePhaseOpen = false;
+                continue;
+            }
+
+            if (!scan.EndOfOptions
+                && scan.DirectivePhaseOpen
+                && token.StartsWith('[', StringComparison.Ordinal))
+            {
+                if (!ScanDirectiveSpan(model, tokens, ref index, scan))
+                {
+                    scan.FailureTokenIndex = index;
+                    return scan;
+                }
+
                 continue;
             }
 
@@ -818,6 +854,7 @@ public sealed class CompletionService(
             {
                 scan.Path.Add(child);
                 scan.Command = child;
+                scan.DirectivePhaseOpen = false;
                 continue;
             }
 
@@ -837,12 +874,186 @@ public sealed class CompletionService(
             positionals.Add((positional, token, index));
             scan.PositionalTokenCount++;
             scan.CommandSelectionOpen = false;
+            scan.DirectivePhaseOpen = false;
         }
 
         scan.Pending = pending is null ? null : new PendingValue(pending, null,
             pending.ElementType ?? pending.ValueType);
         ConvertPositionals(scan, positionals);
         return scan;
+    }
+
+    private bool AddDirectiveCandidates(
+        CompletionScan scan,
+        string activeToken,
+        string prefix,
+        int cursor,
+        Segment segment,
+        List<CompletionCandidate> candidates,
+        HashSet<(string Text, int Start, int Length)> unique)
+    {
+        DirectiveDefinition? activeDirective = scan.PendingDirective;
+        int valueIndex = scan.PendingDirectiveValueIndex;
+        int colonIndex = activeToken.IndexOf(':', StringComparison.Ordinal);
+        if (activeDirective is null
+            && activeToken.StartsWith('[', StringComparison.Ordinal)
+            && colonIndex >= 0
+            && cursor > colonIndex)
+        {
+            int closing = activeToken.IndexOf(']', StringComparison.Ordinal);
+            string name = activeToken[1..(closing >= 0 && closing < colonIndex ? closing : colonIndex)];
+            activeDirective = scan.Command is not null
+                ? scan.RootModel.Directives.FirstOrDefault(directive =>
+                    string.Equals(directive.Name, name, StringComparison.Ordinal))
+                : null;
+            valueIndex = 0;
+        }
+
+        if (activeDirective is not null)
+        {
+            if (valueIndex >= activeDirective.Values.Count)
+            {
+                return false;
+            }
+
+            DirectiveValueDefinition definition = activeDirective.Values[valueIndex];
+            if (definition.IsHidden || definition.IsSensitive)
+            {
+                return false;
+            }
+
+            Type valueType = definition.ElementType ?? definition.ValueType;
+            string valuePrefix = scan.PendingDirective is not null
+                ? prefix
+                : activeToken[(colonIndex + 1)..Math.Min(cursor, activeToken.Length)];
+            bool limited = false;
+            foreach (string value in _converters.GetEnumNames(valueType))
+            {
+                if (!value.StartsWith(valuePrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string insertion = scan.PendingDirective is not null
+                    ? string.Concat(value, activeToken.Length > 0 && activeToken[^1] == ']' ? string.Empty : "]")
+                    : string.Concat(activeToken[..(colonIndex + 1)], value, "]");
+                limited |= AddCandidate(
+                    insertion,
+                    HelpTextSanitizer.SingleLine(value),
+                    HelpTextSanitizer.DescriptionOrNull(definition.Description),
+                    CompletionCandidateKind.Value,
+                    segment,
+                    activeToken,
+                    null,
+                    null,
+                    null,
+                    candidates,
+                    unique);
+            }
+
+            return limited;
+        }
+
+        string directivePrefix = activeToken.StartsWith('[', StringComparison.Ordinal)
+            ? activeToken[1..Math.Min(cursor, activeToken.Length)]
+            : prefix;
+        int nameEnd = directivePrefix.IndexOfAny([':', ']']);
+        if (nameEnd >= 0)
+        {
+            directivePrefix = directivePrefix[..nameEnd];
+        }
+
+        bool candidateTooLong = false;
+        foreach (DirectiveDefinition directive in scan.RootModel.Directives)
+        {
+            if (directive.IsHidden || !directive.Name.StartsWith(directivePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string insertionText = string.Concat("[", directive.Name, "]");
+            candidateTooLong |= AddCandidate(
+                insertionText,
+                insertionText,
+                HelpTextSanitizer.DescriptionOrNull(directive.Description),
+                CompletionCandidateKind.Directive,
+                segment,
+                activeToken,
+                null,
+                null,
+                null,
+                candidates,
+                unique);
+        }
+
+        return candidateTooLong;
+    }
+
+    private static bool ScanDirectiveSpan(
+        CommandModel model,
+        string[] tokens,
+        ref int index,
+        CompletionScan scan)
+    {
+        string header = tokens[index][1..];
+        int colon = header.IndexOf(':', StringComparison.Ordinal);
+        int close = header.IndexOf(']', StringComparison.Ordinal);
+        bool hasColon = colon >= 0 && (close < 0 || colon < close);
+        int nameLength = hasColon ? colon : close >= 0 ? close : header.Length;
+        string name = header[..nameLength];
+        DirectiveDefinition? directive = model.Directives.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, name, StringComparison.Ordinal));
+        if (directive is null || name.Length == 0 || (close >= 0 && close != header.Length - 1))
+        {
+            return false;
+        }
+
+        int valueCount = 0;
+        if (hasColon)
+        {
+            int valueStart = colon + 1;
+            int valueEnd = close >= 0 ? close : header.Length;
+            if (valueEnd > valueStart || (close >= 0 && valueEnd == valueStart))
+            {
+                valueCount++;
+            }
+        }
+
+        bool closed = close >= 0;
+        while (!closed && index + 1 < tokens.Length)
+        {
+            index++;
+            string token = tokens[index];
+            int tokenClose = token.IndexOf(']', StringComparison.Ordinal);
+            if (tokenClose >= 0)
+            {
+                if (tokenClose != token.Length - 1)
+                {
+                    return false;
+                }
+
+                if (tokenClose > 0)
+                {
+                    valueCount++;
+                }
+
+                closed = true;
+            }
+            else
+            {
+                valueCount++;
+            }
+        }
+
+        if (!closed)
+        {
+            scan.PendingDirective = directive;
+            scan.PendingDirectiveValueIndex = valueCount;
+            return true;
+        }
+
+        return valueCount <= directive.Values.Count
+            && (directive.Values.Count == 0 || valueCount == 0 || directive.Values[^1].ElementType is not null);
     }
 
     private void ConvertPositionals(
@@ -1144,18 +1355,26 @@ public sealed class CompletionService(
         PositionalDefinition? Positional,
         Type ValueType);
 
-    private sealed class CompletionScan(CommandDefinition root)
+    private sealed class CompletionScan(CommandModel model)
     {
-        public CommandDefinition Command { get; set; } = root;
+        public CommandModel RootModel { get; } = model;
 
-        public List<CommandDefinition> Path { get; } = [root];
+        public CommandDefinition Command { get; set; } = model.Root;
+
+        public List<CommandDefinition> Path { get; } = [model.Root];
 
         public Dictionary<object, object?> Values { get; } =
             [with(ReferenceEqualityComparer.Instance)];
 
         public bool CommandSelectionOpen { get; set; } = true;
 
+        public bool DirectivePhaseOpen { get; set; } = true;
+
         public bool EndOfOptions { get; set; }
+
+        public DirectiveDefinition? PendingDirective { get; set; }
+
+        public int PendingDirectiveValueIndex { get; set; }
 
         public int PositionalTokenCount { get; set; }
 

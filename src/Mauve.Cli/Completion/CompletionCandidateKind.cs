@@ -13,5 +13,8 @@ public enum CompletionCandidateKind
     Value,
 
     /// <summary>A positional value candidate.</summary>
-    Positional
+    Positional,
+
+    /// <summary>A registered command directive.</summary>
+    Directive
 }

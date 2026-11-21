@@ -10,8 +10,9 @@ Produce useful, customizable help from command and argument metadata.
 Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-06](FEAT-06-Defaults-And-Validation.md), and
-[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Pack grouping is
-provided by [FEAT-14](Planned/FEAT-14-OptionPacks.md); its composition rules
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md), and
+[FEAT-15](FEAT-15-Directives.md). Pack grouping is
+provided by [FEAT-14](FEAT-14-OptionPacks.md); its composition rules
 are not owned here. The implementation decision is recorded in
 [ADR-007](../Architecture/ADR-007-Help-Projection-And-Precedence.md).
 Reference: `../maz/Console/Cli/CommandDef.cs` and

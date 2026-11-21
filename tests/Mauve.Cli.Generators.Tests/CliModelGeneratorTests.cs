@@ -783,6 +783,63 @@ public sealed class CliModelGeneratorTests
         Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-15")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-15-004")]
+    public async Task Generate_RegistersStandaloneAndRootMethodDirectives()
+    {
+        const string declaration = """
+            using System.Threading;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Invocation;
+
+            namespace DirectiveFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            [CliDirective<DebugDirective>]
+            public partial class Root
+            {
+                [CliDirective("version")]
+                private DirectiveResult Version(CancellationToken cancellationToken)
+                    => cancellationToken.CanBeCanceled
+                        ? DirectiveResult.StopProcessing(9)
+                        : DirectiveResult.StopProcessing(8);
+            }
+
+            [CliDirective]
+            public partial class DebugDirective
+            {
+                public static string? Captured { get; private set; }
+
+                [CliOption(IsRequired = true)]
+                public partial string Text { get; }
+
+                [CliHandler]
+                private DirectiveResult Run()
+                {
+                    Captured = Text;
+                    return DirectiveResult.ContinueProcessing;
+                }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type rootType = fixture.GetType("DirectiveFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!
+            .Invoke(null, [null, false])!;
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(model, ["[debug:first]", "[version]", "[debug:last]"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Type directiveType = fixture.GetType("DirectiveFixture.DebugDirective", throwOnError: true)!;
+
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(9, result.ExitCode);
+        Assert.AreEqual("first", directiveType.GetProperty("Captured")!.GetValue(null));
+        Assert.HasCount(3, result.ParseResult!.Directives);
+    }
+
     private GeneratorResult Generate(params string[] sources)
     {
         CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.None);

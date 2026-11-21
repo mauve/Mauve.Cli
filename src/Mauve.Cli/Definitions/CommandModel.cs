@@ -10,11 +10,16 @@ namespace Mauve.Cli.Definitions;
 /// <summary>An immutable, validated snapshot of a command graph.</summary>
 public sealed class CommandModel
 {
-    private CommandModel(CommandDefinition root, CliLimits limits, bool hasStandardHelp)
+    private CommandModel(
+        CommandDefinition root,
+        CliLimits limits,
+        bool hasStandardHelp,
+        DirectiveDefinition[] directives)
     {
         Root = root;
         Limits = limits;
         HasStandardHelp = hasStandardHelp;
+        Directives = Array.AsReadOnly(directives);
     }
 
     /// <summary>Gets the root command definition.</summary>
@@ -25,6 +30,9 @@ public sealed class CommandModel
 
     /// <summary>Gets whether standard help was explicitly installed in this model.</summary>
     public bool HasStandardHelp { get; }
+
+    /// <summary>Gets directives registered on the root, in declaration order.</summary>
+    public IReadOnlyList<DirectiveDefinition> Directives { get; }
 
     /// <summary>Creates and validates an immutable snapshot from a command graph.</summary>
     /// <param name="root">The root command builder.</param>
@@ -91,6 +99,12 @@ public sealed class CommandModel
             }
 
             int addedHelpOption = includeStandardHelp ? 1 : 0;
+            DirectiveBuilder[] directiveBuilders = frame.Builder.CopyDirectives();
+            if (frame.Depth != 1 && directiveBuilders.Length > 0)
+            {
+                throw InvalidModel("Directives can be registered only on the command model root.");
+            }
+
             OptionPackSnapshot[] packs = SnapshotPacks(
                 frame.Builder.CopyPacks(),
                 effectiveLimits,
@@ -108,6 +122,9 @@ public sealed class CommandModel
             long minimumRemainingNodes = modelNodeCount
                 + 1
                 + optionCount
+                + (frame.Depth == 1
+                    ? directiveBuilders.Sum(static directive => 1L + directive.ValueCount)
+                    : 0)
                 + packNodeCount
                 + frame.Builder.PositionalCount
                 + frame.Builder.ChildCount;
@@ -127,6 +144,10 @@ public sealed class CommandModel
             PositionalDefinition[] positionals = frame.Builder.CopyPositionals();
             CrossValueValidator[] crossValidators = frame.Builder.CopyCrossValidators();
             modelNodeCount += 1L + options.Length + positionals.Length + packNodeCount;
+            if (frame.Depth == 1)
+            {
+                modelNodeCount += directiveBuilders.Sum(static directive => 1L + directive.ValueCount);
+            }
 
             ValidateCommand(frame.Builder, aliases, options, positionals, packGroups, frame.Depth == 1);
             ValidateChildren(childrenSnapshot);
@@ -165,7 +186,64 @@ public sealed class CommandModel
 
         CommandDefinition rootDefinition = definitions[root];
         ValidateEffectiveOptions(rootDefinition, effectiveLimits);
-        return new CommandModel(rootDefinition, effectiveLimits, includeStandardHelp);
+        DirectiveDefinition[] directives = [.. root.CopyDirectives().Select(static directive => directive.Build())];
+        ValidateDirectives(directives);
+        return new CommandModel(rootDefinition, effectiveLimits, includeStandardHelp, directives);
+    }
+
+    private static void ValidateDirectives(DirectiveDefinition[] directives)
+    {
+        HashSet<string> directiveNames = [with(StringComparer.Ordinal)];
+        for (int directiveIndex = 0; directiveIndex < directives.Length; directiveIndex++)
+        {
+            DirectiveDefinition directive = directives[directiveIndex];
+            if (!IsValidDirectiveName(directive.Name) || !directiveNames.Add(directive.Name))
+            {
+                throw InvalidModel("Directive names must be valid and unique on the root.");
+            }
+
+            HashSet<string> valueNames = [with(StringComparer.Ordinal)];
+            bool collectionSeen = false;
+            for (int valueIndex = 0; valueIndex < directive.Values.Count; valueIndex++)
+            {
+                DirectiveValueDefinition value = directive.Values[valueIndex];
+                if (!IsValidDirectiveName(value.Name) || !valueNames.Add(value.Name))
+                {
+                    throw InvalidModel(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Directive '{directive.Name}' has an invalid or duplicate value name."));
+                }
+
+                if (value.ElementType is not null)
+                {
+                    if (collectionSeen || valueIndex != directive.Values.Count - 1)
+                    {
+                        throw InvalidModel("A directive collection value must be the final value definition.");
+                    }
+
+                    collectionSeen = true;
+                }
+
+            }
+
+            if (directive.Handler is null)
+            {
+                throw InvalidModel(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Directive '{directive.Name}' has no handler."));
+            }
+        }
+    }
+
+    private static bool IsValidDirectiveName(string name)
+    {
+        return name.Length is > 0 and <= 128
+            && (name[0] is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9'))
+            && name.All(static character =>
+                character is (>= 'A' and <= 'Z')
+                    or (>= 'a' and <= 'z')
+                    or (>= '0' and <= '9')
+                    or '-');
     }
 
     internal static IReadOnlyList<CommandOption> GetEffectiveOptions(

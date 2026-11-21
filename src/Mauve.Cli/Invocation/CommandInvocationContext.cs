@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,9 @@ public sealed class CommandInvocationContext
 
     /// <summary>Gets the validated parse result for this invocation.</summary>
     public ParseResult ParseResult { get; }
+
+    /// <summary>Gets directive occurrences that completed before the command handler.</summary>
+    public IReadOnlyList<ParsedDirective> Directives => ParseResult.Directives;
 
     /// <summary>Attempts to get a typed option value for the selected command.</summary>
     /// <typeparam name="T">The expected value type.</typeparam>

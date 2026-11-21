@@ -12,7 +12,8 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-03](FEAT-03-Token-Grammar.md),
 [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md) and
-[FEAT-08](FEAT-08-Help-And-Usage.md). Pack definitions are resolved by
+[FEAT-08](FEAT-08-Help-And-Usage.md) and
+[FEAT-15](FEAT-15-Directives.md). Pack definitions are resolved by
 identity through the shared model. Cursor and provider boundaries are recorded
 in [ADR-012](../Architecture/ADR-012-Completion-API.md).
 

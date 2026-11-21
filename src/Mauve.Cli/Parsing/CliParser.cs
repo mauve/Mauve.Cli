@@ -57,9 +57,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         List<CommandDefinition> selectedPath = [model.Root];
         List<OptionOccurrence> optionOccurrences = [];
         List<PositionalOccurrence> positionalOccurrences = [];
+        List<RawDirective> rawDirectives = [];
+        bool directiveInputValid = true;
 
         CommandDefinition current = model.Root;
         bool commandSelectionOpen = true;
+        bool directiveSelectionOpen = true;
         bool endOfOptions = false;
         for (int index = 0; index < tokens.Length; index++)
         {
@@ -69,6 +72,19 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 endOfOptions = true;
                 commandSelectionOpen = false;
+                directiveSelectionOpen = false;
+                continue;
+            }
+
+            if (!endOfOptions && directiveSelectionOpen && token.StartsWith('[', StringComparison.Ordinal))
+            {
+                directiveInputValid &= ParseDirectiveSpan(
+                    tokens,
+                    ref index,
+                    model,
+                    rawDirectives,
+                    diagnostics,
+                    cancellationToken);
                 continue;
             }
 
@@ -89,9 +105,11 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             {
                 current = child;
                 selectedPath.Add(current);
+                directiveSelectionOpen = false;
                 continue;
             }
 
+            directiveSelectionOpen = false;
             if (commandSelectionOpen && current.Children.Count > 0 && current.Positionals.Count == 0)
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
@@ -109,6 +127,13 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         CommandDefinition selectedCommand = selectedPath[^1];
+        List<ParsedDirective> parsedDirectives = [];
+        bool directivesValid = ParseDirectives(rawDirectives, diagnostics, parsedDirectives, cancellationToken)
+            && directiveInputValid;
+        if (!directivesValid)
+        {
+            parsedDirectives.Clear();
+        }
         IReadOnlyList<CommandOption> effectiveOptions = CommandModel.GetEffectiveOptions(selectedPath);
         List<OptionOccurrence> inScopeOccurrences = [];
         foreach (OptionOccurrence occurrence in optionOccurrences)
@@ -136,13 +161,17 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
         if (diagnostics.Count > 0)
         {
-            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched,
+                directivesValid ? [.. parsedDirectives] : [],
+                directivesValid);
         }
 
         ValidateHelpOptionOccurrences(inScopeOccurrences, diagnostics);
         if (diagnostics.Count > 0)
         {
-            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched,
+                directivesValid ? [.. parsedDirectives] : [],
+                directivesValid);
         }
 
         if (inScopeOccurrences.Exists(static occurrence =>
@@ -154,7 +183,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 [],
                 [.. unmatched],
                 tokens,
-                []);
+                [],
+                directivesValid ? [.. parsedDirectives] : [],
+                directivesValid);
         }
 
         ValidateRequiredInputs(
@@ -165,7 +196,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             diagnostics);
         if (diagnostics.Exists(static diagnostic => diagnostic.Code != ParseDiagnosticCode.MissingRequired))
         {
-            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched);
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched,
+                directivesValid ? [.. parsedDirectives] : [],
+                directivesValid);
         }
 
         List<ParsedValue> values = ConvertValues(
@@ -191,14 +224,269 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         return diagnostics.Count > 0
-            ? InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched)
+            ? InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched,
+                directivesValid ? [.. parsedDirectives] : [],
+                directivesValid)
             : new ParseResult(
             ParseOutcome.Validated,
             [.. selectedPath],
             [],
             [.. unmatched],
             tokens,
-            [.. values]);
+            [.. values],
+            [.. parsedDirectives],
+            directivesValid);
+    }
+
+    private static bool ParseDirectiveSpan(
+        string[] tokens,
+        ref int index,
+        CommandModel model,
+        List<RawDirective> directives,
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken)
+    {
+        int startIndex = index;
+        string first = tokens[index];
+        string header = first[1..];
+        int colonIndex = header.IndexOf(':', StringComparison.Ordinal);
+        int closeIndex = header.IndexOf(']', StringComparison.Ordinal);
+        bool hasColon = colonIndex >= 0 && (closeIndex < 0 || colonIndex < closeIndex);
+        int nameLength = hasColon ? colonIndex : closeIndex >= 0 ? closeIndex : header.Length;
+        string name = header[..nameLength];
+        List<RawDirectiveValue> values = [];
+        bool malformed = name.Length == 0;
+        bool closed = closeIndex >= 0;
+        if (closed && closeIndex != header.Length - 1)
+        {
+            malformed = true;
+        }
+
+        if (hasColon)
+        {
+            int valueStart = colonIndex + 1;
+            int valueEnd = closed ? closeIndex : header.Length;
+            if (valueEnd > valueStart || (closed && valueEnd == valueStart))
+            {
+                values.Add(new RawDirectiveValue(header[valueStart..valueEnd], index));
+            }
+        }
+
+        if (closeIndex >= 0 && closeIndex < (hasColon ? colonIndex : nameLength))
+        {
+            malformed = true;
+        }
+
+        while (!closed && index + 1 < tokens.Length)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            index++;
+            string valueToken = tokens[index];
+            int tokenClose = valueToken.IndexOf(']', StringComparison.Ordinal);
+            if (tokenClose >= 0)
+            {
+                closed = true;
+                if (tokenClose != valueToken.Length - 1)
+                {
+                    malformed = true;
+                }
+
+                if (tokenClose > 0)
+                {
+                    values.Add(new RawDirectiveValue(valueToken[..tokenClose], index));
+                }
+            }
+            else
+            {
+                values.Add(new RawDirectiveValue(valueToken, index));
+            }
+        }
+
+        if (!closed)
+        {
+            malformed = true;
+        }
+
+        if (malformed)
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.MalformedDirective,
+                "Malformed directive bracket span.",
+                startIndex));
+            return false;
+        }
+
+        DirectiveDefinition? definition = null;
+        foreach (DirectiveDefinition candidate in model.Directives)
+        {
+            if (string.Equals(candidate.Name, name, StringComparison.Ordinal))
+            {
+                definition = candidate;
+                break;
+            }
+        }
+
+        if (definition is null)
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.UnknownDirective,
+                "Unknown directive.",
+                startIndex));
+            return false;
+        }
+
+        directives.Add(new RawDirective(definition, values, startIndex, index));
+        return true;
+    }
+
+    private bool ParseDirectives(
+        List<RawDirective> rawDirectives,
+        DiagnosticBuffer diagnostics,
+        List<ParsedDirective> parsedDirectives,
+        CancellationToken cancellationToken)
+    {
+        bool valid = true;
+        foreach (RawDirective directive in rawDirectives)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            List<object?> values = [];
+            int nextRawValue = 0;
+            foreach (DirectiveValueDefinition definition in directive.Definition.Values)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (definition.ElementType is not null)
+                {
+                    List<object?> elements = [];
+                    while (nextRawValue < directive.Values.Count)
+                    {
+                        RawDirectiveValue raw = directive.Values[nextRawValue++];
+                        if (!TryConvertDirectiveValue(
+                            definition,
+                            definition.ElementType,
+                            raw,
+                            directive.StartIndex,
+                            diagnostics,
+                            out object? converted))
+                        {
+                            valid = false;
+                            continue;
+                        }
+
+                        elements.Add(converted);
+                    }
+
+                    if (definition.IsRequired && elements.Count == 0)
+                    {
+                        AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                            ParseDiagnosticCode.MissingDirectiveValue,
+                            "A required directive value is missing.",
+                            directive.StartIndex));
+                        valid = false;
+                    }
+
+                    values.Add(ValueConverterEngine.CreateReadOnlyCollection(
+                        definition.ElementType,
+                        elements,
+                        _converters));
+                    continue;
+                }
+
+                if (nextRawValue >= directive.Values.Count)
+                {
+                    if (definition.IsRequired)
+                    {
+                        AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                            ParseDiagnosticCode.MissingDirectiveValue,
+                            "A required directive value is missing.",
+                            directive.StartIndex));
+                        valid = false;
+                    }
+
+                    values.Add(null);
+                    continue;
+                }
+
+                RawDirectiveValue scalar = directive.Values[nextRawValue++];
+                if (!TryConvertDirectiveValue(
+                    definition,
+                    definition.ValueType,
+                    scalar,
+                    directive.StartIndex,
+                    diagnostics,
+                    out object? scalarValue))
+                {
+                    valid = false;
+                }
+
+                values.Add(scalarValue);
+            }
+
+            if (nextRawValue < directive.Values.Count)
+            {
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                    ParseDiagnosticCode.MalformedDirective,
+                    "The directive has more values than its declaration accepts.",
+                    directive.Values[nextRawValue].TokenIndex));
+                valid = false;
+            }
+
+            parsedDirectives.Add(new ParsedDirective(
+                directive.Definition,
+                [.. values],
+                [.. Enumerable.Range(directive.StartIndex, directive.EndIndex - directive.StartIndex + 1)]));
+        }
+
+        if (!valid)
+        {
+            parsedDirectives.Clear();
+        }
+
+        return valid;
+    }
+
+    private bool TryConvertDirectiveValue(
+        DirectiveValueDefinition definition,
+        Type targetType,
+        RawDirectiveValue raw,
+        int definitionTokenIndex,
+        DiagnosticBuffer diagnostics,
+        out object? value)
+    {
+        ConversionContext context = new(
+            targetType,
+            definition.Name,
+            raw.TokenIndex,
+            _numericCulture,
+            definition.IsSensitive);
+        bool succeeded = ValueConverterEngine.TryConvert(
+            raw.Value,
+            targetType,
+            context,
+            _converters,
+            out value,
+            out _);
+        if (!succeeded)
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.InvalidDirectiveValue,
+                definition.IsSensitive
+                    ? "A sensitive directive value is invalid."
+                    : "A directive value is invalid.",
+                raw.TokenIndex));
+            return false;
+        }
+
+        if (value is not null && !targetType.IsInstanceOfType(value))
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.InvalidDirectiveValue,
+                "A directive value is invalid.",
+                raw.TokenIndex));
+            return false;
+        }
+
+        _ = definitionTokenIndex;
+        return true;
     }
 
     private static string[] CopyAndValidateArguments(
@@ -1360,7 +1648,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         string[] arguments,
         CommandDefinition[] selectedPath,
         ParseDiagnostic[] diagnostics,
-        List<UnmatchedToken> unmatched)
+        List<UnmatchedToken> unmatched,
+        ParsedDirective[]? directives = null,
+        bool directiveInputValid = true)
     {
         return new ParseResult(
             ParseOutcome.Invalid,
@@ -1368,7 +1658,9 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             diagnostics,
             [.. unmatched],
             arguments,
-            []);
+            [],
+            directives,
+            directiveInputValid);
     }
 
     private sealed class DiagnosticBuffer(int maximum)
@@ -1463,6 +1755,14 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     }
 
     private sealed record RawValue(string Value, int TokenIndex, int? ValueOffset);
+
+    private sealed record RawDirective(
+        DirectiveDefinition Definition,
+        List<RawDirectiveValue> Values,
+        int StartIndex,
+        int EndIndex);
+
+    private sealed record RawDirectiveValue(string Value, int TokenIndex);
 
     private sealed record ConversionRequest(
         string RawValue,

@@ -11,17 +11,17 @@ and the installed [policy](../governance.md).
 FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
 FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-10, FEAT-11, FEAT-12,
-FEAT-13 and FEAT-14 are active.
+FEAT-13 through FEAT-15 are active.
 Portable test methods are declared for each. The strict Release solution build
-passes with no warnings, and the repository-wide MTP run passes 90 tests:
-75 runtime tests, 14 generator tests and 1 focused AOT test.
+passes with no warnings, and the repository-wide MTP run passes 99 tests:
+82 runtime tests, 15 generator tests and 2 focused AOT tests.
 
 The standalone runner/analyzer/MTP TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
-inventory and is excluded from source traceability. The focused FEAT-13 test
-passed through managed MTP and as a NativeAOT executable with exact test-count
-and metadata parity. Both actual example consumers passed managed trimmed and
-NativeAOT publish/run checks on Linux x64; see FEAT-13 and the rows below. See
+inventory and is excluded from source traceability. The focused FEAT-13 and FEAT-15 tests passed through managed MTP and as a
+NativeAOT executable with exact test-count and metadata parity. Both actual
+example consumers passed managed trimmed and NativeAOT publish/run checks on
+Linux x64; see FEAT-13 and the rows below. See
 [POL-01](Policies/POL-01-Strict-Dotnet-And-Aot.md) for executable local gates.
 Hosted/protected CI remains unavailable.
 
@@ -109,6 +109,17 @@ is claimed.
 | FEAT-13-002 | environment-gated automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`; `scripts/verify-aot.sh` managed trimmed publishes | Mauve.Cli maintainers | Native Linux x64; .NET SDK 11.0.100 | The managed focused test and both trimmed example outputs ran successfully; evidence and hashes are retained under `artifacts/aot-verification/linux-x64/`. |
 | FEAT-13-003 | environment-gated automated | `scripts/verify-aot.sh` NativeAOT test and example publishes/executions | Mauve.Cli maintainers | Native Linux x64; Clang 21.1.8 | The native focused test reported exactly one pass with four requirement traits, and both native examples passed their model smoke checks. |
 | FEAT-13-004 | environment-gated automated | FEAT-13 support matrix; ADR-013; native-host guard in `scripts/verify-aot.sh` | Mauve.Cli maintainers | Linux x64 verified; ARM64 and other RIDs unavailable/unverified | Only Linux x64 is claimed. Other targets remain explicitly unverified; cross-publish alone is rejected. |
+| FEAT-15-001 | portable automated | `CommandModelTests.Create_PreservesRootDirectiveOrderAndRejectsDuplicateNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite. |
+| FEAT-15-001 | portable automated | `CommandModelTests.Create_RejectsDirectiveRegistrationOnChildCommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite. |
+| FEAT-15-002 | portable automated | `CliInvokerTests.InvokeAsync_RunsDirectivesInOrderBeforeOrdinaryInvalidOutcome` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite, including a root option before directives and the first child command. |
+| FEAT-15-002 | portable automated | `CliInvokerTests.InvokeAsync_ValidatesAllDirectivesBeforeRunningAny` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite. |
+| FEAT-15-002 | portable automated | `CliInvokerTests.InvokeAsync_DoesNotRecognizeDirectivesAfterTheFirstCommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite; the directive and command handlers remain undispatched. |
+| FEAT-15-003 | portable automated | `CliInvokerTests.InvokeAsync_RunsDirectivesInOrderBeforeOrdinaryInvalidOutcome` | Mauve.Cli maintainers | .NET 11; no privileged environment | Ordered execution, successful stop code and command-handler suppression passed in the 99-test strict MTP suite. |
+| FEAT-15-004 | portable automated | `CliModelGeneratorTests.Generate_RegistersStandaloneAndRootMethodDirectives` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Passed in the 99-test strict MTP suite. |
+| FEAT-15-004 | environment-gated automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitDirectives`; `scripts/verify-aot.sh` | Mauve.Cli maintainers | Native Linux x64; .NET SDK 11.0.100 and native toolchain | Generated and explicit directive scenarios passed managed and NativeAOT execution; exact FEAT-15 evidence was imported by the gate. |
+| FEAT-15-005 | portable automated | `HelpDocumentTests.Create_ProjectsDirectivesBeforeTheFirstCommandWithoutSensitiveValueNames` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite. |
+| FEAT-15-005 | portable automated | `CompletionServiceTests.CompleteAsync_SuggestsDirectivesBeforeTheFirstCommand` | Mauve.Cli maintainers | .NET 11; no privileged environment | Passed in the 99-test strict MTP suite. |
+| FEAT-15-005 | environment-gated automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitDirectives`; `scripts/verify-aot.sh` | Mauve.Cli maintainers | Native Linux x64; .NET SDK 11.0.100 and native toolchain | Generated and explicit directive scenarios passed managed and NativeAOT execution; exact FEAT-15 evidence was imported by the gate. |
 
 Use one row per method when a requirement has multiple methods. Classify each
 as **missing**, **manual**, **portable automated**, **environment-gated

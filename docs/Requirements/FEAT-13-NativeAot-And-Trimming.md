@@ -15,7 +15,8 @@ separation is in [ADR-001](../Architecture/ADR-001-Project-Boundaries.md).
 Integrated acceptance also uses results [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md),
 help [FEAT-08](FEAT-08-Help-And-Usage.md), completion [FEAT-10](FEAT-10-Completion.md),
 scope [FEAT-12](FEAT-12-Inherited-And-Global-Options.md) and
-packs [FEAT-14](FEAT-14-OptionPacks.md). The verified support matrix currently
+packs [FEAT-14](FEAT-14-OptionPacks.md), and directives
+[FEAT-15](FEAT-15-Directives.md). The verified support matrix currently
 contains Linux x64 only; see [ADR-013](../Architecture/ADR-013-NativeAot-Support-Matrix.md).
 
 ## Requirements
@@ -71,7 +72,7 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix passed once through managed MTP and once as a NativeAOT MTP executable. Both TRX reports contained exactly one passing FEAT-13 test and all four requirements. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs or invocation behavior. |
+| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix plus generated and explicit directive scenarios run through managed MTP and as a NativeAOT MTP executable. Both TRX reports must contain two passing tests covering FEAT-13 and FEAT-15. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs, directives or invocation behavior. |
 | Generated Todo.Cli, Linux x64 | Managed trimmed and NativeAOT publishes ran a small check of the normal generated Todo model with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the generator or example model. |
 | Explicit FileTool.Cli without a generator reference, Linux x64 | Managed trimmed and NativeAOT publishes ran a small check of the normal explicit copy model with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the runtime or example model. |
 | Linux ARM64 and all other RIDs | Unverified. No support claim is made. | Add a native or cross-publish-plus-execution environment and retain its independent evidence before claiming support. |
@@ -138,8 +139,8 @@ library does not promise arbitrary application code is trim-safe.
 
 `bash scripts/verify-aot.sh` performs locked restore, strict Release builds,
 managed trimmed publish/run and NativeAOT publish/run for both examples. It
-also runs the focused AOT test through managed MTP and as a NativeAOT MTP
-executable, imports both TRX reports, and requires exact one-test parity. The
+also runs the focused AOT tests through managed MTP and as a NativeAOT MTP
+executable, imports both TRX reports, and requires exact two-test parity. The
 focused scenario checks valid nested alias binding, inherited and nested pack
 values, custom and enum conversion, nullable values, help/completion without
 handler dispatch, invalid input without dispatch, and sequential invocation
@@ -147,17 +148,19 @@ isolation.
 
 Observed on Ubuntu 26.04, .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`.
 Both example modes printed `AOT smoke check passed.` The managed and native
-focused test executions each reported one passing test and preserved
-FEAT-13-001 through FEAT-13-004. The latest artifact SHA-256 values were:
+focused executions each reported two passing tests, covering FEAT-13 and
+FEAT-15. The gate imported four FEAT-13 requirements and three FEAT-15
+requirements from both reports. Artifact SHA-256 values for this run were:
 
 | Consumer | Trimmed managed DLL | Native executable |
 | --- | --- | --- |
-| Todo.Cli | `4bbd93e3f3e7711eedd843b46097a919d9435230337212a4fb3413345f33c933` | `830f5b13ad8f40235ce170f7f613c7b009b489e33c94fad27222718f8c840061` |
-| FileTool.Cli | `6b76c7b8c715c9786897abcb15d06056eb456b1eb6b8235be8a9f1790be82d83` | `18e68e0aaf71be6f8218a0eba1e3faea915221c4ad23d387e17637394218c6b3` |
-| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `4792e959bfdd350d281b1b4fa851e1a67ebbc659203fa83260ba7d333d9f4763` |
+| Todo.Cli | `35437d16afc8dc635d1f9a3f72eff6dd950d4b7fdc57c2ca3cdeff93bd59446b` | `a07feea12760213440a905d74b9e81e94f7693fb929f133ff6ca4d54baab0463` |
+| FileTool.Cli | `c38fc0700385f0312d50e57bd651e0635636b55885587484bb0f3a89ffcf0e55` | `ea0d4764b21791cbfa2c19fa98741ab9f5dd6f9abbcf3ffb60a67788bcf0d7c4` |
+| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `1d5f8e7ee538bd43b86d78dfab9afb56d8ab8d9fcd776a2b0e35248a4c9d9a9e` |
 
-The metadata-bearing behavioral test is
-`AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`. ARM64 and other
+The metadata-bearing behavioral tests are
+`AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios` and
+`AotAcceptanceTests.VerifyGeneratedAndExplicitDirectives`. ARM64 and other
 RIDs remain unverified.
 
 ## Diagrams

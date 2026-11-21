@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Mauve.Cli.Completion;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Invocation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -318,6 +319,45 @@ public sealed class CompletionServiceTests
                 target,
                 static (_, _) => EmptyValues(),
                 CompletionDependency.ForOption(secret)));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-005")]
+    public async Task CompleteAsync_SuggestsDirectivesBeforeTheFirstCommand()
+    {
+        DirectiveBuilder debug = new DirectiveBuilder("debug")
+            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        DirectiveBuilder format = new DirectiveBuilder("format")
+            .AddValue(new DirectiveValueDefinition("format", typeof(Format)))
+            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddDirective(debug)
+            .AddDirective(format)
+            .AddChild(new CommandBuilder("copy")));
+        ConverterRegistry converters = new ConverterRegistryBuilder()
+            .RegisterEnum([
+                new KeyValuePair<string, Format>("plain", Format.Plain),
+                new KeyValuePair<string, Format>("pretty", Format.Pretty)
+            ])
+            .Build();
+        CompletionService service = new(converters);
+
+        CompletionResult names = await service.CompleteAsync(
+            new CompletionRequest(model, ["[de"], 0, 3),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult values = await service.CompleteAsync(
+            new CompletionRequest(model, ["[format:pre"], 0, 11),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult afterCommand = await service.CompleteAsync(
+            new CompletionRequest(model, ["copy", "[de"], 1, 3),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("[debug]", names.Candidates.Single().InsertionText);
+        Assert.AreEqual(CompletionCandidateKind.Directive, names.Candidates[0].Kind);
+        Assert.AreEqual("[format:pretty]", values.Candidates.Single().InsertionText);
+        Assert.AreEqual(CompletionCandidateKind.Value, values.Candidates[0].Kind);
+        Assert.IsEmpty(afterCommand.Candidates);
     }
 
     private static async IAsyncEnumerable<CompletionValue> SuggestResources(

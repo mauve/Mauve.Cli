@@ -9,6 +9,7 @@ generator. Both approaches use the same parser.
 - Nested commands, aliases, options, and positional arguments.
 - Typed values, defaults, validation, and clear parse errors.
 - Built-in help and asynchronous command handlers.
+- Root directives that run before command dispatch.
 - Reusable nested option packs.
 - Shell-independent command, option, and value completion.
 - Generated bindings with no runtime generator dependency.

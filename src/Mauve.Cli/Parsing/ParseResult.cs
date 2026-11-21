@@ -14,6 +14,7 @@ public sealed class ParseResult
     private readonly ReadOnlyCollection<UnmatchedToken> _unmatchedTokens;
     private readonly ReadOnlyCollection<string> _arguments;
     private readonly ReadOnlyCollection<ParsedValue> _values;
+    private readonly ReadOnlyCollection<ParsedDirective> _directives;
 
     internal ParseResult(
         ParseOutcome outcome,
@@ -21,7 +22,9 @@ public sealed class ParseResult
         ParseDiagnostic[] diagnostics,
         UnmatchedToken[] unmatchedTokens,
         string[] arguments,
-        ParsedValue[] values)
+        ParsedValue[] values,
+        ParsedDirective[]? directives = null,
+        bool directiveInputValid = true)
     {
         Outcome = outcome;
         _selectedPath = Array.AsReadOnly(selectedPath);
@@ -29,6 +32,8 @@ public sealed class ParseResult
         _unmatchedTokens = Array.AsReadOnly(unmatchedTokens);
         _arguments = Array.AsReadOnly(arguments);
         _values = Array.AsReadOnly(values);
+        _directives = Array.AsReadOnly(directives ?? []);
+        DirectiveInputValid = directiveInputValid;
     }
 
     /// <summary>Gets the overall parsing outcome.</summary>
@@ -56,6 +61,12 @@ public sealed class ParseResult
 
     /// <summary>Gets values for a valid result; invalid results expose no partial values.</summary>
     public IReadOnlyList<ParsedValue> Values => _values;
+
+    /// <summary>Gets validated directive occurrences in command-line order.</summary>
+    public IReadOnlyList<ParsedDirective> Directives => _directives;
+
+    /// <summary>Gets whether all directive spans and values validated as one atomic plan.</summary>
+    public bool DirectiveInputValid { get; }
 
     /// <summary>Attempts to get a parsed option value by its owning command and definition.</summary>
     /// <typeparam name="T">The expected value type.</typeparam>

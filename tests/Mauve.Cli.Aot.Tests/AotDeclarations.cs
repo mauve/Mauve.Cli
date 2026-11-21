@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics.CodeAnalysis;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
@@ -14,6 +15,44 @@ namespace Mauve.Cli.Aot.Tests;
     Justification = "This generated declaration supplies the static model factory.")]
 internal sealed partial class AotRootCommand
 {
+}
+
+[CliCommand("directive", IsRoot = true)]
+[CliDirective<DebugDirective>]
+[SuppressMessage(
+    "Style",
+    "IDE0051:Remove unused private members",
+    Justification = "The generated directive descriptor references the root method.")]
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "This generated declaration supplies the static model factory.")]
+internal sealed partial class AotDirectiveRootCommand
+{
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "The generated directive binding invokes root instance methods.")]
+    [CliDirective("version")]
+    private int VersionDirective() => AotDirectiveState.RecordVersion();
+}
+
+[CliDirective]
+[SuppressMessage(
+    "Style",
+    "IDE0051:Remove unused private members",
+    Justification = "The generated directive descriptor references the handler.")]
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated directive dispatcher instantiates this declaration.")]
+internal sealed partial class DebugDirective
+{
+    [CliOption(IsRequired = true)]
+    public partial string Text { get; }
+
+    [CliHandler]
+    private int Run() => AotDirectiveState.RecordDebug(Text);
 }
 
 [CliCommand("add", Aliases = ["new"])]
@@ -85,4 +124,42 @@ internal sealed partial class NetworkPack
     Justification = "Generated pack descriptors are static and are not instantiated.")]
 internal sealed partial class RetryPack
 {
+}
+
+internal static class AotDirectiveState
+{
+    private static int _stage;
+
+    internal static string? CapturedText { get; private set; }
+
+    internal static void Reset()
+    {
+        _stage = 0;
+        CapturedText = null;
+    }
+
+    internal static int RecordDebug(string text)
+    {
+        if (_stage != 0)
+        {
+            throw new InvalidOperationException("The generated directive order changed.");
+        }
+
+        CapturedText = text;
+        _stage = 1;
+        return 0;
+    }
+
+    internal static int RecordVersion()
+    {
+        if (_stage != 1)
+        {
+            throw new InvalidOperationException("The generated directive order changed.");
+        }
+
+        _stage = 2;
+        return 0;
+    }
+
+    internal static bool IsComplete => _stage == 2;
 }

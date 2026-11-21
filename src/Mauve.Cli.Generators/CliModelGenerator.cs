@@ -20,6 +20,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private const string _optionAttributeName = "Mauve.Cli.Declarations.CliOptionAttribute";
     private const string _argumentAttributeName = "Mauve.Cli.Declarations.CliArgumentAttribute";
     private const string _handlerAttributeName = "Mauve.Cli.Declarations.CliHandlerAttribute";
+    private const string _directiveAttributeName = "Mauve.Cli.Declarations.CliDirectiveAttribute";
+    private const string _directiveInclusionAttributeName = "Mauve.Cli.Declarations.CliDirectiveAttribute`1";
     private const string _optionPackAttributeName = "Mauve.Cli.Declarations.CliOptionPackAttribute";
     private const string _packAttributeName = "Mauve.Cli.Declarations.CliPackAttribute`1";
     private const string _packOptionAttributeName = "Mauve.Cli.Declarations.CliPackOptionAttribute`1";
@@ -63,18 +65,30 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 _optionPackAttributeName,
                 static (node, _) => node is TypeDeclarationSyntax,
                 static (attributeContext, _) => (INamedTypeSymbol)attributeContext.TargetSymbol);
+        IncrementalValuesProvider<INamedTypeSymbol> directiveDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                _directiveAttributeName,
+                static (node, _) => node is TypeDeclarationSyntax,
+                static (attributeContext, _) => (INamedTypeSymbol)attributeContext.TargetSymbol);
         context.RegisterSourceOutput(
             commandDeclarations.Collect()
                 .Combine(packDeclarations.Collect())
+                .Combine(directiveDeclarations.Collect())
                 .Combine(context.CompilationProvider),
             static (productionContext, input) =>
-                Generate(productionContext, input.Left.Left, input.Left.Right, input.Right));
+                Generate(
+                    productionContext,
+                    input.Left.Left.Left,
+                    input.Left.Left.Right,
+                    input.Left.Right,
+                    input.Right));
     }
 
     private static void Generate(
         SourceProductionContext context,
         ImmutableArray<INamedTypeSymbol> declaredTypes,
         ImmutableArray<INamedTypeSymbol> declaredPackTypes,
+        ImmutableArray<INamedTypeSymbol> declaredDirectiveTypes,
         Compilation compilation)
     {
         Dictionary<SyntaxTree, int> syntaxTreeOrder = [];
@@ -86,6 +100,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         Dictionary<INamedTypeSymbol, CommandInfo> commands = [with(SymbolEqualityComparer.Default)];
         Dictionary<INamedTypeSymbol, PackInfo> packs = [with(SymbolEqualityComparer.Default)];
+        Dictionary<INamedTypeSymbol, DirectiveInfo> directives = [with(SymbolEqualityComparer.Default)];
         foreach (INamedTypeSymbol? type in declaredPackTypes.Distinct(SymbolEqualityComparer.Default)
             .OrderBy(static symbol => symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? string.Empty, StringComparer.Ordinal).Cast<INamedTypeSymbol?>())
         {
@@ -117,6 +132,19 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             commands.Add(type, command);
         }
 
+        foreach (INamedTypeSymbol? type in declaredDirectiveTypes.Distinct(SymbolEqualityComparer.Default)
+            .OrderBy(static symbol => symbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? string.Empty, StringComparer.Ordinal).Cast<INamedTypeSymbol?>())
+        {
+            if (type is not null)
+            {
+                AttributeData? attribute = FindAttribute(type, _directiveAttributeName);
+                if (attribute is not null && GetConstructorString(attribute, 0) is null)
+                {
+                    directives.Add(type, CreateDirectiveInfo(context, type, attribute, syntaxTreeOrder));
+                }
+            }
+        }
+
         foreach (PackInfo pack in packs.Values)
         {
             ReadPackInclusions(context, pack, packs, syntaxTreeOrder);
@@ -127,10 +155,22 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         {
             ReadChildren(context, command, commands, syntaxTreeOrder);
             ReadCommandPacks(context, command, packs, syntaxTreeOrder);
+            ReadCommandDirectives(context, command, directives, syntaxTreeOrder);
+        }
+
+        foreach (CommandInfo command in commands.Values)
+        {
+            if (!command.IsRoot && command.Directives.Count > 0)
+            {
+                Report(context, _invalidHierarchy, GetLocation(command.Directives[0].Directive?.Attribute
+                    ?? command.Directives[0].MethodDirective!.Attribute, command.Symbol), "Directives may be declared only on a generated command root.");
+                command.IsValid = false;
+            }
         }
 
         List<CommandInfo> validRoots = [];
         HashSet<CommandInfo> validCommands = [];
+        HashSet<DirectiveInfo> validDirectives = [];
         foreach (CommandInfo root in commands.Values
             .Where(static item => item.IsRoot)
             .OrderBy(static item => item.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
@@ -143,8 +183,20 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
+            if (!ValidateCommandDirectives(context, root))
+            {
+                continue;
+            }
+
             validRoots.Add(root);
             AddCommandTree(root, validCommands);
+            foreach (DirectiveRegistrationInfo directive in root.Directives)
+            {
+                if (directive.Directive is not null)
+                {
+                    _ = validDirectives.Add(directive.Directive);
+                }
+            }
         }
 
         foreach (PackInfo pack in packs.Values.OrderBy(static item =>
@@ -164,6 +216,15 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                     GetHintName(pack.Symbol, ".Pack"),
                     SourceText.From(GeneratePackMembers(pack), Encoding.UTF8));
             }
+
+        }
+
+        foreach (DirectiveInfo directive in validDirectives.OrderBy(static item =>
+            item.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
+        {
+            context.AddSource(
+                GetHintName(directive.Symbol, ".Directive"),
+                SourceText.From(GenerateDirectiveMembers(directive), Encoding.UTF8));
         }
 
         foreach (CommandInfo command in commands.Values
@@ -464,6 +525,245 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
 
         command.Packs.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
+    }
+
+    private static DirectiveInfo CreateDirectiveInfo(
+        SourceProductionContext context,
+        INamedTypeSymbol symbol,
+        AttributeData attribute,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+    {
+        string name = GetConstructorString(attribute, 0) ?? DeriveDirectiveName(symbol.Name);
+        DirectiveInfo directive = new(symbol, attribute, name);
+        if (symbol.TypeKind != TypeKind.Class
+            || symbol.IsStatic
+            || symbol.IsGenericType
+            || symbol.ContainingType is not null
+            || symbol.IsAbstract
+            || !symbol.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0))
+        {
+            Report(context, _invalidDeclaration, GetLocation(attribute, symbol), "Directives must be concrete, non-generic, non-static, top-level classes with a parameterless constructor.");
+            directive.IsValid = false;
+        }
+
+        foreach (SyntaxReference reference in symbol.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax() is not ClassDeclarationSyntax declaration
+                || !declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+            {
+                Report(context, _invalidDeclaration, reference.GetSyntax().GetLocation(), "Directive declarations must be partial classes.");
+                directive.IsValid = false;
+            }
+        }
+
+        if (!IsValidCommandName(name))
+        {
+            Report(context, _invalidDeclaration, GetLocation(attribute, symbol), "Directive names must follow the supported command-name rules.");
+            directive.IsValid = false;
+        }
+
+        foreach (IPropertySymbol property in symbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            AttributeData? optionAttribute = FindAttribute(property, _optionAttributeName);
+            if (optionAttribute is null)
+            {
+                continue;
+            }
+
+            if (!ValidateProperty(context, property, optionAttribute))
+            {
+                directive.IsValid = false;
+                continue;
+            }
+
+            directive.Values.Add(new OptionInfo(
+                property,
+                optionAttribute,
+                GetSourceOrder(optionAttribute, property, syntaxTreeOrder)));
+        }
+
+        directive.Values.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
+        IMethodSymbol[] handlers = [.. symbol.GetMembers().OfType<IMethodSymbol>()
+            .Where(static method => FindAttribute(method, _handlerAttributeName) is not null)];
+        if (handlers.Length > 1)
+        {
+            Report(context, _invalidMember, GetLocation(FindAttribute(handlers[1], _handlerAttributeName), handlers[1]), "A directive can declare at most one CliHandler method.");
+            directive.IsValid = false;
+        }
+        else if (handlers.Length == 1)
+        {
+            directive.Handler = handlers[0];
+            if (!ValidateDirectiveHandler(context, handlers[0]))
+            {
+                directive.IsValid = false;
+            }
+        }
+        else
+        {
+            Report(context, _invalidMember, GetLocation(attribute, symbol), "A standalone directive must declare one CliHandler method.");
+            directive.IsValid = false;
+        }
+
+        return directive;
+    }
+
+    private static bool ValidateDirectiveHandler(
+        SourceProductionContext context,
+        IMethodSymbol handler)
+    {
+        bool supportedReturn = IsSupportedDirectiveReturnType(handler.ReturnType);
+        bool supportedParameters = handler.Parameters.Length == 0
+            || (handler.Parameters.Length == 1
+                && handler.Parameters[0].RefKind == RefKind.None
+                && (IsNamedType(handler.Parameters[0].Type, "System.Threading", "CancellationToken")
+                    || IsNamedType(handler.Parameters[0].Type, "Mauve.Cli.Invocation", "CommandInvocationContext")));
+        if (handler.IsStatic
+            || handler.IsGenericMethod
+            || (handler.IsAsync && handler.ReturnsVoid)
+            || !supportedReturn
+            || !supportedParameters)
+        {
+            Report(context, _invalidMember, GetLocation(FindAttribute(handler, _handlerAttributeName), handler), "Directive handlers must be instance methods with no parameters or one CancellationToken or CommandInvocationContext and a supported return type.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSupportedDirectiveReturnType(ITypeSymbol type)
+    {
+        string display = type.ToDisplayString();
+        return IsSupportedReturnType(type)
+            || display == "Mauve.Cli.Invocation.DirectiveResult"
+            || (type is INamedTypeSymbol named
+                && named.TypeArguments.Length == 1
+                && named.TypeArguments[0].ToDisplayString() == "Mauve.Cli.Invocation.DirectiveResult"
+                && named.OriginalDefinition.ToDisplayString() is "System.Threading.Tasks.Task<TResult>"
+                    or "System.Threading.Tasks.ValueTask<TResult>");
+    }
+
+    private static void ReadCommandDirectives(
+        SourceProductionContext context,
+        CommandInfo command,
+        Dictionary<INamedTypeSymbol, DirectiveInfo> directives,
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+    {
+        foreach (AttributeData attribute in command.Symbol.GetAttributes()
+            .Where(static item => IsAttribute(item, _directiveInclusionAttributeName)))
+        {
+            if (GetAttributeTypeArgument(attribute) is not INamedTypeSymbol directiveType
+                || !directives.TryGetValue(directiveType, out DirectiveInfo? directive))
+            {
+                Report(context, _invalidHierarchy, GetLocation(attribute, command.Symbol), "Every included directive type must have a CliDirective declaration in this compilation.");
+                command.IsValid = false;
+                continue;
+            }
+
+            command.Directives.Add(new DirectiveRegistrationInfo(
+                directive,
+                null,
+                GetSourceOrder(attribute, command.Symbol, syntaxTreeOrder)));
+        }
+
+        foreach (IMethodSymbol method in command.Symbol.GetMembers().OfType<IMethodSymbol>())
+        {
+            AttributeData? attribute = FindAttribute(method, _directiveAttributeName);
+            if (attribute is null)
+            {
+                continue;
+            }
+
+            string? name = GetConstructorString(attribute, 0);
+            if (name is null)
+            {
+                Report(context, _invalidMember, GetLocation(attribute, method), "A method directive requires an explicit name.");
+                command.IsValid = false;
+                continue;
+            }
+
+            MethodDirectiveInfo methodDirective = new(method, attribute, name);
+            if (!IsValidCommandName(name)
+                || method.GetAttributes().Any(item => IsAttribute(item, _handlerAttributeName))
+                || !ValidateDirectiveMethod(context, methodDirective))
+            {
+                command.IsValid = false;
+            }
+
+            command.Directives.Add(new DirectiveRegistrationInfo(
+                null,
+                methodDirective,
+                GetSourceOrder(attribute, method, syntaxTreeOrder)));
+        }
+
+        command.Directives.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
+    }
+
+    private static bool ValidateDirectiveMethod(
+        SourceProductionContext context,
+        MethodDirectiveInfo methodDirective)
+    {
+        IMethodSymbol method = methodDirective.Method;
+        bool supportedReturn = IsSupportedDirectiveReturnType(method.ReturnType);
+        bool supportedParameters = method.Parameters.Length == 0
+            || (method.Parameters.Length == 1
+                && method.Parameters[0].RefKind == RefKind.None
+                && (IsNamedType(method.Parameters[0].Type, "System.Threading", "CancellationToken")
+                    || IsNamedType(method.Parameters[0].Type, "Mauve.Cli.Invocation", "CommandInvocationContext")));
+        if (method.IsStatic
+            || method.IsGenericMethod
+            || (method.IsAsync && method.ReturnsVoid)
+            || !supportedReturn)
+        {
+            Report(context, _invalidMember, GetLocation(methodDirective.Attribute, method), "Method directives must be instance methods with no parameters or one CancellationToken or CommandInvocationContext and a supported return type.");
+            return false;
+        }
+
+        if (!supportedParameters)
+        {
+            Report(context, _invalidMember, GetLocation(methodDirective.Attribute, method), "Method directives must accept no parameter or one CancellationToken or CommandInvocationContext.");
+            return false;
+        }
+
+        if (method.ContainingType.IsAbstract
+            || !method.ContainingType.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0))
+        {
+            Report(context, _invalidMember, GetLocation(methodDirective.Attribute, method), "A method directive requires a concrete command root with a parameterless constructor.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ValidateCommandDirectives(SourceProductionContext context, CommandInfo root)
+    {
+        if (!root.IsRoot && root.Directives.Count > 0)
+        {
+            Report(context, _invalidHierarchy, GetLocation(root.Attribute, root.Symbol), "Directives may be included only on a generated command root.");
+            return false;
+        }
+
+        HashSet<string> names = [with(StringComparer.Ordinal)];
+        bool valid = true;
+        foreach (DirectiveRegistrationInfo registration in root.Directives)
+        {
+            string name = registration.Directive?.Name ?? registration.MethodDirective!.Name;
+            if (!names.Add(name))
+            {
+                Report(
+                    context,
+                    _invalidHierarchy,
+                    GetLocation(registration.Directive?.Attribute ?? registration.MethodDirective!.Attribute, root.Symbol),
+                    "Root directive names must be unique.");
+                valid = false;
+            }
+
+            if (registration.Directive is DirectiveInfo directive && !directive.IsValid)
+            {
+                valid = false;
+            }
+        }
+
+        return valid;
     }
 
     private static bool ValidateProperty(
@@ -947,12 +1247,31 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 .Append(suffix).AppendLine(");");
         }
 
+        if (command.IsRoot)
+        {
+            for (int index = 0; index < command.Directives.Count; index++)
+            {
+                EmitDirectiveRegistration(builder, command.Directives[index], index);
+            }
+        }
+
         _ = builder.AppendLine("        return command;");
         _ = builder.AppendLine("    }");
 
         if (command.Handler is not null)
         {
             EmitHandler(builder, command, suffix, attachName);
+        }
+
+        if (command.IsRoot)
+        {
+            for (int index = 0; index < command.Directives.Count; index++)
+            {
+                if (command.Directives[index].MethodDirective is MethodDirectiveInfo methodDirective)
+                {
+                    EmitMethodDirectiveInvoker(builder, command, methodDirective, index);
+                }
+            }
         }
 
         if (command.IsRoot)
@@ -981,10 +1300,326 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return builder.ToString();
     }
 
+    private static string GenerateDirectiveMembers(DirectiveInfo directive)
+    {
+        StringBuilder builder = new();
+        string namespaceName = directive.Symbol.ContainingNamespace.IsGlobalNamespace
+            ? string.Empty
+            : directive.Symbol.ContainingNamespace.ToDisplayString();
+        string suffix = GetStableSuffix(directive.Symbol);
+        string typeName = EscapeIdentifier(directive.Symbol.Name);
+        string contextField = string.Concat("__mauveDirectiveContext_", suffix);
+        string attachName = string.Concat("__MauveAttachDirective_", suffix);
+        string buildName = string.Concat("__MauveBuildDirective_", suffix);
+
+        _ = builder.AppendLine("#nullable enable");
+        if (namespaceName.Length > 0)
+        {
+            _ = builder.Append("namespace ").Append(namespaceName).AppendLine();
+            _ = builder.AppendLine("{");
+        }
+
+        _ = builder.Append(AccessibilityText(directive.Symbol.DeclaredAccessibility))
+            .Append(" partial class ").Append(typeName).AppendLine();
+        _ = builder.AppendLine("{");
+        for (int index = 0; index < directive.Values.Count; index++)
+        {
+            OptionInfo value = directive.Values[index];
+            string valueName = DeriveMemberName(value.Property.Name);
+            bool isRequired = !HasNamedArgument(value.Attribute, "IsRequired")
+                || GetNamedBoolean(value.Attribute, "IsRequired");
+            _ = builder.Append("    private static readonly global::Mauve.Cli.Definitions.DirectiveValueDefinition ")
+                .Append(DirectiveInfo.FieldName(suffix, index)).Append(" = new(")
+                .Append(Literal(valueName)).Append(", typeof(").Append(FormatTypeForTypeof(value.Property.Type)).Append("), ")
+                .Append("isRequired: ").Append(isRequired ? "true" : "false")
+                .Append(", description: ").Append(Literal(GetNamedString(value.Attribute, "Description")))
+                .Append(", isHidden: ").Append(GetNamedBoolean(value.Attribute, "IsHidden") ? "true" : "false")
+                .Append(", isSensitive: ").Append(GetNamedBoolean(value.Attribute, "IsSensitive") ? "true" : "false")
+                .AppendLine(");");
+        }
+
+        _ = builder.Append("    private global::Mauve.Cli.Invocation.DirectiveInvocationContext? ")
+            .Append(contextField).AppendLine(";");
+        _ = builder.Append("    internal void ").Append(attachName)
+            .AppendLine("(global::Mauve.Cli.Invocation.DirectiveInvocationContext context)");
+        _ = builder.AppendLine("    {");
+        _ = builder.Append("        ").Append(contextField).AppendLine(" = context;");
+        _ = builder.AppendLine("    }");
+
+        for (int index = 0; index < directive.Values.Count; index++)
+        {
+            EmitDirectivePropertyBinding(
+                builder,
+                directive.Values[index].Property,
+                DirectiveInfo.FieldName(suffix, index),
+                contextField);
+        }
+
+        _ = builder.Append("    internal static global::Mauve.Cli.Definitions.DirectiveBuilder ")
+            .Append(buildName).AppendLine("()");
+        _ = builder.AppendLine("    {");
+        _ = builder.Append("        global::Mauve.Cli.Definitions.DirectiveBuilder directive = new(")
+            .Append(Literal(directive.Name)).AppendLine(")");
+        _ = builder.AppendLine("        {");
+        _ = builder.Append("            Description = ").Append(Literal(directive.Description)).AppendLine(",");
+        _ = builder.Append("            IsHidden = ").Append(directive.IsHidden ? "true" : "false").AppendLine();
+        _ = builder.AppendLine("        };");
+        for (int index = 0; index < directive.Values.Count; index++)
+        {
+            _ = builder.Append("        _ = directive.AddValue(")
+                .Append(DirectiveInfo.FieldName(suffix, index)).AppendLine(");");
+        }
+
+        _ = builder.Append("        _ = directive.SetValueTaskHandler(__MauveInvokeDirective_")
+            .Append(suffix).AppendLine(");");
+        _ = builder.AppendLine("        return directive;");
+        _ = builder.AppendLine("    }");
+        EmitStandaloneDirectiveInvoker(builder, directive, suffix, attachName);
+        _ = builder.AppendLine("}");
+        if (namespaceName.Length > 0)
+        {
+            _ = builder.AppendLine("}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static void EmitDirectivePropertyBinding(
+        StringBuilder builder,
+        IPropertySymbol property,
+        string definitionField,
+        string contextField)
+    {
+        string propertyType = FormatType(property.Type);
+        string accessibility = AccessibilityText(property.DeclaredAccessibility);
+        string tryName = string.Concat("TryGet", property.Name);
+        _ = builder.Append("    ").Append(accessibility).Append(" partial ").Append(propertyType).Append(' ')
+            .Append(EscapeIdentifier(property.Name)).AppendLine();
+        _ = builder.AppendLine("    {");
+        _ = builder.AppendLine("        get");
+        _ = builder.AppendLine("        {");
+        _ = builder.Append("            if (!").Append(tryName).AppendLine("(out var value))");
+        _ = builder.AppendLine("            {");
+        _ = builder.AppendLine("                throw new global::System.InvalidOperationException(\"The directive value is unavailable.\");");
+        _ = builder.AppendLine("            }");
+        _ = builder.AppendLine("            return value;");
+        _ = builder.AppendLine("        }");
+        _ = builder.AppendLine("    }");
+        _ = builder.Append("    ").Append(accessibility).Append(" bool ").Append(tryName)
+            .Append("(out ").Append(propertyType).AppendLine(" value)");
+        _ = builder.AppendLine("    {");
+        _ = builder.Append("        global::Mauve.Cli.Invocation.DirectiveInvocationContext context = ")
+            .Append(contextField)
+            .AppendLine(" ?? throw new global::System.InvalidOperationException(\"Directive binding is not attached.\");");
+        _ = builder.Append("        return context.TryGetValue<").Append(propertyType)
+            .Append(">(").Append(definitionField).AppendLine(", out value!);");
+        _ = builder.AppendLine("    }");
+    }
+
+    private static void EmitStandaloneDirectiveInvoker(
+        StringBuilder builder,
+        DirectiveInfo directive,
+        string suffix,
+        string attachName)
+    {
+        IMethodSymbol handler = directive.Handler!;
+        string returnType = handler.ReturnType.ToDisplayString();
+        string typeName = directive.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string methodName = EscapeIdentifier(handler.Name);
+        string arguments = handler.Parameters.Length == 0
+            ? string.Empty
+            : IsNamedType(handler.Parameters[0].Type, "System.Threading", "CancellationToken")
+                ? "cancellationToken"
+                : "context.CommandContext";
+        string invocation = string.Concat("instance.", methodName, "(", arguments, ")");
+        _ = builder.Append("    private static async global::System.Threading.Tasks.ValueTask<global::Mauve.Cli.Invocation.DirectiveResult> __MauveInvokeDirective_")
+            .Append(suffix).AppendLine("(global::Mauve.Cli.Invocation.DirectiveInvocationContext context, global::System.Threading.CancellationToken cancellationToken)");
+        _ = builder.AppendLine("    {");
+        _ = builder.AppendLine("        await global::System.Threading.Tasks.ValueTask.CompletedTask;");
+        _ = builder.Append("        ").Append(typeName).AppendLine(" instance = new();");
+        _ = builder.Append("        instance.").Append(attachName).AppendLine("(context);");
+        if (returnType == "void")
+        {
+            _ = builder.Append("        ").Append(invocation).AppendLine(";");
+            _ = builder.AppendLine("        return global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing;");
+        }
+        else if (returnType == "int")
+        {
+            _ = builder.Append("        int result = ").Append(invocation).AppendLine(";");
+            EmitIntDirectiveResult(builder);
+        }
+        else if (returnType == "Mauve.Cli.Invocation.DirectiveResult")
+        {
+            _ = builder.Append("        return ").Append(invocation).AppendLine(";");
+        }
+        else if (returnType == "System.Threading.Tasks.Task")
+        {
+            _ = builder.Append("        global::System.Threading.Tasks.Task task = ").Append(invocation).AppendLine(";");
+            _ = builder.AppendLine("        if (task is null) throw new global::System.InvalidOperationException(\"The asynchronous directive returned a null task.\");");
+            _ = builder.AppendLine("        await task.ConfigureAwait(false);");
+            _ = builder.AppendLine("        return global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing;");
+        }
+        else if (returnType == "System.Threading.Tasks.ValueTask")
+        {
+            _ = builder.Append("        await ").Append(invocation).AppendLine(".ConfigureAwait(false);");
+            _ = builder.AppendLine("        return global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing;");
+        }
+        else
+        {
+            bool resultIsDirective = returnType.EndsWith("<Mauve.Cli.Invocation.DirectiveResult>", StringComparison.Ordinal);
+            string resultType = resultIsDirective ? "global::Mauve.Cli.Invocation.DirectiveResult" : "int";
+            if (returnType.StartsWith("System.Threading.Tasks.Task<", StringComparison.Ordinal))
+            {
+                _ = builder.Append("        global::System.Threading.Tasks.Task<").Append(resultType).Append("> task = ")
+                    .Append(invocation).AppendLine(";");
+                _ = builder.AppendLine("        if (task is null) throw new global::System.InvalidOperationException(\"The asynchronous directive returned a null task.\");");
+                _ = builder.Append("        ").Append(resultType).Append(" result = await task.ConfigureAwait(false);").AppendLine();
+            }
+            else
+            {
+                _ = builder.Append("        ").Append(resultType).Append(" result = await ")
+                    .Append(invocation).AppendLine(".ConfigureAwait(false);");
+            }
+
+            if (resultIsDirective)
+            {
+                _ = builder.AppendLine("        return result;");
+            }
+            else
+            {
+                EmitIntDirectiveResult(builder);
+            }
+        }
+
+        _ = builder.AppendLine("    }");
+    }
+
     private static bool IsSynchronousTree(CommandInfo command)
     {
         return (command.Handler is null || command.Handler.ReturnType.ToDisplayString() is "void" or "int")
+            && command.Directives.All(static directive =>
+                directive.Directive is not null
+                    ? directive.Directive.Handler is null
+                        || directive.Directive.Handler.ReturnType.ToDisplayString() is "void" or "int"
+                    : directive.MethodDirective!.Method.ReturnType.ToDisplayString() is "void" or "int"
+                        or "Mauve.Cli.Invocation.DirectiveResult")
             && command.Children.All(static child => IsSynchronousTree(child.Child));
+    }
+
+    private static void EmitDirectiveRegistration(
+        StringBuilder builder,
+        DirectiveRegistrationInfo registration,
+        int index)
+    {
+        if (registration.Directive is DirectiveInfo directive)
+        {
+            _ = builder.Append("        _ = command.AddDirective(")
+                .Append(directive.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                .Append('.').Append(string.Concat("__MauveBuildDirective_", GetStableSuffix(directive.Symbol)))
+                .AppendLine("());");
+            return;
+        }
+
+        MethodDirectiveInfo methodDirective = registration.MethodDirective!;
+        string localName = string.Concat("directive_", index.ToString(CultureInfo.InvariantCulture));
+        string helperName = string.Concat("__MauveInvokeDirective_", index.ToString(CultureInfo.InvariantCulture));
+        _ = builder.Append("        global::Mauve.Cli.Definitions.DirectiveBuilder ").Append(localName)
+            .Append(" = new(").Append(Literal(methodDirective.Name)).AppendLine(")");
+        _ = builder.AppendLine("        {");
+        _ = builder.Append("            Description = ").Append(Literal(GetNamedString(methodDirective.Attribute, "Description"))).AppendLine(",");
+        _ = builder.Append("            IsHidden = ").Append(GetNamedBoolean(methodDirective.Attribute, "IsHidden") ? "true" : "false").AppendLine();
+        _ = builder.AppendLine("        };");
+        _ = builder.Append("        _ = ").Append(localName).Append(".SetValueTaskHandler(").Append(helperName).AppendLine(");");
+        _ = builder.Append("        _ = command.AddDirective(").Append(localName).AppendLine(");");
+    }
+
+    private static void EmitMethodDirectiveInvoker(
+        StringBuilder builder,
+        CommandInfo command,
+        MethodDirectiveInfo methodDirective,
+        int index)
+    {
+        IMethodSymbol method = methodDirective.Method;
+        string returnType = method.ReturnType.ToDisplayString();
+        string typeName = command.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string methodName = EscapeIdentifier(method.Name);
+        string handlerName = string.Concat("__MauveInvokeDirective_", index.ToString(CultureInfo.InvariantCulture));
+        string arguments = method.Parameters.Length == 0
+            ? string.Empty
+            : IsNamedType(method.Parameters[0].Type, "System.Threading", "CancellationToken")
+                ? "cancellationToken"
+                : "context.CommandContext";
+        string invocation = string.Concat("instance.", methodName, "(", arguments, ")");
+        _ = builder.Append("    private static async global::System.Threading.Tasks.ValueTask<global::Mauve.Cli.Invocation.DirectiveResult> ")
+            .Append(handlerName).AppendLine("(global::Mauve.Cli.Invocation.DirectiveInvocationContext context, global::System.Threading.CancellationToken cancellationToken)");
+        _ = builder.AppendLine("    {");
+        _ = builder.AppendLine("        await global::System.Threading.Tasks.ValueTask.CompletedTask;");
+        _ = builder.Append("        ").Append(typeName).AppendLine(" instance = new();");
+        if (returnType == "void")
+        {
+            _ = builder.Append("        ").Append(invocation).AppendLine(";");
+            _ = builder.AppendLine("        return global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing;");
+        }
+        else if (returnType == "int")
+        {
+            _ = builder.Append("        int result = ").Append(invocation).AppendLine(";");
+            EmitIntDirectiveResult(builder);
+        }
+        else if (returnType == "Mauve.Cli.Invocation.DirectiveResult")
+        {
+            _ = builder.Append("        return ").Append(invocation).AppendLine(";");
+        }
+        else
+        {
+            string taskType = returnType;
+            if (returnType == "System.Threading.Tasks.Task")
+            {
+                _ = builder.Append("        global::System.Threading.Tasks.Task task = ").Append(invocation).AppendLine(";");
+                _ = builder.AppendLine("        if (task is null) throw new global::System.InvalidOperationException(\"The asynchronous directive returned a null task.\");");
+                _ = builder.AppendLine("        await task.ConfigureAwait(false);");
+                _ = builder.AppendLine("        return global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing;");
+            }
+            else if (returnType == "System.Threading.Tasks.ValueTask")
+            {
+                _ = builder.Append("        await ").Append(invocation).AppendLine(".ConfigureAwait(false);");
+                _ = builder.AppendLine("        return global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing;");
+            }
+            else
+            {
+                bool resultIsDirective = taskType.EndsWith("<Mauve.Cli.Invocation.DirectiveResult>", StringComparison.Ordinal);
+                string resultType = resultIsDirective ? "global::Mauve.Cli.Invocation.DirectiveResult" : "int";
+                if (taskType.StartsWith("System.Threading.Tasks.Task<", StringComparison.Ordinal))
+                {
+                    _ = builder.Append("        global::System.Threading.Tasks.Task<").Append(resultType).Append("> task = ")
+                        .Append(invocation).AppendLine(";");
+                    _ = builder.AppendLine("        if (task is null) throw new global::System.InvalidOperationException(\"The asynchronous directive returned a null task.\");");
+                    _ = builder.Append("        ").Append(resultType).Append(" result = await task.ConfigureAwait(false);").AppendLine();
+                }
+                else
+                {
+                    _ = builder.Append("        ").Append(resultType).Append(" result = await ")
+                        .Append(invocation).AppendLine(".ConfigureAwait(false);");
+                }
+
+                if (resultIsDirective)
+                {
+                    _ = builder.AppendLine("        return result;");
+                }
+                else
+                {
+                    EmitIntDirectiveResult(builder);
+                }
+            }
+        }
+
+        _ = builder.AppendLine("    }");
+    }
+
+    private static void EmitIntDirectiveResult(StringBuilder builder)
+    {
+        _ = builder.AppendLine("        return result == 0");
+        _ = builder.AppendLine("            ? global::Mauve.Cli.Invocation.DirectiveResult.ContinueProcessing");
+        _ = builder.AppendLine("            : global::Mauve.Cli.Invocation.DirectiveResult.StopProcessing(result);");
     }
 
     private static string GeneratePackMembers(PackInfo pack)
@@ -1451,6 +2086,15 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return DeriveMemberName(name);
     }
 
+    private static string DeriveDirectiveName(string typeName)
+    {
+        const string suffix = "Directive";
+        string name = typeName.EndsWith(suffix, StringComparison.Ordinal)
+            ? typeName.Substring(0, typeName.Length - suffix.Length)
+            : typeName;
+        return DeriveMemberName(name);
+    }
+
     private static string DeriveOptionName(string memberName) => string.Concat("--", DeriveMemberName(memberName));
 
     private static string DeriveMemberName(string identifier)
@@ -1550,9 +2194,59 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public List<PackInclusionInfo> Packs { get; } = [];
 
+        public List<DirectiveRegistrationInfo> Directives { get; } = [];
+
         public IMethodSymbol? Handler { get; set; }
 
         public bool IsValid { get; set; } = true;
+    }
+
+    private sealed class DirectiveInfo(
+        INamedTypeSymbol symbol,
+        AttributeData attribute,
+        string name)
+    {
+        public INamedTypeSymbol Symbol { get; } = symbol;
+
+        public AttributeData Attribute { get; } = attribute;
+
+        public string Name { get; } = name;
+
+        public string? Description => GetNamedString(Attribute, "Description");
+
+        public bool IsHidden => GetNamedBoolean(Attribute, "IsHidden");
+
+        public List<OptionInfo> Values { get; } = [];
+
+        public IMethodSymbol? Handler { get; set; }
+
+        public bool IsValid { get; set; } = true;
+
+        public static string FieldName(string suffix, int index) => string.Concat("__mauveDirectiveValue_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private sealed class MethodDirectiveInfo(
+        IMethodSymbol method,
+        AttributeData attribute,
+        string name)
+    {
+        public IMethodSymbol Method { get; } = method;
+
+        public AttributeData Attribute { get; } = attribute;
+
+        public string Name { get; } = name;
+    }
+
+    private sealed class DirectiveRegistrationInfo(
+        DirectiveInfo? directive,
+        MethodDirectiveInfo? methodDirective,
+        SourceOrder sourceOrder)
+    {
+        public DirectiveInfo? Directive { get; } = directive;
+
+        public MethodDirectiveInfo? MethodDirective { get; } = methodDirective;
+
+        public SourceOrder SourceOrder { get; } = sourceOrder;
     }
 
     private sealed class PackInfo(INamedTypeSymbol symbol, AttributeData attribute)

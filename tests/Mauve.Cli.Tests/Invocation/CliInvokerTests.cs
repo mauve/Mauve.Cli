@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
@@ -348,6 +349,110 @@ public sealed class CliInvokerTests
             cancellationSource.Token).ConfigureAwait(false);
 
         Assert.AreEqual(9, cancelled);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-002")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-003")]
+    public async Task InvokeAsync_RunsDirectivesInOrderBeforeOrdinaryInvalidOutcome()
+    {
+        List<string> calls = [];
+        DirectiveValueDefinition text = new("text", typeof(string));
+        DirectiveValueDefinition count = new("count", typeof(int));
+        DirectiveBuilder report = new DirectiveBuilder("report")
+            .AddValue(text)
+            .AddValue(count)
+            .SetHandler((context, _) =>
+            {
+                Assert.IsTrue(context.TryGetValue(text, out string? value));
+                Assert.IsTrue(context.TryGetValue(count, out int number));
+                calls.Add($"{value}:{number}");
+                return DirectiveResult.ContinueProcessing;
+            });
+        DirectiveBuilder stop = new DirectiveBuilder("stop")
+            .SetHandler((_, _) =>
+            {
+                calls.Add("stop");
+                return DirectiveResult.StopProcessing(0);
+            });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddDirective(report)
+            .AddDirective(stop)
+            .AddOption(new OptionDefinition("--quiet", typeof(bool), OptionArity.BooleanFlag))
+            .AddChild(new CommandBuilder("copy")
+                .SetHandler((_, _) =>
+                {
+                    calls.Add("command");
+                    return 17;
+                })));
+
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(
+                model,
+                ["--quiet", "[report:hello world", "1]", "[report:again", "2]", "[stop]", "copy", "--bad"],
+                TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(0, result.ExitCode);
+        Assert.AreSequenceEqual(["hello world:1", "again:2", "stop"], calls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-002")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-003")]
+    public async Task InvokeAsync_ValidatesAllDirectivesBeforeRunningAny()
+    {
+        int calls = 0;
+        DirectiveBuilder known = new DirectiveBuilder("known")
+            .SetHandler((_, _) =>
+            {
+                calls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddDirective(known));
+
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(model, ["[known]", "[unknown]"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+        Assert.IsFalse(result.ParseResult!.DirectiveInputValid);
+        Assert.IsEmpty(result.ParseResult.Directives);
+        Assert.AreEqual(0, calls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-002")]
+    public async Task InvokeAsync_DoesNotRecognizeDirectivesAfterTheFirstCommand()
+    {
+        int directiveCalls = 0;
+        int handlerCalls = 0;
+        DirectiveBuilder debug = new DirectiveBuilder("debug")
+            .SetHandler((_, _) =>
+            {
+                directiveCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddDirective(debug)
+            .AddChild(new CommandBuilder("copy")
+                .SetHandler((_, _) =>
+                {
+                    handlerCalls++;
+                    return 0;
+                })));
+
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(model, ["copy", "[debug]"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+        Assert.AreEqual(0, directiveCalls);
+        Assert.AreEqual(0, handlerCalls);
     }
 
     private async Task<InvocationResult> Invoke(CommandBuilder command)

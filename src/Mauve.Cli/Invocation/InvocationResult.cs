@@ -42,6 +42,14 @@ public sealed class InvocationResult
         return new InvocationResult(InvocationOutcome.Completed, parseResult, exitCode);
     }
 
+    internal static InvocationResult CompletedByDirective(ParseResult parseResult, int exitCode)
+    {
+        ArgumentNullException.ThrowIfNull(parseResult);
+        return parseResult.DirectiveInputValid
+            ? new InvocationResult(InvocationOutcome.Completed, parseResult, exitCode)
+            : throw new InvalidOperationException("An invalid directive plan cannot complete an invocation.");
+    }
+
     internal static InvocationResult InvalidInput(ParseResult parseResult)
     {
         RequireOutcome(parseResult, ParseOutcome.Invalid);

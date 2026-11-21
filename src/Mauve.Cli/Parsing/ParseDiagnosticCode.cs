@@ -40,5 +40,17 @@ public enum ParseDiagnosticCode
     InputLimitExceeded,
 
     /// <summary>The diagnostic list reached its configured bound.</summary>
-    DiagnosticLimitExceeded
+    DiagnosticLimitExceeded,
+
+    /// <summary>A directive name is not registered on the model root.</summary>
+    UnknownDirective,
+
+    /// <summary>A directive bracket span is malformed.</summary>
+    MalformedDirective,
+
+    /// <summary>A required directive value is missing.</summary>
+    MissingDirectiveValue,
+
+    /// <summary>A directive value could not be converted.</summary>
+    InvalidDirectiveValue
 }

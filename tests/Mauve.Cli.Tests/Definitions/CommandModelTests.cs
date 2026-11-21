@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Invocation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -55,6 +56,44 @@ public sealed class CommandModelTests
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
 
         Assert.IsEmpty(model.Root.Children);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-001")]
+    public void Create_PreservesRootDirectiveOrderAndRejectsDuplicateNames()
+    {
+        DirectiveBuilder debug = new DirectiveBuilder("debug")
+            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        DirectiveBuilder trace = new DirectiveBuilder("trace")
+            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddDirective(debug)
+            .AddDirective(trace)
+            .AddChild(new CommandBuilder("copy"));
+
+        CommandModel model = CommandModel.Create(root);
+
+        Assert.AreSequenceEqual(["debug", "trace"], model.Directives.Select(static directive => directive.Name));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            new CommandBuilder("tool")
+                .AddDirective(new DirectiveBuilder("debug")
+                    .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing))
+                .AddDirective(new DirectiveBuilder("debug")
+                    .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing))));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-001")]
+    public void Create_RejectsDirectiveRegistrationOnChildCommand()
+    {
+        CommandBuilder child = new CommandBuilder("copy")
+            .AddDirective(new DirectiveBuilder("debug")
+                .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing));
+
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            new CommandBuilder("tool").AddChild(child)));
     }
 
     [TestMethod]

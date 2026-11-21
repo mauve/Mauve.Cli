@@ -78,6 +78,35 @@ public sealed class CliInvoker(CliParser? parser = null)
             return InvocationResult.Cancelled();
         }
 
+        if (!parseResult.DirectiveInputValid)
+        {
+            return InvocationResult.InvalidInput(parseResult);
+        }
+
+        foreach (ParsedDirective directive in parseResult.Directives)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return InvocationResult.Cancelled(parseResult);
+            }
+
+            DirectiveHandler directiveHandler = directive.Definition.Handler
+                ?? throw new InvalidOperationException("A validated directive has no handler.");
+            DirectiveInvocationContext directiveContext = new(directive, parseResult);
+            try
+            {
+                DirectiveResult directiveResult = await directiveHandler(directiveContext, cancellationToken).ConfigureAwait(false);
+                if (!directiveResult.ShouldContinue)
+                {
+                    return InvocationResult.CompletedByDirective(parseResult, directiveResult.ExitCode);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return InvocationResult.Cancelled(parseResult);
+            }
+        }
+
         if (parseResult.Outcome == ParseOutcome.Invalid)
         {
             return InvocationResult.InvalidInput(parseResult);

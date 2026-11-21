@@ -9,8 +9,9 @@ exit/exception responsibilities.
 
 ## Context
 Depends on [FEAT-06](FEAT-06-Defaults-And-Validation.md),
-[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md), and
-[FEAT-08](FEAT-08-Help-And-Usage.md). The implementation decision is recorded
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md),
+[FEAT-08](FEAT-08-Help-And-Usage.md), and
+[FEAT-15](FEAT-15-Directives.md). The implementation decision is recorded
 in [ADR-008](../Architecture/ADR-008-Invocation-Lifecycle.md).
 Application-specific confirmation and exception formatting are not part of
 the reusable CLI library.
@@ -45,8 +46,10 @@ Provide synchronous and asynchronous high-level host methods for generated comma
 #### Dispatch contract
 
 `CliInvoker.InvokeAsync` performs a fresh parse for each invocation and
-dispatches only a validated selected command. A public dispatch-existing-
-result API is not provided. Cancellation is checked before parsing, between
+dispatches only a validated selected command. Valid root directives execute
+in argv order before ordinary parse outcomes or command handlers, and must
+appear before the first child command. A public dispatch-existing-result API
+is not provided. Cancellation is checked before parsing, between
 parser callbacks and stages, and before handler dispatch. A help request,
 invalid input, cancellation or missing handler never runs application
 handlers.

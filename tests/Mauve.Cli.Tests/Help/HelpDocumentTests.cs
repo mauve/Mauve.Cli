@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
+using Mauve.Cli.Invocation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -228,5 +229,30 @@ public sealed class HelpDocumentTests
                 OptionArity.BooleanFlag,
                 displayGroup: new OptionDisplayGroup("shared", "Different title")));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(conflictingGroups));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-005")]
+    public void Create_ProjectsDirectivesBeforeTheFirstCommandWithoutSensitiveValueNames()
+    {
+        DirectiveBuilder debug = new("debug")
+        {
+            Description = "Enable diagnostic output."
+        };
+        _ = debug.AddValue(new DirectiveValueDefinition("text", typeof(string)));
+        _ = debug.AddValue(new DirectiveValueDefinition("secret", typeof(string), isSensitive: true));
+        _ = debug.SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddDirective(debug)
+            .AddChild(new CommandBuilder("copy")));
+
+        HelpDocument help = HelpDocument.Create(model, model.Root.Children[0]);
+        string rendered = HelpTextRenderer.Render(help);
+
+        Assert.AreEqual("tool [DIRECTIVES] copy", help.Usage);
+        Assert.AreEqual("[debug <text>]", help.Directives.Single().Syntax);
+        Assert.IsTrue(rendered.Contains("Enable diagnostic output.", StringComparison.Ordinal));
+        Assert.IsFalse(rendered.Contains("secret", StringComparison.Ordinal));
     }
 }

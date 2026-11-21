@@ -7,8 +7,9 @@
 Interpret a caller-provided argument vector without changing token boundaries.
 
 ## Context
-Depends on [FEAT-01](FEAT-01-Command-Model.md) and
-[FEAT-02](FEAT-02-Options-And-Arguments.md). The parser and conversion
+Depends on [FEAT-01](FEAT-01-Command-Model.md),
+[FEAT-02](FEAT-02-Options-And-Arguments.md), and
+[FEAT-15](FEAT-15-Directives.md). The parser and conversion
 pipeline is recorded in [ADR-004](../Architecture/ADR-004-Parser-And-Conversion-Pipeline.md).
 Ancestor options are not implicitly visible; inherited and global option
 scope is owned by [FEAT-12](FEAT-12-Inherited-And-Global-Options.md).
@@ -46,7 +47,9 @@ An unconsumed bare token may select an exact child name or alias while
 command selection is open. Once a positional or `--` closes selection, later
 text cannot select another command. The parser records each consumed token's
 original index and rechecks local option ownership against the final command.
-An ancestor option is not inherited implicitly.
+An ancestor option is not inherited implicitly. Root directives are
+recognized before the first child-command token; after selecting a child,
+bracket-looking tokens are ordinary input and cannot dispatch directives.
 
 Option values are consumed by token position. A value that happens to equal a
 child name remains a value; the parser does not skip it or search later text

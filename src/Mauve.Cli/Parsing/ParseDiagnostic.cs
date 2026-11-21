@@ -112,7 +112,10 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.ValidationFailed => $"The value for option '{name}' failed validation.",
             ParseDiagnosticCode.MissingRequired => WithCommand($"Required option '{name}' is missing.", selectedCommand ?? owner),
             ParseDiagnosticCode.OptionOutOfScope => $"Option '{name}' is not available for the selected command.",
-            ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption or ParseDiagnosticCode.UnexpectedArgument
+            ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption
+                or ParseDiagnosticCode.UnknownDirective or ParseDiagnosticCode.MalformedDirective
+                or ParseDiagnosticCode.MissingDirectiveValue or ParseDiagnosticCode.InvalidDirectiveValue
+                or ParseDiagnosticCode.UnexpectedArgument
                 or ParseDiagnosticCode.InputLimitExceeded or ParseDiagnosticCode.DiagnosticLimitExceeded =>
                 throw new ArgumentException("Expected an option diagnostic.", nameof(code)),
             _ => throw new ArgumentOutOfRangeException(nameof(code), code, "Not an option diagnostic.")
@@ -146,7 +149,10 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.InvalidValue => $"The value for argument '{name}' is invalid.",
             ParseDiagnosticCode.ValidationFailed => $"The value for argument '{name}' failed validation.",
             ParseDiagnosticCode.MissingRequired => WithCommand($"Required argument '{name}' is missing.", owner),
-            ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption or ParseDiagnosticCode.UnexpectedArgument
+            ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption
+                or ParseDiagnosticCode.UnknownDirective or ParseDiagnosticCode.MalformedDirective
+                or ParseDiagnosticCode.MissingDirectiveValue or ParseDiagnosticCode.InvalidDirectiveValue
+                or ParseDiagnosticCode.UnexpectedArgument
                 or ParseDiagnosticCode.MissingValue or ParseDiagnosticCode.UnexpectedValue or ParseDiagnosticCode.DuplicateOption
                 or ParseDiagnosticCode.OptionOutOfScope or ParseDiagnosticCode.InputLimitExceeded or ParseDiagnosticCode.DiagnosticLimitExceeded =>
                 throw new ArgumentException("Expected a positional diagnostic.", nameof(code)),
@@ -227,6 +233,10 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.InputLimitExceeded => -1,
             ParseDiagnosticCode.UnknownCommand => 0,
             ParseDiagnosticCode.UnknownOption => 0,
+            ParseDiagnosticCode.UnknownDirective => 0,
+            ParseDiagnosticCode.MalformedDirective => 0,
+            ParseDiagnosticCode.MissingDirectiveValue => 0,
+            ParseDiagnosticCode.InvalidDirectiveValue => 1,
             ParseDiagnosticCode.UnexpectedArgument => 0,
             ParseDiagnosticCode.MissingValue => 0,
             ParseDiagnosticCode.UnexpectedValue => 0,

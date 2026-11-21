@@ -13,6 +13,7 @@ public sealed class HelpDocument
     private readonly ReadOnlyCollection<HelpCommandItem> _children;
     private readonly ReadOnlyCollection<HelpPositionalItem> _positionals;
     private readonly ReadOnlyCollection<HelpOptionGroup> _optionGroups;
+    private readonly ReadOnlyCollection<HelpDirectiveItem> _directives;
 
     internal HelpDocument(
         string usage,
@@ -20,7 +21,8 @@ public sealed class HelpDocument
         string longDescription,
         HelpCommandItem[] children,
         HelpPositionalItem[] positionals,
-        HelpOptionGroup[] optionGroups)
+        HelpOptionGroup[] optionGroups,
+        HelpDirectiveItem[] directives)
     {
         Usage = usage;
         Description = description;
@@ -28,6 +30,7 @@ public sealed class HelpDocument
         _children = Array.AsReadOnly(children);
         _positionals = Array.AsReadOnly(positionals);
         _optionGroups = Array.AsReadOnly(optionGroups);
+        _directives = Array.AsReadOnly(directives);
     }
 
     /// <summary>Gets the deterministic usage line.</summary>
@@ -47,6 +50,9 @@ public sealed class HelpDocument
 
     /// <summary>Gets visible option groups in first-member order.</summary>
     public IReadOnlyList<HelpOptionGroup> OptionGroups => _optionGroups;
+
+    /// <summary>Gets visible directive syntax in root registration order.</summary>
+    public IReadOnlyList<HelpDirectiveItem> Directives => _directives;
 
     /// <summary>Creates a sanitized help projection for the root or a command in the model.</summary>
     /// <param name="model">The validated command model.</param>
@@ -76,6 +82,9 @@ public sealed class HelpDocument
         HelpPositionalItem[] positionals = [.. selected.Positionals
             .Where(static positional => !positional.IsHidden)
             .Select(static positional => CreatePositionalItem(positional))];
+        HelpDirectiveItem[] directives = [.. model.Directives
+            .Where(static directive => !directive.IsHidden)
+            .Select(CreateDirectiveItem)];
 
         List<HelpOptionGroupBuilder> groups = [];
         Dictionary<(CommandDefinition Owner, string Key), HelpOptionGroupBuilder> groupsByKey = [];
@@ -110,10 +119,13 @@ public sealed class HelpDocument
 
         string[] visiblePositionals = [.. positionals.Select(static positional => positional.Syntax)];
         bool hasVisibleOptions = groups.Count > 0;
+        string[] directiveUsage = directives.Length > 0 ? ["[DIRECTIVES]"] : [];
         string[] optionUsage = hasVisibleOptions ? ["[OPTIONS]"] : [];
         string[] usageParts =
         [
-            .. selected.Path.Select(HelpTextSanitizer.SingleLine),
+            .. selected.Path.Take(1).Select(HelpTextSanitizer.SingleLine),
+            .. directiveUsage,
+            .. selected.Path.Skip(1).Select(HelpTextSanitizer.SingleLine),
             .. optionUsage,
             .. visiblePositionals
         ];
@@ -125,7 +137,24 @@ public sealed class HelpDocument
             HelpTextSanitizer.Description(selected.LongDescription),
             children,
             positionals,
-            [.. groups.Select(static group => group.Build())]);
+            [.. groups.Select(static group => group.Build())],
+            directives);
+    }
+
+    private static HelpDirectiveItem CreateDirectiveItem(DirectiveDefinition directive)
+    {
+        DirectiveValueDefinition[] visibleValues = [.. directive.Values
+            .Where(static value => !value.IsHidden && !value.IsSensitive)];
+        string valueSyntax = visibleValues.Length == 0
+            ? directive.Values.Count == 0 ? string.Empty : " <value>"
+            : string.Concat(" ", string.Join(' ', visibleValues.Select(static value =>
+                value.IsRequired
+                    ? $"<{HelpTextSanitizer.SingleLine(value.Name)}>"
+                    : $"[{HelpTextSanitizer.SingleLine(value.Name)}]")));
+        string syntax = string.Concat("[", HelpTextSanitizer.SingleLine(directive.Name), valueSyntax, "]");
+        return new HelpDirectiveItem(
+            syntax,
+            HelpTextSanitizer.Description(directive.Description));
     }
 
     private static bool Contains(CommandDefinition root, CommandDefinition target)
@@ -218,6 +247,22 @@ public sealed class HelpDocument
 
         public HelpOptionGroup Build() => new(ownerPath, key, title, description, [.. Options]);
     }
+}
+
+/// <summary>A visible directive syntax and sanitized description.</summary>
+public sealed class HelpDirectiveItem
+{
+    internal HelpDirectiveItem(string syntax, string description)
+    {
+        Syntax = syntax;
+        Description = description;
+    }
+
+    /// <summary>Gets the bracketed directive syntax.</summary>
+    public string Syntax { get; }
+
+    /// <summary>Gets the sanitized description.</summary>
+    public string Description { get; }
 }
 
 /// <summary>A visible child command summary in a help document.</summary>

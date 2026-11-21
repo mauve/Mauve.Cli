@@ -164,12 +164,16 @@ for mode in managed native; do
     dotnet tool run governance -- test-results --trx "${reports[0]}" \
         --output "$evidence/$test_name-$mode-evidence.json"
     jq -e '
-        (.Tests | length == 1)
+        (.Tests | length == 2)
         and (.Tests | all(.Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 1))
+        and (.Features | any(.Id == "FEAT-15" and .Status == "Passed" and .Passed == 1))
         and ([.Requirements[]
             | select(.Id | startswith("FEAT-13-"))
             | select(.Status == "Passed" and .Passed == 1)] | length == 4)
+        and ([.Requirements[]
+            | select(.Id | startswith("FEAT-15-"))
+            | select(.Status == "Passed" and .Passed == 1)] | length == 3)
     ' "$evidence/$test_name-$mode-evidence.json" >/dev/null
 done
 

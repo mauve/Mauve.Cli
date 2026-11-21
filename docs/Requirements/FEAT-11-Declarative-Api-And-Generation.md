@@ -11,8 +11,9 @@ declarations, with the same parser behavior available through the builder API.
 Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md), and
-[FEAT-09](FEAT-09-Invocation-Lifecycle.md). The API and diagnostic decisions
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md),
+[FEAT-09](FEAT-09-Invocation-Lifecycle.md), and
+[FEAT-15](FEAT-15-Directives.md). The API and diagnostic decisions
 are recorded in [ADR-010](../Architecture/ADR-010-Declarative-Generation.md).
 
 ## Requirements
