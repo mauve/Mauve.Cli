@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -303,10 +305,90 @@ public sealed class CliInvokerTests
         Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
     }
 
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    public void Run_UsesConfiguredHostOutputAndExitCodes()
+    {
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions options = new(
+            output,
+            errors,
+            helpRenderer: static (_, _) => "custom help",
+            invalidInputExitCode: 7,
+            noHandlerExitCode: 8,
+            cancelledExitCode: 9);
+
+        int completed = CliInvoker.Run<SyncHostCommand>(["sync"], options, TestContext.CancellationToken);
+        int help = CliInvoker.Run<SyncHostCommand>(["sync", "--help"], options, TestContext.CancellationToken);
+        int invalid = CliInvoker.Run<SyncHostCommand>(["--unknown"], options, TestContext.CancellationToken);
+        int noHandler = CliInvoker.Run<SyncHostCommand>([], options, TestContext.CancellationToken);
+
+        Assert.AreEqual(23, completed);
+        Assert.AreEqual(0, help);
+        Assert.IsTrue(output.ToString().Contains("custom help", StringComparison.Ordinal));
+        Assert.AreEqual(7, invalid);
+        Assert.AreEqual(8, noHandler);
+        Assert.HasCount(2, errors.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    public async Task RunAsync_MapsPreCancellationToConfiguredExitCode()
+    {
+        CliHostOptions options = new(cancelledExitCode: 9);
+        using CancellationTokenSource cancellationSource = new();
+        await cancellationSource.CancelAsync().ConfigureAwait(false);
+
+        int cancelled = await CliInvoker.RunAsync<AsyncHostCommand>(
+            ["async"],
+            options,
+            cancellationSource.Token).ConfigureAwait(false);
+
+        Assert.AreEqual(9, cancelled);
+    }
+
     private async Task<InvocationResult> Invoke(CommandBuilder command)
     {
         return await new CliInvoker()
             .InvokeAsync(CommandModel.Create(command), [], TestContext.CancellationToken)
             .ConfigureAwait(false);
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test exercises the generic static root contract.")]
+    private sealed class SyncHostCommand : ISynchronousGeneratedCliCommand
+    {
+        public static CommandModel CreateModel(CliLimits? limits = null, bool includeStandardHelp = false)
+        {
+            return CommandModel.Create(
+                new CommandBuilder("host")
+                    .AddChild(new CommandBuilder("sync")
+                        .SetHandler(static (_, _) => 23)),
+                limits,
+                includeStandardHelp);
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test exercises the generic static root contract.")]
+    private sealed class AsyncHostCommand : IGeneratedCliCommand
+    {
+        public static CommandModel CreateModel(CliLimits? limits = null, bool includeStandardHelp = false)
+        {
+            return CommandModel.Create(
+                new CommandBuilder("host")
+                    .AddChild(new CommandBuilder("async")
+                        .SetTaskHandler(async (_, cancellationToken) =>
+                            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false))),
+                limits,
+                includeStandardHelp);
+        }
     }
 }

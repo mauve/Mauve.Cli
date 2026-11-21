@@ -38,6 +38,13 @@ and generator diagnostics had not previously been selected.
   directly construct the selected command, attach an invocation-scoped
   binding context, and call the declared method. Runtime assembly scanning
   is not used.
+- Make each valid generated root implement `IGeneratedCliCommand`, whose
+  static model-factory contract is satisfied by the generated `CreateModel`.
+  Implement `ISynchronousGeneratedCliCommand` only when every handler in the
+  root's reachable command tree has a `void` or `int` return type. The
+  generic constraint on `CliInvoker.Run<TCommand>` then rejects async
+  descendants at compile time; `RunAsync<TCommand>` accepts every generated
+  root.
 - Use generator-only diagnostics `MCLI001` for invalid command declarations,
   `MCLI002` for invalid members, and `MCLI003` for invalid hierarchy or
   visible-name collisions. Diagnostics contain invariant guidance, not
@@ -65,5 +72,6 @@ IDs require a separate review and must retain the shared runtime validation
 rules.
 
 Affected requirements:
-[FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md) and
+[FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md),
+including FEAT-11-005, and
 [FEAT-14](../Requirements/FEAT-14-OptionPacks.md).

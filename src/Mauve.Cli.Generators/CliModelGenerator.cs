@@ -846,7 +846,17 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
 
         _ = builder.Append(AccessibilityText(command.Symbol.DeclaredAccessibility))
-            .Append(" partial class ").Append(typeName).AppendLine();
+            .Append(" partial class ").Append(typeName);
+        if (command.IsRoot)
+        {
+            _ = builder.Append(" : global::Mauve.Cli.Invocation.IGeneratedCliCommand");
+            if (IsSynchronousTree(command))
+            {
+                _ = builder.Append(", global::Mauve.Cli.Invocation.ISynchronousGeneratedCliCommand");
+            }
+        }
+
+        _ = builder.AppendLine();
         _ = builder.AppendLine("{");
 
         for (int index = 0; index < command.Options.Count; index++)
@@ -969,6 +979,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
 
         return builder.ToString();
+    }
+
+    private static bool IsSynchronousTree(CommandInfo command)
+    {
+        return (command.Handler is null || command.Handler.ReturnType.ToDisplayString() is "void" or "int")
+            && command.Children.All(static child => IsSynchronousTree(child.Child));
     }
 
     private static string GeneratePackMembers(PackInfo pack)

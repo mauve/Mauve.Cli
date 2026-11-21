@@ -235,6 +235,79 @@ public sealed class CliModelGeneratorTests
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-005")]
+    public void Generate_ConstrainsSynchronousEntrypointToSynchronousCommandTrees()
+    {
+        const string syncDeclaration = """
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Invocation;
+            using System.Threading.Tasks;
+
+            namespace InvocationCapabilityFixture;
+
+            [CliCommand("sync", IsRoot = true)]
+            public partial class SyncRoot
+            {
+                [CliHandler]
+                private int Run() => 3;
+            }
+
+            [CliCommand("empty", IsRoot = true)]
+            public partial class EmptyRoot
+            {
+            }
+
+            public static class SyncEntrypoints
+            {
+                public static int RunSync() => CliInvoker.Run<SyncRoot>([]);
+                public static Task<int> RunAsync() => CliInvoker.RunAsync<SyncRoot>([]);
+                public static int RunHandlerless() => CliInvoker.Run<EmptyRoot>([]);
+            }
+            """;
+        const string asyncDeclaration = """
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Invocation;
+            using System.Threading.Tasks;
+
+            namespace InvocationCapabilityFixture;
+
+            [CliCommand("async", IsRoot = true)]
+            [CliChild<AsyncChild>]
+            public partial class AsyncRoot
+            {
+            }
+
+            [CliCommand("child")]
+            public partial class AsyncChild
+            {
+                [CliHandler]
+                private Task Run() => Task.CompletedTask;
+            }
+
+            public static class AsyncEntrypoints
+            {
+                public static Task<int> RunAsync() => CliInvoker.RunAsync<AsyncRoot>([]);
+            }
+            """;
+
+        GeneratorResult sync = Generate(syncDeclaration);
+        GeneratorResult async = Generate(asyncDeclaration);
+        AssertNoErrors(sync);
+        AssertNoErrors(async);
+        Assert.IsEmpty(GetCompilerErrors(sync.OutputCompilation));
+        Assert.IsEmpty(GetCompilerErrors(async.OutputCompilation));
+
+        Compilation rejectedSyncCall = AddSource(
+            async.OutputCompilation,
+            "namespace InvocationCapabilityFixture; public static class InvalidEntrypoint { public static int Run() => Mauve.Cli.Invocation.CliInvoker.Run<AsyncRoot>([]); }");
+
+        Assert.Contains(
+            static diagnostic => diagnostic.Id == "CS0311",
+            GetCompilerErrors(rejectedSyncCall));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
     public void Generate_RejectsAsyncVoidAndUnsupportedAsyncResultTypes()
     {
@@ -752,6 +825,20 @@ public sealed class CliModelGeneratorTests
                 .Select(static path => MetadataReference.CreateFromFile(path))
                 .Append(MetadataReference.CreateFromFile(typeof(CommandModel).Assembly.Location))
         ];
+    }
+
+    private Compilation AddSource(Compilation compilation, string source)
+    {
+        return compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(
+            source,
+            new CSharpParseOptions(LanguageVersion.Preview),
+            cancellationToken: TestContext.CancellationToken));
+    }
+
+    private Diagnostic[] GetCompilerErrors(Compilation compilation)
+    {
+        return [.. compilation.GetDiagnostics(TestContext.CancellationToken)
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
     }
 
     private Assembly EmitAndLoad(Compilation compilation)

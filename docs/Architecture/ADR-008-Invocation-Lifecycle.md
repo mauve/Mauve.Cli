@@ -30,13 +30,26 @@ the library.
 - Propagate unexpected callback and handler faults without formatting them.
   The library does not install process signal handlers, dispose caller-owned
   services, or terminate the process.
+- Provide `CliInvoker.Run<TCommand>` and `RunAsync<TCommand>` as static host
+  conveniences over the same validated invocation path. Omitted argument
+  tokens come from the current process arguments, excluding the executable.
+- Configure help/diagnostic sinks, help rendering and non-handler exit codes
+  through `CliHostOptions`; keep standard console output and conventional
+  exit-code behavior as defaults. Preserve completed handler codes and
+  propagate unexpected faults.
+- Require the synchronous generated-root capability for `Run<TCommand>` and
+  the general generated-root capability for `RunAsync<TCommand>`. FEAT-11
+  owns deterministic whole-tree capability generation.
 
 ## Consequences
 
-Hosts own output, exception presentation, cancellation-source lifetime and
-process exit mapping. Parsing remains separately usable without invocation.
-Generated method binding and supported declarative signatures remain owned
-by [FEAT-11](../Requirements/Planned/FEAT-11-Declarative-Api-And-Generation.md).
+Hosts own exception presentation, cancellation-source lifetime and process
+exit mapping; the high-level convenience options provide configurable output
+and default mappings without taking process ownership. Parsing remains
+separately usable without invocation. Generated method binding and
+compile-time synchronous-root classification remain owned by
+[FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md).
 
-Affected requirement:
-[FEAT-09](../Requirements/FEAT-09-Invocation-Lifecycle.md).
+Affected requirements:
+[FEAT-09](../Requirements/FEAT-09-Invocation-Lifecycle.md),
+including FEAT-09-005.

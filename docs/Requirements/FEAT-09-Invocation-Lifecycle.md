@@ -36,6 +36,11 @@ Return or propagate a documented outcome, including application exit codes and h
 **Acceptance:** A handler returning a nonzero code preserves it; a thrown exception propagates to the host with its identity and without calling process exit.
 **Security:** The core does not format or expose exception details; the host owns safe presentation and termination.
 
+### FEAT-09-005 - Generated command host entry points
+Provide synchronous and asynchronous high-level host methods for generated command roots, defaulting omitted arguments to the current process arguments and allowing hosts to configure help/diagnostic sinks, help rendering and non-handler exit codes.
+**Acceptance:** `CliInvoker.Run<TCommand>()` executes a wholly synchronous generated root; `CliInvoker.RunAsync<TCommand>()` executes either synchronous or asynchronous generated roots; explicit argument lists override process arguments; help and invalid-input results use configured output and exit policy.
+**Security:** High-level hosting preserves the shared validated-dispatch path, propagates unexpected handler faults, emits only sanitized help and parser diagnostics, and never terminates the process directly.
+
 ## Design
 #### Dispatch contract
 
@@ -75,6 +80,15 @@ print exception text, or call `Environment.Exit`. Definitions and
 application-owned values are not automatically disposed based on
 `IDisposable`.
 
+The static `CliInvoker.Run<TCommand>` and `RunAsync<TCommand>` methods are
+host conveniences over `InvokeAsync`. They use supplied argument tokens or
+the current process arguments excluding the executable name. Their
+`CliHostOptions` configure standard-output/help rendering, standard-error
+diagnostics, and exit codes for invalid input, no handler, and cancellation;
+completed handler exit codes are preserved and unexpected exceptions
+propagate. They do not consume environment variables or install process
+signal handlers.
+
 ## Metrics Impact
 **Instruments:** none - invocation introduces no runtime metrics.
 
@@ -89,10 +103,15 @@ and
 `CliInvokerTests.InvokeAsync_ReportsCooperativeCancellationButPreservesCompletedExitCode`
 cover cancellation boundaries and completion precedence.
 `CliInvokerTests.InvokeAsync_PropagatesHandlerFaultsAndIsolatesInvocations`
-covers exception identity and invocation isolation. The package-free harness
-passed these methods; this is not product MSTest or Governance acceptance
-evidence. The product test run remains blocked by the missing local
-Governance feed. See the [validation ledger](../validation-gaps.md).
+covers exception identity and invocation isolation.
+`CliInvokerTests.Run_UsesConfiguredHostOutputAndExitCodes` and
+`CliInvokerTests.RunAsync_MapsPreCancellationToConfiguredExitCode` cover host
+output and exit policy. The generated default-argument path is also exercised
+by launching the published Todo CLI with process arguments in the trimmed
+and NativeAOT verification script. All these methods passed in the 90-test
+strict MTP suite; the verification gate also completed both example publish
+and run checks on Linux x64. See the [validation ledger](../validation-gaps.md)
+for requirement-level evidence.
 
 ## Diagrams
 

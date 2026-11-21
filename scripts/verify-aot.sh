@@ -46,7 +46,12 @@ command -v jq >/dev/null
         examples/Todo.Cli/Todo.Cli.csproj \
         examples/FileTool.Cli/Program.cs \
         examples/FileTool.Cli/FileTool.Cli.csproj \
+        src/Mauve.Cli/Invocation/CliInvoker.cs \
+        src/Mauve.Cli/Invocation/CliHostOptions.cs \
+        src/Mauve.Cli/Invocation/IGeneratedCliCommand.cs \
         src/Mauve.Cli.Generators/CliModelGenerator.cs \
+        tests/Mauve.Cli.Tests/Invocation/CliInvokerTests.cs \
+        tests/Mauve.Cli.Generators.Tests/CliModelGeneratorTests.cs \
         tests/Mauve.Cli.Aot.Tests/AotScenario.cs \
         tests/Mauve.Cli.Aot.Tests/AotDeclarations.cs \
         tests/Mauve.Cli.Aot.Tests/AotAcceptanceTests.cs \
@@ -83,7 +88,12 @@ for example in Todo.Cli FileTool.Cli; do
         -p:SelfContained=true \
         -p:EnableTrimAnalyzer=true \
         -p:ILLinkTreatWarningsAsErrors=true
-    run_logged "$evidence/$example.log" dotnet "$trimmed/$example.dll" --verify-aot
+    if [[ "$example" == "Todo.Cli" ]]; then
+        run_logged "$evidence/$example.log" dotnet "$trimmed/$example.dll" new "AOT check"
+        grep -Fqx "Added: AOT check" "$evidence/$example.log"
+    else
+        run_logged "$evidence/$example.log" dotnet "$trimmed/$example.dll" --verify-aot
+    fi
     if find "$trimmed" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example trimmed output contains the build-time generator." >&2
         exit 1
@@ -101,7 +111,12 @@ for example in Todo.Cli FileTool.Cli; do
         -p:ILLinkTreatWarningsAsErrors=true \
         -p:IlcTreatWarningsAsErrors=true \
         "-p:CppCompilerAndLinker=$compiler"
-    run_logged "$evidence/$example.log" "$native/$example" --verify-aot
+    if [[ "$example" == "Todo.Cli" ]]; then
+        run_logged "$evidence/$example.log" "$native/$example" new "AOT check"
+        grep -Fqx "Added: AOT check" "$evidence/$example.log"
+    else
+        run_logged "$evidence/$example.log" "$native/$example" --verify-aot
+    fi
     if find "$native" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example native output contains the build-time generator." >&2
         exit 1

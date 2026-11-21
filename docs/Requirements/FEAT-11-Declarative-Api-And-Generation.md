@@ -36,6 +36,11 @@ Reject unsupported class/property/handler shapes and hierarchy collisions at the
 **Acceptance:** A non-partial bound property and duplicate sibling alias produce errors, and the invalid root receives no generated registration.
 **Security:** Diagnostics use stable generator-only IDs and do not include declaration literal values.
 
+### FEAT-11-005 - Generated invocation capability
+Generated roots expose a common static model-factory contract; roots whose reachable command trees contain only synchronous handlers additionally expose a synchronous capability contract for compile-time-constrained host entry points.
+**Acceptance:** `RunAsync<TCommand>` compiles and runs for any generated root; `Run<TCommand>` compiles for a synchronous tree, including a handlerless tree, and fails C# generic constraint checking when any reachable handler is asynchronous.
+**Security:** Capability classification is deterministic over the validated generated command tree and never relies on runtime reflection, async detection, or fallback dispatch.
+
 ## Design
 The public declarations live in `Mauve.Cli.Declarations`. Commands are
 top-level, non-generic partial classes. Children and members have
@@ -58,6 +63,13 @@ definitions and uses the runtime model validator. A handler creates a fresh comm
 invocation, attaches its `CommandInvocationContext`, and reads values through
 generated typed getters and `TryGet` companions. No application object is
 created for parse-only operations.
+
+Each valid root implements `IGeneratedCliCommand`; it also implements
+`ISynchronousGeneratedCliCommand` only if all handlers in its complete
+reachable command tree return `void` or `int`. A handlerless command does not
+make its tree asynchronous. The runtime entry points use these interfaces as
+generic constraints, so an async descendant makes `Run<Root>()` a compile-time
+error while remaining accepted by `RunAsync<Root>()`.
 
 `MCLI001` identifies invalid command declarations, `MCLI002` invalid members,
 and `MCLI003` hierarchy or visible-name conflicts. Unsupported shapes are
@@ -82,6 +94,12 @@ unsupported async signature diagnostics. They also verify unchanged and
 edited output, inferred names/cardinality, cross-file source order, and that
 unsupported or colliding declarations suppress root generation. The strict
 MTP suite records the observed results in the validation ledger.
+`CliModelGeneratorTests.Generate_ConstrainsSynchronousEntrypointToSynchronousCommandTrees`
+verifies both host entry points for synchronous roots and compiler rejection
+of `Run` when an async handler is present below the root.
+The method passed in the strict MTP suite; the repository gate also validated
+all generated method-level requirement declarations. See the
+[validation ledger](../validation-gaps.md) for observed requirement evidence.
 
 ## Diagrams
 
