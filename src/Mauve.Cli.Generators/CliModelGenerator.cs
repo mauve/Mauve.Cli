@@ -1149,7 +1149,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             .Append(" partial class ").Append(typeName);
         if (command.IsRoot)
         {
-            _ = builder.Append(" : global::Mauve.Cli.Invocation.IGeneratedCliCommand");
+            _ = builder.Append(" : global::Mauve.Cli.Invocation.IGeneratedCliCommandBuilder");
             if (IsSynchronousTree(command))
             {
                 _ = builder.Append(", global::Mauve.Cli.Invocation.ISynchronousGeneratedCliCommand");

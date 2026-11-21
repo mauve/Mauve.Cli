@@ -24,11 +24,39 @@ public sealed class CliInvoker(CliParser? parser = null)
         CliHostOptions? options = null,
         CancellationToken cancellationToken = default)
         where TCommand : ISynchronousGeneratedCliCommand
+        => Run(TCommand.CreateModel(includeStandardHelp: true), arguments, options, cancellationToken);
+
+    /// <summary>Runs a synchronous generated root with additional synchronous directives.</summary>
+    /// <typeparam name="TCommand">A synchronous generated root with a builder.</typeparam>
+    /// <param name="arguments">Optional command-line tokens, excluding the executable name.</param>
+    /// <param name="directives">Additional root directive builders.</param>
+    /// <param name="options">Optional host output and exit-code settings.</param>
+    /// <param name="cancellationToken">The caller-owned cancellation token.</param>
+    /// <returns>The selected handler's exit code or configured host outcome code.</returns>
+    public static int Run<TCommand>(
+        IReadOnlyList<string>? arguments,
+        IReadOnlyList<DirectiveBuilder> directives,
+        CliHostOptions? options = null,
+        CancellationToken cancellationToken = default)
+        where TCommand : ISynchronousGeneratedCliCommand, IGeneratedCliCommandBuilder
+        => Run(CreateModel(TCommand.CreateBuilder(), directives, requireSynchronous: true), arguments, options, cancellationToken);
+
+    /// <summary>Runs a model whose handlers complete synchronously.</summary>
+    /// <param name="model">The validated command model.</param>
+    /// <param name="arguments">Optional command-line tokens, excluding the executable name.</param>
+    /// <param name="options">Optional host output and exit-code settings.</param>
+    /// <param name="cancellationToken">The caller-owned cancellation token.</param>
+    /// <returns>The selected handler's exit code or the configured host outcome code.</returns>
+    public static int Run(
+        CommandModel model,
+        IReadOnlyList<string>? arguments = null,
+        CliHostOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
-        CommandModel model = TCommand.CreateModel(includeStandardHelp: true);
+        ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
         ValueTask<InvocationResult> invocation = new CliInvoker()
-            .InvokeAsync(model, ResolveArguments(arguments), cancellationToken);
+            .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken);
         if (!invocation.IsCompleted)
         {
             throw new InvalidOperationException("A synchronous generated command did not complete synchronously.");
@@ -49,17 +77,59 @@ public sealed class CliInvoker(CliParser? parser = null)
         CliHostOptions? options = null,
         CancellationToken cancellationToken = default)
         where TCommand : IGeneratedCliCommand
-        => RunAsyncCore<TCommand>(arguments, options, cancellationToken);
+        => RunAsync(TCommand.CreateModel(includeStandardHelp: true), arguments, options, cancellationToken);
+
+    /// <summary>Runs a generated root with additional root directives.</summary>
+    /// <typeparam name="TCommand">A generated root with a builder.</typeparam>
+    /// <param name="arguments">Optional command-line tokens, excluding the executable name.</param>
+    /// <param name="directives">Additional root directive builders.</param>
+    /// <param name="options">Optional host output and exit-code settings.</param>
+    /// <param name="cancellationToken">The caller-owned cancellation token.</param>
+    /// <returns>The selected handler's exit code or configured host outcome code.</returns>
+    public static Task<int> RunAsync<TCommand>(
+        IReadOnlyList<string>? arguments,
+        IReadOnlyList<DirectiveBuilder> directives,
+        CliHostOptions? options = null,
+        CancellationToken cancellationToken = default)
+        where TCommand : IGeneratedCliCommandBuilder
+        => RunAsync(CreateModel(TCommand.CreateBuilder(), directives, requireSynchronous: false), arguments, options, cancellationToken);
+
+    /// <summary>Runs an explicitly supplied command model.</summary>
+    /// <param name="model">The validated command model.</param>
+    /// <param name="arguments">Optional command-line tokens, excluding the executable name.</param>
+    /// <param name="options">Optional host output and exit-code settings.</param>
+    /// <param name="cancellationToken">The caller-owned cancellation token.</param>
+    /// <returns>The selected handler's exit code or the configured host outcome code.</returns>
+    public static async Task<int> RunAsync(
+        CommandModel model,
+        IReadOnlyList<string>? arguments = null,
+        CliHostOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        CliHostOptions hostOptions = options ?? new CliHostOptions();
+        InvocationResult result = await new CliInvoker()
+            .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return WriteHostResult(model, result, hostOptions);
+    }
 
     /// <summary>Parses and invokes one command, awaiting its handler to completion.</summary>
     /// <param name="model">The validated command model.</param>
     /// <param name="arguments">Tokens excluding the executable name.</param>
     /// <param name="cancellationToken">The caller-owned cancellation token.</param>
     /// <returns>The invocation outcome and any completed parse result.</returns>
-    public async ValueTask<InvocationResult> InvokeAsync(
+    public ValueTask<InvocationResult> InvokeAsync(
         CommandModel model,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken = default)
+        => InvokeCoreAsync(model, arguments, new CliHostOptions(), cancellationToken);
+
+    private async ValueTask<InvocationResult> InvokeCoreAsync(
+        CommandModel model,
+        IReadOnlyList<string> arguments,
+        CliHostOptions hostOptions,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
@@ -92,7 +162,7 @@ public sealed class CliInvoker(CliParser? parser = null)
 
             DirectiveHandler directiveHandler = directive.Definition.Handler
                 ?? throw new InvalidOperationException("A validated directive has no handler.");
-            DirectiveInvocationContext directiveContext = new(directive, parseResult);
+            DirectiveInvocationContext directiveContext = new(model, directive, parseResult, hostOptions);
             try
             {
                 DirectiveResult directiveResult = await directiveHandler(directiveContext, cancellationToken).ConfigureAwait(false);
@@ -147,18 +217,24 @@ public sealed class CliInvoker(CliParser? parser = null)
         }
     }
 
-    private static async Task<int> RunAsyncCore<TCommand>(
-        IReadOnlyList<string>? arguments,
-        CliHostOptions? options,
-        CancellationToken cancellationToken)
-        where TCommand : IGeneratedCliCommand
+    private static CommandModel CreateModel(
+        CommandBuilder root,
+        IReadOnlyList<DirectiveBuilder> directives,
+        bool requireSynchronous)
     {
-        CommandModel model = TCommand.CreateModel(includeStandardHelp: true);
-        CliHostOptions hostOptions = options ?? new CliHostOptions();
-        InvocationResult result = await new CliInvoker()
-            .InvokeAsync(model, ResolveArguments(arguments), cancellationToken)
-            .ConfigureAwait(false);
-        return WriteHostResult(model, result, hostOptions);
+        ArgumentNullException.ThrowIfNull(directives);
+        foreach (DirectiveBuilder directive in directives)
+        {
+            ArgumentNullException.ThrowIfNull(directive);
+            if (requireSynchronous && directive.IsAsync)
+            {
+                throw new ArgumentException("Asynchronous directives require RunAsync.", nameof(directives));
+            }
+
+            _ = root.AddDirective(directive);
+        }
+
+        return CommandModel.Create(root, includeStandardHelp: true);
     }
 
     private static IReadOnlyList<string> ResolveArguments(IReadOnlyList<string>? arguments)

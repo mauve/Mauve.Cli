@@ -325,8 +325,11 @@ public sealed class CliInvokerTests
         int help = CliInvoker.Run<SyncHostCommand>(["sync", "--help"], options, TestContext.CancellationToken);
         int invalid = CliInvoker.Run<SyncHostCommand>(["--unknown"], options, TestContext.CancellationToken);
         int noHandler = CliInvoker.Run<SyncHostCommand>([], options, TestContext.CancellationToken);
+        CommandModel explicitModel = CommandModel.Create(new CommandBuilder("explicit").SetHandler(static (_, _) => 23));
+        int explicitCompleted = CliInvoker.Run(explicitModel, [], options, TestContext.CancellationToken);
 
         Assert.AreEqual(23, completed);
+        Assert.AreEqual(23, explicitCompleted);
         Assert.AreEqual(0, help);
         Assert.IsTrue(output.ToString().Contains("custom help", StringComparison.Ordinal));
         Assert.AreEqual(7, invalid);
@@ -349,6 +352,77 @@ public sealed class CliInvokerTests
             cancellationSource.Token).ConfigureAwait(false);
 
         Assert.AreEqual(9, cancelled);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    public async Task RunAsync_UsesExplicitModelHostOutputAndExitCodes()
+    {
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions options = new(output, errors, helpRenderer: static (_, _) => "model help", invalidInputExitCode: 7);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .SetHandler(static (_, _) => 23), includeStandardHelp: true);
+
+        int completed = await CliInvoker.RunAsync(model, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+        int help = await CliInvoker.RunAsync(model, ["--help"], options, TestContext.CancellationToken).ConfigureAwait(false);
+        int invalid = await CliInvoker.RunAsync(model, ["--unknown"], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(23, completed);
+        Assert.AreEqual(0, help);
+        Assert.AreEqual(7, invalid);
+        Assert.IsTrue(output.ToString().Contains("model help", StringComparison.Ordinal));
+        Assert.AreNotEqual(string.Empty, errors.ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    public async Task RunAsync_RegistersDirectivesAndUsesInvocationWriters()
+    {
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions options = new(output, errors);
+        List<string> calls = [];
+        DirectiveBuilder first = new DirectiveBuilder("first")
+            .SetHandler((_, _) => calls.Add("first"));
+        DirectiveBuilder second = new DirectiveBuilder("second")
+            .SetHandler((_, _) => calls.Add("second"));
+
+        int completed = await CliInvoker.RunAsync<SyncHostCommand>(
+            ["[first]", "[second]", "sync"], [first, second], options, TestContext.CancellationToken).ConfigureAwait(false);
+        int suggest = await CliInvoker.RunAsync<SyncHostCommand>(
+            ["[suggest:7]", "host sy"],
+            [PredefinedDirectives.CreateSuggest()], options, TestContext.CancellationToken).ConfigureAwait(false);
+        int invalid = await CliInvoker.RunAsync<SyncHostCommand>(
+            ["[suggest:90]", "host sy"],
+            [PredefinedDirectives.CreateSuggest()], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(23, completed);
+        Assert.AreSequenceEqual(["first", "second"], calls);
+        Assert.AreEqual(0, suggest);
+        Assert.AreEqual($"sync{Environment.NewLine}", output.ToString());
+        Assert.AreEqual(2, invalid);
+        Assert.IsTrue(errors.ToString().Contains("Invalid completion", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    public void Run_RejectsAsynchronousOrDuplicateAdditionalDirectives()
+    {
+        int calls = 0;
+        DirectiveBuilder sync = new DirectiveBuilder("sync-directive")
+            .SetHandler((_, _) => calls++);
+        int exitCode = CliInvoker.Run<SyncHostCommand>(["[sync-directive]", "sync"], [sync], cancellationToken: TestContext.CancellationToken);
+        Assert.AreEqual(23, exitCode);
+        Assert.AreEqual(1, calls);
+        Assert.ThrowsExactly<ArgumentException>(() => CliInvoker.Run<SyncHostCommand>(
+            ["[debug]", "sync"], [PredefinedDirectives.CreateDebug()], cancellationToken: TestContext.CancellationToken));
+        Assert.ThrowsExactly<ArgumentException>(() => CliInvoker.Run<SyncHostCommand>(
+            [], [new DirectiveBuilder("duplicate").SetHandler(static (_, _) => 0),
+                new DirectiveBuilder("duplicate").SetHandler(static (_, _) => 0)], cancellationToken: TestContext.CancellationToken));
     }
 
     [TestMethod]
@@ -466,17 +540,13 @@ public sealed class CliInvokerTests
         "Performance",
         "CA1812:Avoid uninstantiated internal classes",
         Justification = "The test exercises the generic static root contract.")]
-    private sealed class SyncHostCommand : ISynchronousGeneratedCliCommand
+    private sealed class SyncHostCommand : ISynchronousGeneratedCliCommand, IGeneratedCliCommandBuilder
     {
+        public static CommandBuilder CreateBuilder() => new CommandBuilder("host")
+            .AddChild(new CommandBuilder("sync").SetHandler(static (_, _) => 23));
+
         public static CommandModel CreateModel(CliLimits? limits = null, bool includeStandardHelp = false)
-        {
-            return CommandModel.Create(
-                new CommandBuilder("host")
-                    .AddChild(new CommandBuilder("sync")
-                        .SetHandler(static (_, _) => 23)),
-                limits,
-                includeStandardHelp);
-        }
+            => CommandModel.Create(CreateBuilder(), limits, includeStandardHelp);
     }
 
     [SuppressMessage(

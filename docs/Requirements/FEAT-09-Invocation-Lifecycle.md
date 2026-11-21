@@ -92,6 +92,16 @@ completed handler exit codes are preserved and unexpected exceptions
 propagate. They do not consume environment variables or install process
 signal handlers.
 
+Generated roots expose a fresh `CreateBuilder()` through
+`IGeneratedCliCommandBuilder`. The directive-list overloads append the supplied
+builders before validating the model and installing standard help. Directive
+callbacks receive the invocation's host options, including the same output
+writers used for help and diagnostics. The synchronous overload rejects
+asynchronous additional directives before invocation; callers must use
+`RunAsync` for them. Duplicate directive names remain invalid model errors.
+An untyped `null` in the second argument position is ambiguous with the
+host-options overload; callers can omit it or use `options: null`.
+
 ## Metrics Impact
 **Instruments:** none - invocation introduces no runtime metrics.
 
@@ -111,9 +121,11 @@ covers exception identity and invocation isolation.
 `CliInvokerTests.RunAsync_MapsPreCancellationToConfiguredExitCode` cover host
 output and exit policy. The generated default-argument path is also exercised
 by launching the published Todo CLI with process arguments in the trimmed
-and NativeAOT verification script. All these methods passed in the 90-test
+and NativeAOT verification script. All these methods passed in the 111-test
 strict MTP suite; the verification gate also completed both example publish
-and run checks on Linux x64. See the [validation ledger](../validation-gaps.md)
+and run checks on Linux x64. `CliInvokerTests.RunAsync_RegistersDirectivesAndUsesInvocationWriters`
+and `CliInvokerTests.Run_RejectsAsynchronousOrDuplicateAdditionalDirectives`
+also passed in that suite. See the [validation ledger](../validation-gaps.md)
 for requirement-level evidence.
 
 ## Diagrams

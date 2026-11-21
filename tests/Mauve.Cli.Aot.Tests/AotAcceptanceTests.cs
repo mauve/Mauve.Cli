@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Mauve.Cli.Conversion;
@@ -13,6 +14,8 @@ namespace Mauve.Cli.Aot.Tests;
 [TestClass]
 public sealed class AotAcceptanceTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Runs identical parser acceptance scenarios against both model paths.</summary>
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-13")]
@@ -49,6 +52,15 @@ public sealed class AotAcceptanceTests
     {
         await VerifyGeneratedDirectivesAsync().ConfigureAwait(false);
         await VerifyExplicitDirectivesAsync().ConfigureAwait(false);
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        int exitCode = await CliInvoker.RunAsync<AotDirectiveRootCommand>(
+            ["[suggest:13]", "directive [ve"],
+            [PredefinedDirectives.CreateSuggest()],
+            new CliHostOptions(output, errors), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(0, exitCode, errors.ToString());
+        Assert.AreEqual($"[version]{Environment.NewLine}", output.ToString());
+        Assert.AreEqual(string.Empty, errors.ToString());
     }
 
     private static async Task VerifyGeneratedDirectivesAsync()

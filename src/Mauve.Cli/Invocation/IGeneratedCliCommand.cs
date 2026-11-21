@@ -12,6 +12,14 @@ public interface IGeneratedCliCommand
     static abstract CommandModel CreateModel(CliLimits? limits = null, bool includeStandardHelp = false);
 }
 
+/// <summary>Identifies a generated root that can create a mutable command builder.</summary>
+public interface IGeneratedCliCommandBuilder : IGeneratedCliCommand
+{
+    /// <summary>Creates a fresh command builder for the generated root.</summary>
+    /// <returns>A mutable command builder.</returns>
+    static abstract CommandBuilder CreateBuilder();
+}
+
 /// <summary>Identifies a generated command root whose entire command tree is synchronous.</summary>
 public interface ISynchronousGeneratedCliCommand : IGeneratedCliCommand
 {

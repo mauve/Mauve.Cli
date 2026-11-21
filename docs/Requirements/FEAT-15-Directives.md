@@ -54,6 +54,16 @@ invocation contexts, and preserve trimming/NativeAOT behavior.
 **Acceptance:** Help and completion show visible directive names/value syntax; hidden and sensitive values are suppressed; generated and explicit NativeAOT scenarios execute registered directives without changing ordinary parsing semantics.
 **Security:** Projection APIs never instantiate directives or run handlers; AOT support is claimed only after native publish-and-run evidence.
 
+### FEAT-15-006 - Debugger wait directive
+Provide an opt-in `[debug]` directive that waits for an attached debugger and then continues invocation.
+**Acceptance:** The directive waits without busy-spinning, continues after attachment, and reports caller cancellation without dispatching later handlers.
+**Security:** It never launches a debugger or attaches one on the application's behalf.
+
+### FEAT-15-007 - Suggest directive
+Provide an opt-in `[suggest:NN]` directive that adapts a command-line payload into a completion request and writes newline-delimited insertion texts.
+**Acceptance:** Successful completion stops normal dispatch with exit code zero; invalid payloads, incomplete completion and provider failures return a nonzero result and cancellation remains cancellation.
+**Security:** Do not execute shell input, log raw payloads or emit partial results after a completion failure; reject multiline candidates.
+
 ## Design
 
 The immutable `CommandModel` owns an ordered directive list. Directives are
@@ -87,6 +97,19 @@ Generated standalone directives and root method directives must lower to
 these same definitions and invocation semantics. Help and completion operate
 on metadata only.
 
+`PredefinedDirectives.CreateDebug()` creates an independent registration
+which polls for debugger attachment and cooperates with caller cancellation.
+`PredefinedDirectives.CreateSuggest()` uses the invocation's host writers;
+an overload accepts explicit output/error writers and optional completion
+configuration. The directive accepts
+a required UTF-16 position and treats the last argv token outside all directive
+spans as the full command-line payload, including the executable. It uses
+FEAT-10's raw-payload adapter and writes candidates to the selected writer.
+Only a completed result succeeds; context/provider/limit failures, malformed
+payloads, and multiline candidates write a safe diagnostic and stop with exit
+code 2. Earlier directives may run first; normal parse errors do not prevent
+a valid suggest directive from completing.
+
 ## Metrics Impact
 **Instruments:** none - directive registration and invocation add no telemetry.
 
@@ -98,8 +121,11 @@ validate requirement metadata, build and test the solution, and publish/run
 the trimmed and NativeAOT acceptance scenarios. NativeAOT support is claimed
 only after that gate records successful generated and explicit directive
 execution; ordinary unit tests are not AOT evidence. The repository gate
-passed with 99 tests, including the generated and explicit directive scenarios
-in both managed MTP and NativeAOT execution on Linux x64.
+passed with 111 tests, including predefined debugger wait and suggest
+directive behavior. Both example applications exposed the predefined
+directives and produced expected suggestions in trimmed and NativeAOT
+execution on Linux x64. Debugger attachment was simulated in portable tests;
+no live debugger attachment is claimed.
 
 ## Diagrams
 

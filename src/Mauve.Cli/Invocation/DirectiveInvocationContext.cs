@@ -7,8 +7,10 @@ namespace Mauve.Cli.Invocation;
 /// <summary>Provides the validated values and selected command for one directive occurrence.</summary>
 public sealed class DirectiveInvocationContext
 {
-    internal DirectiveInvocationContext(ParsedDirective directive, ParseResult parseResult)
+    internal DirectiveInvocationContext(CommandModel model, ParsedDirective directive, ParseResult parseResult, CliHostOptions hostOptions)
     {
+        Model = model;
+        HostOptions = hostOptions;
         Directive = directive;
         ParseResult = parseResult;
         CommandContext = new CommandInvocationContext(
@@ -16,6 +18,12 @@ public sealed class DirectiveInvocationContext
                 ?? throw new InvalidOperationException("The directive parse has no selected command."),
             parseResult);
     }
+
+    /// <summary>Gets the model being invoked.</summary>
+    public CommandModel Model { get; }
+
+    /// <summary>Gets the invocation's host output and error settings.</summary>
+    public CliHostOptions HostOptions { get; }
 
     /// <summary>Gets the directive occurrence.</summary>
     public ParsedDirective Directive { get; }

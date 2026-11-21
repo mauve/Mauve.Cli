@@ -3,7 +3,6 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
-using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 
 namespace FileTool.Cli;
@@ -12,6 +11,7 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        CliHostOptions options = new();
         CommandModel model = CreateModel();
         if (args is ["--verify-aot"])
         {
@@ -20,24 +20,7 @@ internal static class Program
             return 0;
         }
 
-        InvocationResult result = await new CliInvoker().InvokeAsync(model, args).ConfigureAwait(false);
-        if (result.Outcome == InvocationOutcome.HelpRequested && result.ParseResult?.SelectedCommand is not null)
-        {
-            Write(HelpTextRenderer.Render(HelpDocument.Create(model, result.ParseResult.SelectedCommand)));
-            return 0;
-        }
-
-        if (result.Outcome == InvocationOutcome.InvalidInput && result.ParseResult is not null)
-        {
-            foreach (string line in result.ParseResult.FormatDiagnostics())
-            {
-                await Console.Error.WriteLineAsync(line).ConfigureAwait(false);
-            }
-
-            return 2;
-        }
-
-        return result.ExitCode ?? 1;
+        return await CliInvoker.RunAsync(model, args, options).ConfigureAwait(false);
     }
 
     private static CommandModel CreateModel()
@@ -51,6 +34,8 @@ internal static class Program
             description: "Replace an existing destination.");
         return CommandModel.Create(
             new CommandBuilder("file-tool")
+                .AddDirective(PredefinedDirectives.CreateDebug())
+                .AddDirective(PredefinedDirectives.CreateSuggest())
                 .AddChild(new CommandBuilder("copy")
                     .AddOption(overwrite)
                     .AddPositional(source)

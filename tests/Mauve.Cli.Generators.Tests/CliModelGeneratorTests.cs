@@ -262,6 +262,8 @@ public sealed class CliModelGeneratorTests
                 public static int RunSync() => CliInvoker.Run<SyncRoot>([]);
                 public static Task<int> RunAsync() => CliInvoker.RunAsync<SyncRoot>([]);
                 public static int RunHandlerless() => CliInvoker.Run<EmptyRoot>([]);
+                public static Task<int> RunWithDirectives() => CliInvoker.RunAsync<SyncRoot>(
+                    [], [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateSuggest()]);
             }
             """;
         const string asyncDeclaration = """

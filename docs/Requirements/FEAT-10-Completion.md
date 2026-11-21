@@ -38,7 +38,27 @@ Keep core candidates separate from shell-specific quoting and adapter behavior, 
 **Acceptance:** Core returns a candidate containing spaces as one logical value; an enabled adapter escapes it according to that shell, and an unsupported shell is reported as unsupported.
 **Security:** Adapters must not evaluate candidate text as shell code.
 
+### FEAT-10-005 - Suggest protocol input
+Translate a dotnet-suggest command-line payload and UTF-16 cursor position to a logical completion request.
+**Acceptance:** Executable removal and cursor mapping preserve quoted and escaped arguments and correctly handle an empty active word; invalid coordinates fail explicitly.
+**Security:** Treat the payload as inert text, never perform expansion or execution, and respect model input limits.
+
 ## Design
+#### Suggest protocol boundary
+
+The opt-in FEAT-15 suggest directive accepts a full command-line payload
+including the executable and a UTF-16 cursor position into that payload.
+Its adapter decodes whitespace-separated words, single and double quotes,
+and backslash escapes outside single quotes; within double quotes, backslash
+escapes only double quote or backslash. An unmatched quote is tolerated for
+partial completion. The executable is removed and a cursor within it is an
+invalid request. A cursor in whitespace after it selects a new empty word;
+quoted and escaped characters map to decoded token offsets. Input after the
+cursor is retained for replacement but does not select completion context.
+The adapter never expands variables, executes commands, or claims support for
+shell-specific syntax. A raw cursor outside the payload and oversized inputs
+fail explicitly.
+
 #### Shell-independent request
 
 The core receives already-decoded logical tokens, a cursor token index,
@@ -156,6 +176,7 @@ exception-text rendering. Await/dispose fully before reporting an outcome.
 | --- | --- |
 | Core logical-token completion | Required by this feature. |
 | Explicit static/asynchronous providers and typed safe context | Required by this feature. |
+| dotnet-suggest payload decoding | Limited quote/escape grammar above; no shell expansion or execution. |
 | Bash, Zsh, Fish, PowerShell adapters | Unsupported. The API reports `UnsupportedShell`; hosts must perform lexing and escaping themselves. |
 | Raw command-line tokenization / shell execution | Not part of the core API. |
 
@@ -183,9 +204,11 @@ Focused tests cover command and option candidates, cursor replacement ranges,
 inline and pending values, optional/boolean/end-marker behavior, explicit enum
 maps, negative numeric values, negating aliases, dependency isolation,
 sensitive-target suppression, provider faults, cancellation, candidate bounds
-and unsupported shells. The package-free harness passed these scenarios;
-product MSTest and Governance evidence remains blocked by the missing trusted
-local Governance package feed. No shell adapter is claimed.
+and unsupported shells. `SuggestCommandLineTests` cover raw cursor mapping
+and malformed coordinates. These tests passed in the 109-test strict MTP
+suite; see the [validation ledger](../validation-gaps.md). The published
+examples also produced suggestions in trimmed and NativeAOT execution.
+No shell adapter is claimed.
 
 ## Diagrams
 

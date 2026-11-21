@@ -1,6 +1,7 @@
 // User-facing example of generated nested commands and handler binding.
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Invocation;
 
@@ -64,9 +65,14 @@ internal sealed partial class ListCommand
         Console.WriteLine(message);
         return 0;
     }
+
 }
 
 internal static class Program
 {
-    private static int Main() => CliInvoker.Run<TodoCommand>();
+    private static Task<int> Main(string[] args)
+    {
+        return CliInvoker.RunAsync<TodoCommand>(
+            args, [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateSuggest()]);
+    }
 }

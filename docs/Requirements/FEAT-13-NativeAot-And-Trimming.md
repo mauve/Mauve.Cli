@@ -144,7 +144,8 @@ executable, imports both TRX reports, and requires exact two-test parity. The
 focused scenario checks valid nested alias binding, inherited and nested pack
 values, custom and enum conversion, nullable values, help/completion without
 handler dispatch, invalid input without dispatch, and sequential invocation
-isolation.
+isolation. Both published example modes also check that the predefined debug
+and suggest directives are registered and execute a suggest request.
 
 Observed on Ubuntu 26.04, .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`.
 Both example modes printed `AOT smoke check passed.` The managed and native
@@ -154,9 +155,9 @@ requirements from both reports. Artifact SHA-256 values for this run were:
 
 | Consumer | Trimmed managed DLL | Native executable |
 | --- | --- | --- |
-| Todo.Cli | `35437d16afc8dc635d1f9a3f72eff6dd950d4b7fdc57c2ca3cdeff93bd59446b` | `a07feea12760213440a905d74b9e81e94f7693fb929f133ff6ca4d54baab0463` |
-| FileTool.Cli | `c38fc0700385f0312d50e57bd651e0635636b55885587484bb0f3a89ffcf0e55` | `ea0d4764b21791cbfa2c19fa98741ab9f5dd6f9abbcf3ffb60a67788bcf0d7c4` |
-| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `1d5f8e7ee538bd43b86d78dfab9afb56d8ab8d9fcd776a2b0e35248a4c9d9a9e` |
+| Todo.Cli | `12e62b0fae8ee96f5302a080b917436b51f2e8388568d220fe4cecb2b9dbe48f` | `9d6cac7becedc7209d2b86ae7dff894e776f5604c8611f8c76d72c4ed894c2ed` |
+| FileTool.Cli | `3a6881a658aaad8e81bb645ff67bed59aa8f693da98311fb221ace1ae465bdfd` | `cabe360b99e928e4884d05d683c62f2e93acf9759151f0b8d107bae513853f84` |
+| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `088c0cd9d0ebbb2e57f270b50204ccc1fef3714fd4686ada1e4f7801df7750d7` |
 
 The metadata-bearing behavioral tests are
 `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios` and

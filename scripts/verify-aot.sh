@@ -47,6 +47,8 @@ command -v jq >/dev/null
         examples/FileTool.Cli/Program.cs \
         examples/FileTool.Cli/FileTool.Cli.csproj \
         src/Mauve.Cli/Invocation/CliInvoker.cs \
+        src/Mauve.Cli/Invocation/PredefinedDirectives.cs \
+        src/Mauve.Cli/Completion/SuggestCommandLine.cs \
         src/Mauve.Cli/Invocation/CliHostOptions.cs \
         src/Mauve.Cli/Invocation/IGeneratedCliCommand.cs \
         src/Mauve.Cli.Generators/CliModelGenerator.cs \
@@ -72,6 +74,46 @@ run_logged() {
     "$@" 2>&1 | tee -a "$log"
 }
 
+verify_example_directives() {
+    local log="$1"
+    local example="$2"
+    shift 2
+    local output
+    local payload
+    local expected
+    if [[ "$example" == "Todo.Cli" ]]; then
+        payload="todo ad"
+        expected="add"
+    else
+        payload="tool c"
+        expected="copy"
+    fi
+
+    {
+        printf '$'
+        printf ' %q' "$@" "[suggest:${#payload}]" "$payload"
+        printf '\n'
+    } | tee -a "$log"
+    output="$("$@" "[suggest:${#payload}]" "$payload")"
+    printf 'Directive completion output: %s\n' "$output" | tee -a "$log"
+    if [[ "$output" != "$expected" ]]; then
+        echo "$example returned unexpected directive completion." >&2
+        exit 1
+    fi
+
+    {
+        printf '$'
+        printf ' %q' "$@" --help
+        printf '\n'
+    } | tee -a "$log"
+    output="$("$@" --help)"
+    printf '%s\n' "$output" >>"$log"
+    if [[ "$output" != *"[debug]"* || "$output" != *"[suggest"* ]]; then
+        echo "$example did not register both predefined directives." >&2
+        exit 1
+    fi
+}
+
 for example in Todo.Cli FileTool.Cli; do
     project="examples/$example/$example.csproj"
     run_logged "$evidence/$example.log" dotnet restore "$project" --locked-mode
@@ -94,6 +136,7 @@ for example in Todo.Cli FileTool.Cli; do
     else
         run_logged "$evidence/$example.log" dotnet "$trimmed/$example.dll" --verify-aot
     fi
+    verify_example_directives "$evidence/$example.log" "$example" dotnet "$trimmed/$example.dll"
     if find "$trimmed" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example trimmed output contains the build-time generator." >&2
         exit 1
@@ -117,6 +160,7 @@ for example in Todo.Cli FileTool.Cli; do
     else
         run_logged "$evidence/$example.log" "$native/$example" --verify-aot
     fi
+    verify_example_directives "$evidence/$example.log" "$example" "$native/$example"
     if find "$native" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example native output contains the build-time generator." >&2
         exit 1

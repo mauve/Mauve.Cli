@@ -32,6 +32,10 @@ belong to host adapters and must not be inferred by the core.
 - Do not implement shell adapters in the core. `CompleteForShellAsync`
   reports `UnsupportedShell` until an adapter has an approved per-shell
   tokenization and escaping contract.
+- The opt-in FEAT-15 `[suggest:NN]` directive provides a narrow raw-payload
+  adapter with the quote and escape grammar specified in FEAT-10. It removes
+  the executable and translates UTF-16 cursor positions to the existing
+  logical-token API. It is not a shell adapter and does not execute text.
 
 ## Consequences
 

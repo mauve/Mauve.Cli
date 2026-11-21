@@ -84,7 +84,7 @@ public sealed class DirectiveBuilder
             Task<DirectiveResult> task = handler(context, token)
                 ?? throw new InvalidOperationException("The asynchronous directive returned a null task.");
             return await task.ConfigureAwait(false);
-        });
+        }, isAsync: true);
         return this;
     }
 
@@ -99,7 +99,7 @@ public sealed class DirectiveBuilder
             Task<int> task = handler(context, token)
                 ?? throw new InvalidOperationException("The asynchronous directive returned a null task.");
             return ToDirectiveResult(await task.ConfigureAwait(false));
-        });
+        }, isAsync: true);
         return this;
     }
 
@@ -115,7 +115,7 @@ public sealed class DirectiveBuilder
                 ?? throw new InvalidOperationException("The asynchronous directive returned a null task.");
             await task.ConfigureAwait(false);
             return DirectiveResult.ContinueProcessing;
-        });
+        }, isAsync: true);
         return this;
     }
 
@@ -125,7 +125,7 @@ public sealed class DirectiveBuilder
     public DirectiveBuilder SetValueTaskHandler(Func<DirectiveInvocationContext, CancellationToken, ValueTask<DirectiveResult>> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
-        SetHandlerCore((context, token) => handler(context, token));
+        SetHandlerCore((context, token) => handler(context, token), isAsync: true);
         return this;
     }
 
@@ -136,7 +136,7 @@ public sealed class DirectiveBuilder
     {
         ArgumentNullException.ThrowIfNull(handler);
         SetHandlerCore(async (context, token) =>
-            ToDirectiveResult(await handler(context, token).ConfigureAwait(false)));
+            ToDirectiveResult(await handler(context, token).ConfigureAwait(false)), isAsync: true);
         return this;
     }
 
@@ -150,7 +150,7 @@ public sealed class DirectiveBuilder
         {
             await handler(context, token).ConfigureAwait(false);
             return DirectiveResult.ContinueProcessing;
-        });
+        }, isAsync: true);
         return this;
     }
 
@@ -158,7 +158,9 @@ public sealed class DirectiveBuilder
 
     internal int ValueCount => _values.Count;
 
-    private void SetHandlerCore(DirectiveHandler handler)
+    internal bool IsAsync { get; private set; }
+
+    private void SetHandlerCore(DirectiveHandler handler, bool isAsync = false)
     {
         if (Handler is not null)
         {
@@ -166,6 +168,7 @@ public sealed class DirectiveBuilder
         }
 
         Handler = handler;
+        IsAsync = isAsync;
     }
 
     private static DirectiveResult ToDirectiveResult(int exitCode)

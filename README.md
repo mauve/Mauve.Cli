@@ -10,6 +10,7 @@ generator. Both approaches use the same parser.
 - Typed values, defaults, validation, and clear parse errors.
 - Built-in help and asynchronous command handlers.
 - Root directives that run before command dispatch.
+- Opt-in debugger-wait and dotnet-suggest-style completion directives.
 - Reusable nested option packs.
 - Shell-independent command, option, and value completion.
 - Generated bindings with no runtime generator dependency.
@@ -24,7 +25,13 @@ The library is not published as a NuGet package yet.
 dotnet run --project examples/Todo.Cli -- add "Buy milk"
 dotnet run --project examples/Todo.Cli -- --help
 dotnet run --project examples/FileTool.Cli -- copy source.txt backup.txt
+dotnet run --project examples/Todo.Cli -- '[suggest:7]' 'todo ad'
 ```
+
+`[debug]` waits for a debugger to attach. `[suggest:NN]` treats `NN` as a
+UTF-16 cursor offset in the supplied complete command-line payload and prints
+matching insertion texts, one per line. Both directives precede the command;
+the suggest protocol does not provide shell-specific quoting or adapters.
 
 `Todo.Cli` uses generated commands. `FileTool.Cli` builds a command model
 directly. These examples print the requested action; they do not manage files
@@ -77,6 +84,19 @@ dispatch. It derives `greet` and `--name` from the C# identifiers and derives
 the scalar arity from `string`. Option packs can group reusable options in
 either API. Generated handlers may return `void`, `int`, `Task`, `Task<int>`,
 `ValueTask`, or `ValueTask<int>`; async-void handlers are unsupported.
+
+Generated roots can add predefined directives at the host entry point:
+
+```csharp
+return await CliInvoker.RunAsync<GreetCommand>(args,
+    [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateSuggest()]);
+```
+
+The suggest directive writes through the `CliHostOptions` writers, defaulting
+to standard output and error. The synchronous `Run` overload accepts only
+synchronous additional directives; use `RunAsync` for these built-ins.
+An explicit `null` as the second argument is ambiguous with the directive-list
+overload; omit it or use `options: null` to select the host-options overload.
 
 ## Trimming and NativeAOT
 
