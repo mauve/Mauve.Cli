@@ -68,6 +68,7 @@ declarative method discovery and lowering.
 | `Completed` | Includes the exact handler exit code, including nonzero; the host decides process-code policy. |
 | `InvalidInput` | Includes safe parse diagnostics; no handler ran. |
 | `HelpRequested` | Includes the help parse outcome; the host chooses a renderer and sink. |
+| `HelpTreeRequested` | Includes the tree-help parse outcome; the host chooses a sanitized tree renderer and sink. |
 | `NoHandler` | The selected command is valid but has no registered handler. |
 | `Cancelled` | Distinct from success; the host chooses any process-code mapping. |
 

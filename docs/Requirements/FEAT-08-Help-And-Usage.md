@@ -44,7 +44,30 @@ Expose ordered immutable command examples through the explicit builder and gener
 **Acceptance:** A child `add --text AAA` under `todo item add` becomes `todo item add --text AAA`; full paths and alias/nonmatching prefixes stay unchanged. Standalone `$0` denotes only the executable, with a configurable host value and deterministic root-label fallback for direct projection. Default and custom renderers receive identical expanded, sanitized examples. Invalid empty or multiline builder examples are rejected.
 **Security:** Examples are inert text, never parsed or executed. Sanitize all example and executable display text before exposing it, and do not change canonical routing identities or invoke application callbacks.
 
+### FEAT-08-006 - Command tree help
+When standard help is enabled, expose `--help-tree` on every command and render a sanitized, ordered Unicode tree.
+**Acceptance:** Root help shows all visible descendants; selected-command help shows the root, an omission marker, and the selected subtree. True `--help` and `--help-tree` together produce `ConflictingOptions`; malformed input takes precedence.
+**Security:** Exclude hidden subtrees, sanitize all projected text, and never invoke command handlers, converters, default factories or validators to render the tree.
+
 ## Design
+#### Command tree help
+
+`--help-tree` is installed with standard help and follows its intrinsic
+Boolean parsing, structural-error precedence, callback bypass, directive
+ordering, and collision rules. False does not request help. When both help
+options are true the parse is invalid with `ConflictingOptions`. A distinct
+`HelpTreeRequested` parse and invocation outcome carries no typed values.
+
+The tree projection contains only sanitized names and single-line short
+descriptions, never hidden commands or their descendants. Root selection
+includes the entire visible hierarchy. For a selected descendant, show the
+root, `... other commands omitted...`, and the selected command as sibling
+children of the root, followed by its visible descendants. A hidden command
+or a descendant of a hidden command is not eligible for tree projection.
+Render names as `name (description)` when a description is present and `name`
+otherwise. Use `├── `, `└── `, `│   ` and four spaces for connectors and
+LF between lines. Custom renderers receive the same sanitized projection.
+
 #### Command examples
 
 `CommandBuilder.AddExample` accepts one nonempty invocation line; the immutable
@@ -103,8 +126,7 @@ parsing; default values marked sensitive remain suppressed in all display
 modes, including explicitly supplied display-only default/allowed-value
 strings and sensitive positional metadata. A display permission never
 overrides sensitivity. An inert default on a required definition is not
-displayed as effective (FEAT-06). Advanced-only help is not initial scope; do not import maz's
-`--help-more` or tree-filter modes without separate approval.
+displayed as effective (FEAT-06). Advanced-only help remains out of scope.
 
 Text output is deterministic and independent of ambient terminal width.
 Default width is 80 columns, configurable explicitly, and values below 20
@@ -134,7 +156,7 @@ is an invalid model.
 
 Rendering an explicitly selected command's help is separate from recognizing
 a help option in argv. `CommandModel.Create(..., includeStandardHelp: true)`
-installs a marked boolean `--help`/`-h` definition on every command in the
+installs marked boolean `--help`/`-h` and `--help-tree` definitions on every command in the
 snapshot; this provides selected-leaf recognition until FEAT-12 implements
 general option inheritance. Reject spelling collisions instead of silently
 overriding application flags. The token must set help
@@ -183,7 +205,18 @@ unnecessary.
 ## Metrics Impact
 **Instruments:** none - help does not introduce runtime metrics.
 
+**Diagnostics:** `ConflictingOptions`
+
 ## Verification
+`HelpTreeTests.Render_ProjectsVisibleFullAndSelectedTreesSafely`,
+`HelpTreeTests.Write_UsesSanitizedProjectionAndPropagatesOutputFaults`,
+`CommandModelTests.Create_InstallsHelpTreeAndAccountsForItsLimitsAndCollisions`,
+`CliParserTests.Parse_HelpTreeHonorsHelpPrecedenceAndConflicts`, and
+`CliInvokerTests.Run_HelpTreeUsesHostOutputAndPreservesDirectiveOrder` cover
+FEAT-08-006. `scripts/verify-aot.sh` also runs root and selected help trees
+on generated and explicit trimmed and NativeAOT examples. Actual results are
+recorded in the validation ledger.
+
 `HelpDocumentTests.Create_ExpandsCanonicalExamplesWithoutReplacingDeclaredCommandNames`,
 `Create_SnapshotsExamplesAndRejectsInvalidExampleInputs`, and
 `CliInvokerTests.Run_PassesExecutableExamplesToDefaultHelpRenderer`, and

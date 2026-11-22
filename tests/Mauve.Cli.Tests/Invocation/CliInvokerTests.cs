@@ -22,6 +22,36 @@ public sealed class CliInvokerTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-006")]
+    public async Task Run_HelpTreeUsesHostOutputAndPreservesDirectiveOrder()
+    {
+        int handlerCalls = 0;
+        int directiveCalls = 0;
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("child").SetHandler((_, _) => handlerCalls++))
+            .AddDirective(new DirectiveBuilder("trace").SetHandler((_, _) => directiveCalls++));
+        CommandModel model = CommandModel.Create(root, includeStandardHelp: true);
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions options = new(output, errors);
+
+        int exit = await CliInvoker.RunAsync(model, ["[trace]", "child", "--help-tree"],
+            options, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(0, exit);
+        Assert.AreEqual("tool\n├── ... other commands omitted...\n└── child" + Environment.NewLine, output.ToString());
+        Assert.AreEqual(1, directiveCalls);
+        Assert.AreEqual(0, handlerCalls);
+
+        using StringWriter customOutput = new();
+        CliHostOptions custom = new(customOutput, errors, helpTreeRenderer: static tree => tree.Items[0].Name);
+        int generatedExit = await CliInvoker.RunAsync<SyncHostCommand>(
+            ["--help-tree"], custom, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(0, generatedExit);
+        Assert.AreNotEqual(string.Empty, customOutput.ToString());
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-09")]
     [TestProperty(Metadata.Requirement, "FEAT-09-001")]
     public async Task InvokeAsync_DispatchesOnlyTheSelectedValidatedHandler()

@@ -10,5 +10,8 @@ public enum ParseOutcome
     HelpRequested,
 
     /// <summary>The input or model is invalid.</summary>
-    Invalid
+    Invalid,
+
+    /// <summary>A help-tree request was recognized without producing dispatchable values.</summary>
+    HelpTreeRequested
 }

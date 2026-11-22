@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Invocation;
@@ -17,10 +16,6 @@ internal sealed partial class OptionPacksCommand
 internal sealed partial class FetchCommand(NetworkPack network)
 {
     [CliHandler]
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Generated command handlers are instance methods.")]
     private int Run()
     {
         Console.WriteLine($"Fetch {network.Endpoint} with {network.Retry.Retries} retries.");
@@ -33,10 +28,6 @@ internal sealed partial class FetchCommand(NetworkPack network)
 internal sealed partial class InspectCommand(NetworkPack network)
 {
     [CliHandler]
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Generated command handlers are instance methods.")]
     private int Run()
     {
         Console.WriteLine($"Inspect {network.Endpoint} with {network.Retry.Retries} retries.");

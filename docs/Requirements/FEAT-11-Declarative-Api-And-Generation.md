@@ -18,7 +18,7 @@ are recorded in [ADR-010](../Architecture/ADR-010-Declarative-Generation.md).
 
 ## Requirements
 ### FEAT-11-001 - Declarative registration
-Attributes declare a root, generic child inclusions, options, positional arguments and an optional handler. Names, order and ordinary cardinality are inferred from symbols, source position and property types unless explicitly overridden. The generator emits a `CreateModel` factory and typed binding accessors.
+Attributes declare a root, generic child or parent relationships, options, positional arguments and an optional handler. Names, order and ordinary cardinality are inferred from symbols, source position and property types unless explicitly overridden. The generator emits a `CreateModel` factory and typed binding accessors.
 **Acceptance:** A nested declaration with an alias, inferred kebab-case names, typed option and positional argument compiles and invokes its handler; `--arg 1 2 3 --arg 4` binds one ordered collection.
 **Security:** Generation uses direct type and method references; it does not scan assemblies or evaluate declaration text.
 
@@ -33,7 +33,7 @@ The builder API and generated model share the same definitions, parser and invoc
 **Security:** Both paths use `CommandModel.Create` validation and the shared parser; generated code cannot bypass model checks.
 
 ### FEAT-11-004 - Declaration diagnostics
-Reject unsupported class/property/handler shapes and hierarchy collisions at the declaration site with corrective diagnostics.
+Reject unsupported class/property/handler shapes, hierarchy cycles anywhere in the declared graph, and hierarchy collisions at the declaration site with corrective diagnostics. Declaring the same edge with both `CliChild` and `CliParent` reports `MCLI003` at both attributes.
 **Acceptance:** A non-partial bound property and duplicate sibling alias produce errors, and the invalid root receives no generated registration.
 **Security:** Diagnostics use stable generator-only IDs and do not include declaration literal values.
 
@@ -68,7 +68,11 @@ projection and executable/path expansion are owned by FEAT-08-005.
 
 The public declarations live in `Mauve.Cli.Declarations`. Commands are
 top-level, non-generic partial classes. Children and members have
-source-derived order. Bound properties are partial, get-only instance
+source-derived order. A parent can declare `[CliChild<TChild>]` or its child
+can declare `[CliParent<TParent>]`; both forms normalize to the same edge.
+Sibling edges are ordered by compilation syntax-tree index and the declaring
+attribute's span, including mixed forms and partial declarations. A command
+edge must not use both forms. Bound properties are partial, get-only instance
 properties. Command types, option properties and positional properties derive
 kebab-case names when omitted. A handler is a direct instance method with no
 parameters or one `CancellationToken`, and uses a return shape supported by
@@ -126,6 +130,14 @@ verification for the replacement is recorded in the validation ledger.
 **Instruments:** none - source generation adds no runtime instrumentation.
 
 ## Verification
+`CliModelGeneratorTests.Generate_CombinesParentAndChildEdgesInGlobalSourceOrder`,
+`Generate_UpdatesParentOnlyHierarchyWhenAnEdgeChanges`,
+`Generate_ReportsBothDeclarationsOfTheSameEdge`,
+`Generate_ConflictingEdgeDoesNotInvalidateAnUnrelatedRoot`,
+`Generate_RejectsCyclesAcrossAllDeclaredCommands`, and
+`Generate_RejectsInvalidParentTargetsAndRootChildren` cover parent declarations
+and hierarchy diagnostics. Observed results belong in the validation ledger.
+
 `CliModelGeneratorTests.Generate_InfersXmlMetadataAndShellExamplesWithExplicitModelParity`,
 `Generate_PreservesExplicitXmlMetadataOverridesIncludingEmptyAndNull`,
 `Generate_RejectsInvalidShellExamplesButIgnoresOtherLanguages`, and

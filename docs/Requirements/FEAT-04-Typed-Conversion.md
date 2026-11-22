@@ -111,7 +111,8 @@ operation and propagates to the host; do not broadly swallow its exception
 as invalid input, echo its message, substitute a default or dispatch.
 FEAT-07 distinguishes input diagnostics from application callback faults.
 Structural scan/scope/duplicate errors suppress all value converters, even
-custom ones, and produce Invalid directly. Error-free HelpRequested also
+custom ones, and produce Invalid directly. Error-free HelpRequested and
+HelpTreeRequested also
 bypasses them. Otherwise convert occurrences/elements in token order, continue
 after returned failures up to the diagnostic cap (including later collection
 elements), but commit no partially failed collection occurrence. An unexpected

@@ -7,7 +7,6 @@ namespace Commands.Declarative;
 
 [CliCommand("commands", IsRoot = true, Description = "Choose a greeting command.")]
 [CliChild<GreetCommand>]
-[CliChild<GoodbyeCommand>]
 internal sealed partial class CommandsCommand
 {
 }
@@ -27,6 +26,7 @@ internal sealed partial class GreetCommand
 }
 
 [CliCommand(Description = "Say goodbye to someone.")]
+[CliParent<CommandsCommand>]
 internal sealed partial class GoodbyeCommand
 {
     [CliArgument(Description = "Person to address.")]

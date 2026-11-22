@@ -130,6 +130,17 @@ verify_example_commands() {
     fi
     {
         printf '$'
+        printf ' %q' "$@" goodbye "AOT check"
+        printf '\n'
+    } | tee -a "$log"
+    output="$("$@" goodbye "AOT check")"
+    printf 'Goodbye command output: %s\n' "$output" | tee -a "$log"
+    if [[ "$output" != "Goodbye, AOT check!" ]]; then
+        echo "Goodbye command returned unexpected output." >&2
+        exit 1
+    fi
+    {
+        printf '$'
         printf ' %q' "$@" greet
         printf '\n'
     } | tee -a "$log"
@@ -141,6 +152,35 @@ verify_example_commands() {
     echo "Missing-input exit code: $status" | tee -a "$log"
     if [[ "$status" != 2 ]]; then
         echo "Representative command returned an unexpected missing-input exit code." >&2
+        exit 1
+    fi
+}
+
+verify_example_help_tree() {
+    local log="$1"
+    local variant="$2"
+    shift 2
+    local output
+    local expected_root
+    local expected_child
+    if [[ "$variant" == "Declarative" ]]; then
+        expected_root=$'commands (Choose a greeting command.)\n├── greet (Greet someone.)\n└── goodbye (Say goodbye to someone.)'
+        expected_child=$'commands (Choose a greeting command.)\n├── ... other commands omitted...\n└── goodbye (Say goodbye to someone.)'
+    else
+        expected_root=$'commands\n├── greet\n└── goodbye'
+        expected_child=$'commands\n├── ... other commands omitted...\n└── goodbye'
+    fi
+
+    output="$("$@" --help-tree)"
+    printf 'Root help tree:\n%s\n' "$output" | tee -a "$log"
+    if [[ "$output" != "$expected_root" ]]; then
+        echo "$variant root help tree did not match." >&2
+        exit 1
+    fi
+    output="$("$@" goodbye --help-tree)"
+    printf 'Selected help tree:\n%s\n' "$output" | tee -a "$log"
+    if [[ "$output" != "$expected_child" ]]; then
+        echo "$variant selected help tree did not match." >&2
         exit 1
     fi
 }
@@ -164,6 +204,7 @@ for variant in Declarative Manual; do
         -p:ILLinkTreatWarningsAsErrors=true
     verify_example_commands "$evidence/$example.log" dotnet "$trimmed/$example.dll"
     verify_example_directives "$evidence/$example.log" "$example" dotnet "$trimmed/$example.dll"
+    verify_example_help_tree "$evidence/$example.log" "$variant" dotnet "$trimmed/$example.dll"
     if find "$trimmed" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example trimmed output contains the build-time generator." >&2
         exit 1
@@ -183,6 +224,7 @@ for variant in Declarative Manual; do
         "-p:CppCompilerAndLinker=$compiler"
     verify_example_commands "$evidence/$example.log" "$native/$example"
     verify_example_directives "$evidence/$example.log" "$example" "$native/$example"
+    verify_example_help_tree "$evidence/$example.log" "$variant" "$native/$example"
     if find "$native" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example native output contains the build-time generator." >&2
         exit 1

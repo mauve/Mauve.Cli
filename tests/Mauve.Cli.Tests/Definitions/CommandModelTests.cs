@@ -12,6 +12,24 @@ namespace Mauve.Cli.Tests.Definitions;
 public sealed class CommandModelTests
 {
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-006")]
+    public void Create_InstallsHelpTreeAndAccountsForItsLimitsAndCollisions()
+    {
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool").AddChild(new CommandBuilder("child")), includeStandardHelp: true);
+        Assert.IsTrue(model.Root.TryGetOption("--help-tree", out _));
+        Assert.IsTrue(model.Root.Children[0].TryGetOption("--help-tree", out _));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            new CommandBuilder("tool").AddOption(new OptionDefinition("--help-tree", typeof(bool), OptionArity.BooleanFlag)),
+            includeStandardHelp: true));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            new CommandBuilder("tool"), new CliLimits(maximumOptionsPerCommand: 1), includeStandardHelp: true));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            new CommandBuilder("tool"), new CliLimits(maximumModelNodes: 2), includeStandardHelp: true));
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-01")]
     [TestProperty(Metadata.Requirement, "FEAT-01-001")]
     public void Create_PreservesOrderedHierarchyMetadataAndCanonicalPaths()

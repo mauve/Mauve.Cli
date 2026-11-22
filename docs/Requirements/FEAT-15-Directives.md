@@ -85,7 +85,7 @@ performed.
 
 Parsing produces either a complete validated directive plan or no executable
 plan. The parser can retain a valid plan alongside an ordinary
-`InvalidInput` or `HelpRequested` outcome. The invoker runs that plan before
+`InvalidInput`, `HelpRequested` or `HelpTreeRequested` outcome. The invoker runs that plan before
 returning the ordinary outcome, allowing a directive to short-circuit with
 `StopProcessing(0)` or any other exit code. Invalid directive syntax/value
 prevents all directive and command handlers from running.

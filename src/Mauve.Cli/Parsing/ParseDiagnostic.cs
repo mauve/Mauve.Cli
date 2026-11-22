@@ -115,6 +115,7 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption
                 or ParseDiagnosticCode.UnknownDirective or ParseDiagnosticCode.MalformedDirective
                 or ParseDiagnosticCode.MissingDirectiveValue or ParseDiagnosticCode.InvalidDirectiveValue
+                or ParseDiagnosticCode.ConflictingOptions
                 or ParseDiagnosticCode.UnexpectedArgument
                 or ParseDiagnosticCode.InputLimitExceeded or ParseDiagnosticCode.DiagnosticLimitExceeded =>
                 throw new ArgumentException("Expected an option diagnostic.", nameof(code)),
@@ -152,6 +153,7 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.UnknownCommand or ParseDiagnosticCode.UnknownOption
                 or ParseDiagnosticCode.UnknownDirective or ParseDiagnosticCode.MalformedDirective
                 or ParseDiagnosticCode.MissingDirectiveValue or ParseDiagnosticCode.InvalidDirectiveValue
+                or ParseDiagnosticCode.ConflictingOptions
                 or ParseDiagnosticCode.UnexpectedArgument
                 or ParseDiagnosticCode.MissingValue or ParseDiagnosticCode.UnexpectedValue or ParseDiagnosticCode.DuplicateOption
                 or ParseDiagnosticCode.OptionOutOfScope or ParseDiagnosticCode.InputLimitExceeded or ParseDiagnosticCode.DiagnosticLimitExceeded =>
@@ -241,6 +243,7 @@ public sealed class ParseDiagnostic
             ParseDiagnosticCode.MissingValue => 0,
             ParseDiagnosticCode.UnexpectedValue => 0,
             ParseDiagnosticCode.DuplicateOption => 0,
+            ParseDiagnosticCode.ConflictingOptions => 0,
             ParseDiagnosticCode.InvalidValue => 1,
             ParseDiagnosticCode.MissingRequired => 2,
             ParseDiagnosticCode.ValidationFailed => 3,

@@ -16,6 +16,7 @@ public sealed class CliHostOptions
     /// <param name="noHandlerExitCode">The returned code when the selected command has no handler.</param>
     /// <param name="cancelledExitCode">The returned code for caller cancellation.</param>
     /// <param name="executableName">The executable display name used for help examples, defaulting to process argv zero.</param>
+    /// <param name="helpTreeRenderer">An optional custom renderer for sanitized help trees.</param>
     public CliHostOptions(
         TextWriter? standardOutput = null,
         TextWriter? standardError = null,
@@ -24,7 +25,8 @@ public sealed class CliHostOptions
         int invalidInputExitCode = 2,
         int noHandlerExitCode = 1,
         int cancelledExitCode = 130,
-        string? executableName = null)
+        string? executableName = null,
+        Func<HelpTreeDocument, string>? helpTreeRenderer = null)
     {
         HelpTextRenderer.ValidateWidth(helpWidth);
         if (executableName is not null)
@@ -37,6 +39,7 @@ public sealed class CliHostOptions
         StandardError = standardError ?? Console.Error;
         HelpWidth = helpWidth;
         HelpRenderer = helpRenderer;
+        HelpTreeRenderer = helpTreeRenderer;
         InvalidInputExitCode = invalidInputExitCode;
         NoHandlerExitCode = noHandlerExitCode;
         CancelledExitCode = cancelledExitCode;
@@ -53,6 +56,9 @@ public sealed class CliHostOptions
 
     /// <summary>Gets the optional custom renderer for sanitized help documents.</summary>
     public Func<HelpDocument, int, string>? HelpRenderer { get; }
+
+    /// <summary>Gets the optional custom renderer for sanitized help trees.</summary>
+    public Func<HelpTreeDocument, string>? HelpTreeRenderer { get; }
 
     /// <summary>Gets the exit code for malformed input.</summary>
     public int InvalidInputExitCode { get; }

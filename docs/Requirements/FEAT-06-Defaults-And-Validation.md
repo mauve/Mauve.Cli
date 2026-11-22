@@ -78,7 +78,8 @@ unexpected null factory/bare result yields ValidationFailed before binding.
 1. Scan tokens and resolve the final command, checking syntax/scope first.
    If structural errors exist, return Invalid without value converters or
    later callbacks. Otherwise resolve FEAT-08's built-in help-token grammar;
-   a true help occurrence returns HelpRequested now, before all conversion,
+   a true, non-conflicting help or help-tree occurrence returns
+   HelpRequested or HelpTreeRequested now, before all conversion,
    requiredness and defaults.
 2. Convert supplied values in token order. Keep failed definitions invalid;
    never replace invalid supplied input with an absent default.

@@ -21,6 +21,9 @@ public sealed class InvocationResult
     /// <summary>Returns true if the help was requested during invocation.</summary>
     public bool IsHelpRequested => Outcome == InvocationOutcome.HelpRequested;
 
+    /// <summary>Returns true if a help tree was requested during invocation.</summary>
+    public bool IsHelpTreeRequested => Outcome == InvocationOutcome.HelpTreeRequested;
+
     /// <summary>Returns true if the invocation resulted in invalid input.</summary>
     public bool IsInvalidInput => Outcome == InvocationOutcome.InvalidInput;
 
@@ -60,6 +63,12 @@ public sealed class InvocationResult
     {
         RequireOutcome(parseResult, ParseOutcome.HelpRequested);
         return new InvocationResult(InvocationOutcome.HelpRequested, parseResult, null);
+    }
+
+    internal static InvocationResult HelpTreeRequested(ParseResult parseResult)
+    {
+        RequireOutcome(parseResult, ParseOutcome.HelpTreeRequested);
+        return new InvocationResult(InvocationOutcome.HelpTreeRequested, parseResult, null);
     }
 
     internal static InvocationResult NoHandler(ParseResult parseResult)

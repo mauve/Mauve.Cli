@@ -52,5 +52,8 @@ public enum ParseDiagnosticCode
     MissingDirectiveValue,
 
     /// <summary>A directive value could not be converted.</summary>
-    InvalidDirectiveValue
+    InvalidDirectiveValue,
+
+    /// <summary>Mutually exclusive options were supplied together.</summary>
+    ConflictingOptions
 }

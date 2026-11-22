@@ -44,6 +44,11 @@ irrelevant to displaying the selected command's usage.
 - When enabled, install the marked `--help`/`-h` flag on each command in the
   model snapshot until general inherited options are implemented. Any
   spelling collision is a model error.
+- Install `--help-tree` with standard help. Project sanitized visible
+  commands into a separate immutable tree: at the root show the full tree;
+  for a descendant show the root, an omission marker and the selected subtree
+  as sibling branches. Render Unicode connectors without invoking callbacks.
+  Both true help modes are invalid together with `ConflictingOptions`.
 - Scan ordinary token structure and validate the helper's boolean literal
   before considering help. Unknown/out-of-scope options, missing values,
   excess positionals and duplicate scalar options remain failures. A true

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -50,6 +51,218 @@ public sealed class CliModelGeneratorTests
         """;
 
     public required TestContext TestContext { get; set; }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
+    public void Generate_UpdatesParentOnlyHierarchyWhenAnEdgeChanges()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            namespace ParentFixture;
+            [CliCommand("tool", IsRoot = true)] public partial class Root { }
+            [CliCommand("first")] [CliParent<Root>] public partial class First { }
+            [CliCommand("second")] [CliParent<Root>] public partial class Second { }
+            [CliCommand("leaf")] [CliParent<First>] public partial class Leaf { }
+            """;
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
+        CSharpCompilation input = CreateCompilation(CSharpSyntaxTree.ParseText(
+            declaration, parseOptions, cancellationToken: TestContext.CancellationToken));
+        GeneratorDriver driver = CreateDriver(parseOptions);
+        driver = driver.RunGeneratorsAndUpdateCompilation(input, out Compilation initialOutput, out _, TestContext.CancellationToken);
+        string[] initialSources = GetGeneratedSources(driver);
+        Assert.IsEmpty(GetCompilerErrors(initialOutput));
+
+        driver = driver.RunGenerators(input, TestContext.CancellationToken);
+        Assert.AreSequenceEqual(initialSources, GetGeneratedSources(driver));
+
+        string edited = declaration.Replace("CliParent<First>", "CliParent<Second>", StringComparison.Ordinal);
+        CSharpCompilation editedInput = CreateCompilation(CSharpSyntaxTree.ParseText(
+            edited, parseOptions, cancellationToken: TestContext.CancellationToken));
+        driver = driver.RunGeneratorsAndUpdateCompilation(editedInput, out Compilation editedOutput, out ImmutableArray<Diagnostic> diagnostics, TestContext.CancellationToken);
+        Assert.IsFalse(diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.IsEmpty(GetCompilerErrors(editedOutput));
+        Type rootType = EmitAndLoad(editedOutput).GetType("ParentFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        Assert.IsEmpty(model.Root.Children[0].Children);
+        Assert.AreEqual("leaf", model.Root.Children[1].Children[0].Name);
+        Assert.AreNotEqual(string.Join("\n", initialSources), string.Join("\n", GetGeneratedSources(driver)));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
+    public async Task Generate_CombinesParentAndChildEdgesInGlobalSourceOrder()
+    {
+        const string firstFile = """
+            using Mauve.Cli.Declarations;
+            namespace MixedFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            [CliChild<Second>]
+            public partial class Root { }
+
+            [CliCommand("first")]
+            [CliParent<Root>]
+            public partial class First { }
+            """;
+        const string secondFile = """
+            using Mauve.Cli.Declarations;
+            namespace MixedFixture;
+
+            [CliCommand("third")]
+            [CliParent<Root>]
+            public partial class Unrelated { }
+            """;
+        const string thirdFile = """
+            using Mauve.Cli.Declarations;
+            namespace MixedFixture;
+
+            [CliCommand("second")]
+            public partial class Second { }
+
+            [CliCommand("leaf")]
+            [CliParent<Second>]
+            public partial class Leaf
+            {
+                [CliArgument]
+                public partial string Value { get; }
+                [CliHandler]
+                private int Run() => Value.Length;
+            }
+            """;
+        GeneratorResult generated = Generate(firstFile, secondFile, thirdFile);
+        AssertNoErrors(generated);
+        Type rootType = EmitAndLoad(generated.OutputCompilation).GetType("MixedFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        Assert.AreSequenceEqual(["second", "first", "third"], model.Root.Children.Select(static child => child.Name));
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            model, ["second", "leaf", "hello"], TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(5, result.ExitCode);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_ReportsBothDeclarationsOfTheSameEdge()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)]
+            [CliChild<Leaf>]
+            public partial class Root { }
+            [CliCommand]
+            [CliParent<Root>]
+            public partial class Leaf { }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        Diagnostic[] diagnostics = [.. generated.GeneratorDiagnostics.Where(static item => item.Id == "MCLI003")];
+        Assert.HasCount(2, diagnostics);
+        Assert.AreSequenceEqual(
+            ["CliChild<Leaf>", "CliParent<Root>"],
+            diagnostics.Select(diagnostic => diagnostic.Location.SourceTree!.GetText(TestContext.CancellationToken).ToString(diagnostic.Location.SourceSpan))
+                .OrderBy(static text => text, StringComparer.Ordinal));
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+            generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_ConflictingEdgeDoesNotInvalidateAnUnrelatedRoot()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] [CliChild<Leaf>] public partial class BadRoot { }
+            [CliCommand(IsRoot = true)] [CliChild<Leaf>] public partial class GoodRoot { }
+            [CliCommand] [CliParent<BadRoot>] public partial class Leaf { }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        Assert.AreEqual(2, generated.GeneratorDiagnostics.Count(static diagnostic => diagnostic.Id == "MCLI003"));
+        Assert.DoesNotContain(static source => source.HintName.Contains("BadRoot", StringComparison.Ordinal),
+            generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        Assert.Contains(static source => source.HintName.Contains("GoodRoot", StringComparison.Ordinal),
+            generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        Assert.IsEmpty(GetCompilerErrors(generated.OutputCompilation));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsCyclesAcrossAllDeclaredCommands()
+    {
+        string[] cycles =
+        [
+            "[CliParent<A>] public partial class A { }",
+            "[CliParent<B>] public partial class A { } [CliCommand] [CliParent<A>] public partial class B { }",
+            "[CliChild<B>] [CliParent<B>] public partial class A { } [CliCommand] public partial class B { }"
+        ];
+        foreach (string cycle in cycles)
+        {
+            string declaration = """
+                using Mauve.Cli.Declarations;
+                [CliCommand(IsRoot = true)] [CliChild<A>] public partial class Root { }
+                [CliCommand]
+                """ + cycle;
+            GeneratorResult generated = Generate(declaration);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic =>
+                diagnostic.Id == "MCLI003" && diagnostic.GetMessage(CultureInfo.InvariantCulture).Contains("cycle", StringComparison.Ordinal)));
+            Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+                generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+
+        const string disconnected = """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root { }
+            [CliCommand] [CliParent<B>] public partial class A { }
+            [CliCommand] [CliParent<A>] public partial class B { }
+            """;
+        GeneratorResult result = Generate(disconnected);
+        Assert.IsTrue(result.GeneratorDiagnostics.Any(static diagnostic =>
+            diagnostic.Id == "MCLI003" && diagnostic.GetMessage(CultureInfo.InvariantCulture).Contains("cycle", StringComparison.Ordinal)));
+        Assert.Contains(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+            result.RunResult.Results.SelectMany(static item => item.GeneratedSources));
+
+        const string rootCycle = """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] [CliChild<A>] [CliParent<A>] public partial class Root { }
+            [CliCommand] public partial class A { }
+            """;
+        GeneratorResult rootResult = Generate(rootCycle);
+        Assert.IsTrue(rootResult.GeneratorDiagnostics.Any(static diagnostic =>
+            diagnostic.Id == "MCLI003" && diagnostic.GetMessage(CultureInfo.InvariantCulture).Contains("cycle", StringComparison.Ordinal)));
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+            rootResult.RunResult.Results.SelectMany(static item => item.GeneratedSources));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsInvalidParentTargetsAndRootChildren()
+    {
+        string[] declarations =
+        [
+            """
+            [CliCommand(IsRoot = true)] [CliChild<Leaf>] public partial class Root { }
+            [CliCommand] [CliParent<NotCommand>] public partial class Leaf { }
+            public class NotCommand { }
+            """,
+            """
+            [CliCommand(IsRoot = true)] [CliParent<Other>] public partial class Root { }
+            [CliCommand] public partial class Other { }
+            """
+        ];
+        foreach (string declaration in declarations)
+        {
+            GeneratorResult generated = Generate("using Mauve.Cli.Declarations;\n" + declaration);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
+            Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+                generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]

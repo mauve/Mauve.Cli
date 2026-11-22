@@ -16,6 +16,51 @@ namespace Mauve.Cli.Tests.Parsing;
 public sealed class CliParserTests
 {
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-006")]
+    public void Parse_HelpTreeHonorsHelpPrecedenceAndConflicts()
+    {
+        int converterCalls = 0;
+        ConverterRegistry converters = new ConverterRegistryBuilder().Register((_, _) =>
+        {
+            converterCalls++;
+            return ValueConversion.Failure<int>("integer.invalid");
+        }).Build();
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("copy")
+                .AddOption(new OptionDefinition("--count", typeof(int), OptionArity.RequiredScalar, isRequired: true))),
+            includeStandardHelp: true);
+        CliParser parser = new(converters);
+        ParseResult root = parser.Parse(model, ["--help-tree"]);
+        ParseResult leaf = parser.Parse(model, ["copy", "--count=bad", "--help-tree"]);
+        ParseResult invalid = parser.Parse(model, ["copy", "--wat", "--help-tree"]);
+        ParseResult malformed = parser.Parse(model, ["copy", "--help-tree=maybe"]);
+        ParseResult falseValue = parser.Parse(model, ["copy", "--help-tree=false"]);
+        ParseResult repeated = parser.Parse(model, ["copy", "--help-tree", "--help-tree"]);
+        ParseResult conflict = parser.Parse(model, ["copy", "--help", "--help-tree"]);
+        ParseResult falseHelp = parser.Parse(model, ["copy", "--help=false", "--help-tree"]);
+
+        Assert.AreEqual(ParseOutcome.HelpTreeRequested, root.Outcome);
+        Assert.AreEqual(ParseOutcome.HelpTreeRequested, leaf.Outcome);
+        Assert.AreEqual("copy", leaf.SelectedCommand!.Name);
+        Assert.IsEmpty(leaf.Values);
+        Assert.AreEqual(0, converterCalls);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, invalid.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, malformed.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.MissingRequired, falseValue.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, repeated.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.ConflictingOptions, conflict.Diagnostics[0].Code);
+        Assert.AreEqual(ParseOutcome.HelpTreeRequested, falseHelp.Outcome);
+
+        CommandModel positional = CommandModel.Create(new CommandBuilder("tool")
+            .AddPositional(new PositionalDefinition("value", typeof(string))), includeStandardHelp: true);
+        ParseResult afterEnd = parser.Parse(positional, ["--", "--help-tree"]);
+        Assert.AreEqual(ParseOutcome.Validated, afterEnd.Outcome);
+        Assert.IsTrue(afterEnd.TryGetPositionalValue(positional.Root, positional.Root.Positionals[0], out string? value));
+        Assert.AreEqual("--help-tree", value);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-03")]
     [TestProperty(Metadata.Requirement, "FEAT-03-001")]
     public void Parse_PreservesArgumentBoundariesAndEmptyRestValues()

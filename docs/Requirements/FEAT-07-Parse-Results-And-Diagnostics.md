@@ -44,8 +44,8 @@ Where suggestions are offered, derive them from visible declared names and limit
 #### Result schema
 
 `ParseResult` records the immutable model snapshot identity through its
-definition handles and outcome kind (`Validated`, `HelpRequested` or
-`Invalid`), canonical selected command/path, ordered diagnostics and unmatched
+definition handles and outcome kind (`Validated`, `HelpRequested`,
+`HelpTreeRequested` or `Invalid`), canonical selected command/path, ordered diagnostics and unmatched
 occurrences. Its `Arguments` property exposes a defensive copy through
 deliberate caller access; mutable input arrays are not result storage and
 input is never automatically logged. Input-limit and unsupported-model
@@ -63,7 +63,7 @@ partially validated objects.
 Validated permits unavailable optional entries without defaults, but never
 invalid entries. Presence-aware Try access reports unavailable; a direct
 getter for an unavailable entry throws a fixed InvalidOperationException
-without raw input. HelpRequested has no typed value entries.
+without raw input. HelpRequested and HelpTreeRequested have no typed value entries.
 
 Collections exposed as successful results have read-only containers and
 parse-local storage. The library does not deep-freeze arbitrary custom
@@ -81,6 +81,7 @@ Stable codes are the public `ParseDiagnosticCode` enum values:
 | OptionOutOfScope | Ancestor-local option consumed before descending, but invisible on the final command; original option index. |
 | MissingValue / UnexpectedValue | Known option arity violation; option token index. |
 | DuplicateOption | A repeated scalar; repeated occurrence plus first-occurrence reference. |
+| ConflictingOptions | Mutually exclusive built-in help modes; no invented token index. |
 | InvalidValue | Conversion failure; supplied value's index, owning option index when separate, and optional inline offset. |
 | MissingRequired | Required option/argument absent; definition identity without a fabricated token index. |
 | InputLimitExceeded / DiagnosticLimitExceeded | Explicit bound exceeded; do not silently truncate into success. |

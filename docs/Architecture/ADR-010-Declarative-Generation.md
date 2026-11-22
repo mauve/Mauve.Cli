@@ -24,10 +24,14 @@ and generator diagnostics had not previously been selected.
   use MCLI002 rather than silently rewriting source text.
 
 - Place declaration attributes in `Mauve.Cli.Declarations`: `CliCommand`,
-  `CliChild`, `CliOption`, `CliArgument` and `CliHandler`.
+  `CliChild`, `CliParent`, `CliOption`, `CliArgument` and `CliHandler`.
 - Use generic `CliChild<TCommand>` attributes instead of `Type` constructor
   arguments for command-child declarations. OptionPack declarations follow
   [ADR-011](ADR-011-OptionPack-Composition.md).
+- Permit `[CliParent<TParent>]` on a child as the inverse declaration.
+  Normalize both forms into one graph, order sibling edges by the compilation
+  syntax tree and attribute span, reject all declared cycles, and report
+  `MCLI003` on both attributes when an edge uses both forms.
 - Require top-level, non-generic partial command classes and partial get-only
   bound properties. Infer order from compilation syntax-tree order and source
   span, including declarations split across partial class files.

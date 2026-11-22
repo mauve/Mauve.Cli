@@ -69,8 +69,8 @@ and [ADR-011](../../Architecture/ADR-011-OptionPack-Composition.md).
   then inherited ancestors nearest-first. It controls stable diagnostics/
   callback order and the input to flat help-group ordering, never shadowing
   precedence or a requirement to render all options globally ungrouped (08/12/14).
-- **Validated / HelpRequested / Invalid:** only Validated has dispatchable
-  typed values. HelpRequested bypasses conversion/default/validator callbacks
+- **Validated / HelpRequested / HelpTreeRequested / Invalid:** only Validated has dispatchable
+  typed values. HelpRequested and HelpTreeRequested bypass conversion/default/validator callbacks
   and is not invocation; completion uses its own partial-context operation.
   Optional no-default entries may remain unavailable on Validated; this is
   distinct from invalid or available-null entries.

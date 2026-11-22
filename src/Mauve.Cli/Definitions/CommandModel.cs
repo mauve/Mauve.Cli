@@ -37,7 +37,7 @@ public sealed class CommandModel
     /// <summary>Creates and validates an immutable snapshot from a command graph.</summary>
     /// <param name="root">The root command builder.</param>
     /// <param name="limits">Optional positive model and parsing limits.</param>
-    /// <param name="includeStandardHelp">Whether to install <c>--help</c>/<c>-h</c> on each command.</param>
+    /// <param name="includeStandardHelp">Whether to install <c>--help</c>/<c>-h</c> and <c>--help-tree</c> on each command.</param>
     /// <returns>A validated command model.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="root"/> is null.</exception>
     /// <exception cref="ArgumentException">The graph contains invalid or ambiguous definitions.</exception>
@@ -98,7 +98,7 @@ public sealed class CommandModel
                     $"The command graph exceeds the maximum depth of {effectiveLimits.MaximumCommandDepth}."));
             }
 
-            int addedHelpOption = includeStandardHelp ? 1 : 0;
+            int addedHelpOption = includeStandardHelp ? 2 : 0;
             DirectiveBuilder[] directiveBuilders = frame.Builder.CopyDirectives();
             if (frame.Depth != 1 && directiveBuilders.Length > 0)
             {
@@ -139,7 +139,7 @@ public sealed class CommandModel
             string[] aliases = frame.Builder.CopyAliases();
             OptionDefinition[] directOptions = frame.Builder.CopyOptions();
             OptionDefinition[] options = includeStandardHelp
-                ? [.. directOptions, .. packedOptions, OptionDefinition.CreateStandardHelp()]
+                ? [.. directOptions, .. packedOptions, OptionDefinition.CreateStandardHelp(), OptionDefinition.CreateStandardHelpTree()]
                 : [.. directOptions, .. packedOptions];
             PositionalDefinition[] positionals = frame.Builder.CopyPositionals();
             CrossValueValidator[] crossValidators = frame.Builder.CopyCrossValidators();

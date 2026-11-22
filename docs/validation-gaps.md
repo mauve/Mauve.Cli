@@ -8,6 +8,16 @@ and the installed [policy](../governance.md).
 
 ## Current baseline
 
+The hierarchy and help-tree change passed a 143-test Release MTP run, including
+34 generator tests, 107 runtime tests and 2 managed AOT tests. Per-project
+metadata-bearing reports and imported requirement evidence are under
+`artifacts/test-results/hierarchy-help-tree/`; the independently executed
+trimmed and NativeAOT checks are under
+`artifacts/aot-verification/linux-x64/20261122T154453Z/`. Governance validation,
+the tooling probes and changed-file format verification passed. The full
+`scripts/verify.sh` gate remains blocked at the solution build by the
+pre-existing Hello CA1822 edit described below.
+
 FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
 FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-10, FEAT-11, FEAT-12,
@@ -65,6 +75,11 @@ is claimed.
 
 | Requirement | Validation method | Evidence or procedure | Owner | Environment / prerequisites | Gap or waiver details |
 | --- | --- | --- | --- | --- | --- |
+| FEAT-08-006 | portable automated | `HelpTreeTests.Render_ProjectsVisibleFullAndSelectedTreesSafely`; `HelpTreeTests.Write_UsesSanitizedProjectionAndPropagatesOutputFaults`; `CommandModelTests.Create_InstallsHelpTreeAndAccountsForItsLimitsAndCollisions`; `CliParserTests.Parse_HelpTreeHonorsHelpPrecedenceAndConflicts`; `CliInvokerTests.Run_HelpTreeUsesHostOutputAndPreservesDirectiveOrder` | Mauve.Cli maintainers | .NET 11 | All five methods passed in the 107-test Release runtime MTP run; metadata-bearing TRX and imported evidence are under `artifacts/test-results/hierarchy-help-tree/`. |
+| FEAT-08-006 | environment-gated automated | `scripts/verify-aot.sh` root and selected help-tree checks for generated and explicit examples | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | All four trimmed and NativeAOT publications executed both tree modes successfully. Logs are under `artifacts/aot-verification/linux-x64/20261122T154453Z/`. |
+| FEAT-11-001 | portable automated | `CliModelGeneratorTests.Generate_CombinesParentAndChildEdgesInGlobalSourceOrder`; `CliModelGeneratorTests.Generate_UpdatesParentOnlyHierarchyWhenAnEdgeChanges` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Both methods passed in the 34-test Release generator MTP run; metadata-bearing TRX and imported evidence are under `artifacts/test-results/hierarchy-help-tree/`. |
+| FEAT-11-002 | portable automated | `CliModelGeneratorTests.Generate_CombinesParentAndChildEdgesInGlobalSourceOrder`; `CliModelGeneratorTests.Generate_UpdatesParentOnlyHierarchyWhenAnEdgeChanges` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Both methods passed in the 34-test Release generator MTP run; metadata-bearing TRX and imported evidence are under `artifacts/test-results/hierarchy-help-tree/`. |
+| FEAT-11-004 | portable automated | `CliModelGeneratorTests.Generate_ReportsBothDeclarationsOfTheSameEdge`; `CliModelGeneratorTests.Generate_ConflictingEdgeDoesNotInvalidateAnUnrelatedRoot`; `CliModelGeneratorTests.Generate_RejectsCyclesAcrossAllDeclaredCommands`; `CliModelGeneratorTests.Generate_RejectsInvalidParentTargetsAndRootChildren` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | All four methods passed in the 34-test Release generator MTP run; metadata-bearing TRX and imported evidence are under `artifacts/test-results/hierarchy-help-tree/`. |
 | FEAT-08-005 | portable automated | `HelpDocumentTests.Create_ExpandsCanonicalExamplesWithoutReplacingDeclaredCommandNames`; `HelpDocumentTests.Create_SnapshotsExamplesAndRejectsInvalidExampleInputs`; `CliInvokerTests.Run_PassesExecutableExamplesToDefaultHelpRenderer`; `CliInvokerTests.RunAsync_PassesExecutableExamplesToCustomHelpRenderer` | Mauve.Cli maintainers | .NET 11 | All four methods passed in the 102-test runtime suite and final 132-test Release MTP run; metadata-bearing TRX imported under `artifacts/test-results/xml-documentation-20261122-final/`. The full repository gate remains blocked by the unrelated Hello CA1822 edit. |
 | FEAT-11-006 | portable automated | `CliModelGeneratorTests.Generate_InfersXmlMetadataAndShellExamplesWithExplicitModelParity`; `CliModelGeneratorTests.Generate_PreservesExplicitXmlMetadataOverridesIncludingEmptyAndNull`; `CliModelGeneratorTests.Generate_RejectsInvalidShellExamplesButIgnoresOtherLanguages`; `CliModelGeneratorTests.Generate_UpdatesXmlOnlyEditsWithStableUnchangedOutput` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | All four methods passed in the 28-test generator suite and final 132-test Release MTP run, including malformed XML diagnostics; metadata-bearing TRX imported under `artifacts/test-results/xml-documentation-20261122-final/`. The full repository gate remains blocked by the unrelated Hello CA1822 edit. |
 | FEAT-01-001 | portable automated | `CommandModelTests.Create_PreservesOrderedHierarchyMetadataAndCanonicalPaths`; `CommandModelTests.Create_AllowsACommandWithoutChildren` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; passed in the strict 83-test MTP suite. |

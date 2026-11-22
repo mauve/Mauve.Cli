@@ -7,7 +7,7 @@ public interface IGeneratedCliCommand
 {
     /// <summary>Creates the validated model for this generated command root.</summary>
     /// <param name="limits">Optional model and parsing limits.</param>
-    /// <param name="includeStandardHelp">Whether to add the standard help option.</param>
+    /// <param name="includeStandardHelp">Whether to add the standard help and help-tree options.</param>
     /// <returns>The validated command model.</returns>
     static abstract CommandModel CreateModel(CliLimits? limits = null, bool includeStandardHelp = false);
 }

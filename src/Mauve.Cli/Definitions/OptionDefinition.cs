@@ -160,6 +160,8 @@ public sealed class OptionDefinition
 
     internal bool IsHelpOption { get; private init; }
 
+    internal bool IsHelpTreeOption { get; private init; }
+
     internal static OptionDefinition CreateStandardHelp()
     {
         return new OptionDefinition(
@@ -169,6 +171,14 @@ public sealed class OptionDefinition
             aliases: [new OptionAlias("-h")])
         {
             IsHelpOption = true
+        };
+    }
+
+    internal static OptionDefinition CreateStandardHelpTree()
+    {
+        return new OptionDefinition("--help-tree", typeof(bool), OptionArity.BooleanFlag)
+        {
+            IsHelpTreeOption = true
         };
     }
 }

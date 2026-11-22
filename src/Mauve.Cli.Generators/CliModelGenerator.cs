@@ -18,6 +18,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 {
     private const string _commandAttributeName = "Mauve.Cli.Declarations.CliCommandAttribute";
     private const string _childAttributeName = "Mauve.Cli.Declarations.CliChildAttribute`1";
+    private const string _parentAttributeName = "Mauve.Cli.Declarations.CliParentAttribute`1";
     private const string _optionAttributeName = "Mauve.Cli.Declarations.CliOptionAttribute";
     private const string _argumentAttributeName = "Mauve.Cli.Declarations.CliArgumentAttribute";
     private const string _handlerAttributeName = "Mauve.Cli.Declarations.CliHandlerAttribute";
@@ -153,10 +154,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         foreach (CommandInfo command in commands.Values.OrderBy(static item =>
             item.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
         {
-            ReadChildren(context, command, commands, syntaxTreeOrder);
+            ReadCommandEdges(context, command, commands, syntaxTreeOrder);
             command.IsValid &= ReadPackInclusions(context, command.Symbol, command.Packs, packs);
             ReadCommandDirectives(context, command, directives, syntaxTreeOrder);
         }
+
+        ValidateCommandGraph(context, commands.Values);
 
         foreach (CommandInfo command in commands.Values)
         {
@@ -908,38 +911,105 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                     or "System.Threading.Tasks.ValueTask<TResult>");
     }
 
-    private static void ReadChildren(
+    private static void ReadCommandEdges(
         SourceProductionContext context,
         CommandInfo command,
         Dictionary<INamedTypeSymbol, CommandInfo> commands,
         IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
         foreach (AttributeData attribute in command.Symbol.GetAttributes()
-            .Where(static item => IsAttribute(item, _childAttributeName)))
+            .Where(static item => IsAttribute(item, _childAttributeName) || IsAttribute(item, _parentAttributeName)))
         {
-            if (GetAttributeTypeArgument(attribute) is not INamedTypeSymbol childType
-                || !commands.TryGetValue(childType, out CommandInfo? child))
+            bool isParentDeclaration = IsAttribute(attribute, _parentAttributeName);
+            if (GetAttributeTypeArgument(attribute) is not INamedTypeSymbol referencedType
+                || !commands.TryGetValue(referencedType, out CommandInfo? referencedCommand))
             {
-                Report(context, _invalidHierarchy, GetLocation(attribute, command.Symbol), "Every child type must have a CliCommand declaration in this compilation.");
+                Report(context, _invalidHierarchy, GetLocation(attribute, command.Symbol), isParentDeclaration
+                    ? "Every parent type must have a CliCommand declaration in this compilation."
+                    : "Every child type must have a CliCommand declaration in this compilation.");
                 command.IsValid = false;
                 continue;
             }
 
+            CommandInfo parent = isParentDeclaration ? referencedCommand : command;
+            CommandInfo child = isParentDeclaration ? command : referencedCommand;
+            ChildInfo edge = new(
+                parent,
+                child,
+                attribute,
+                GetSourceOrder(attribute, command.Symbol, syntaxTreeOrder),
+                isParentDeclaration);
             if (child.IsRoot)
             {
                 Report(context, _invalidHierarchy, GetLocation(attribute, command.Symbol), "A model root cannot be included as a child.");
                 command.IsValid = false;
+                edge.IsValid = false;
+            }
+
+            parent.Children.Add(edge);
+        }
+    }
+
+    private static void ValidateCommandGraph(SourceProductionContext context, IEnumerable<CommandInfo> commands)
+    {
+        CommandInfo[] ordered = [.. commands.OrderBy(static command =>
+            command.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)];
+        foreach (CommandInfo command in ordered)
+        {
+            command.Children.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
+            foreach (IGrouping<CommandInfo, ChildInfo> edges in command.Children.GroupBy(static edge => edge.Child))
+            {
+                if (!edges.Any(static edge => edge.IsParentDeclaration)
+                    || !edges.Any(static edge => !edge.IsParentDeclaration))
+                {
+                    continue;
+                }
+
+                foreach (ChildInfo edge in edges)
+                {
+                    Report(context, _invalidHierarchy, GetLocation(edge.Attribute, edge.DeclaringCommand.Symbol),
+                        "Declare each command relationship using either CliChild or CliParent, not both.");
+                    edge.IsValid = false;
+                }
+            }
+        }
+
+        HashSet<CommandInfo> visited = [];
+        HashSet<CommandInfo> active = [];
+        foreach (CommandInfo command in ordered)
+        {
+            if (!visited.Add(command))
+            {
                 continue;
             }
 
-            command.Children.Add(new ChildInfo(
-                command,
-                child,
-                attribute,
-                GetSourceOrder(attribute, command.Symbol, syntaxTreeOrder)));
-        }
+            _ = active.Add(command);
+            Stack<(CommandInfo Command, int NextChild)> stack = new();
+            stack.Push((command, 0));
+            while (stack.Count > 0)
+            {
+                (CommandInfo current, int nextChild) = stack.Pop();
+                if (nextChild == current.Children.Count)
+                {
+                    _ = active.Remove(current);
+                    continue;
+                }
 
-        command.Children.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
+                stack.Push((current, nextChild + 1));
+                ChildInfo edge = current.Children[nextChild];
+                if (active.Contains(edge.Child))
+                {
+                    Report(context, _invalidHierarchy, GetLocation(edge.Attribute, edge.DeclaringCommand.Symbol),
+                        "The command hierarchy contains a cycle.");
+                    edge.IsValid = false;
+                }
+                else if (visited.Add(edge.Child))
+                {
+                    _ = active.Add(edge.Child);
+                    stack.Push((edge.Child, 0));
+                }
+            }
+        }
     }
 
     private static bool ValidateTree(
@@ -959,6 +1029,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         HashSet<string> commandNames = [with(StringComparer.Ordinal)];
         foreach (ChildInfo child in command.Children)
         {
+            if (!child.IsValid)
+            {
+                valid = false;
+                continue;
+            }
+
             if (!commandNames.Add(child.Child.Name))
             {
                 Report(context, _invalidHierarchy, GetLocation(child.Attribute, command.Symbol), "Sibling command names or aliases must be unique.");
@@ -1001,7 +1077,10 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         foreach (ChildInfo child in command.Children)
         {
-            valid &= ValidateTree(context, child.Child, active, inheritedForChildren, activePacks);
+            if (child.IsValid)
+            {
+                valid &= ValidateTree(context, child.Child, active, inheritedForChildren, activePacks);
+            }
         }
 
         _ = active.Remove(command.Symbol);
@@ -2386,7 +2465,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         CommandInfo parent,
         CommandInfo child,
         AttributeData attribute,
-        SourceOrder sourceOrder)
+        SourceOrder sourceOrder,
+        bool isParentDeclaration)
     {
         public CommandInfo Parent { get; } = parent;
 
@@ -2396,6 +2476,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public SourceOrder SourceOrder { get; } = sourceOrder;
 
+        public bool IsParentDeclaration { get; } = isParentDeclaration;
+
+        public CommandInfo DeclaringCommand => IsParentDeclaration ? Child : Parent;
+
+        public bool IsValid { get; set; } = true;
     }
 
     private readonly struct SourceOrder(int syntaxTreeOrder, int spanStart)

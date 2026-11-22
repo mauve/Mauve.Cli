@@ -8,7 +8,7 @@ generator. Both approaches use the same parser.
 
 - Nested commands, aliases, options, and positional arguments.
 - Typed values, defaults, validation, and clear parse errors.
-- Built-in help and asynchronous command handlers.
+- Built-in help, Unicode command-tree help, and asynchronous command handlers.
 - Root directives that run before command dispatch.
 - Opt-in debugger-wait and shell-completion directives.
 - Reusable nested option packs.
@@ -27,6 +27,7 @@ NuGet package yet.
 dotnet run --project examples/01-Hello/Declarative
 dotnet run --project examples/01-Hello/Manual
 dotnet run --project examples/02-Commands/Declarative -- greet Ada
+dotnet run --project examples/02-Commands/Declarative -- --help-tree
 dotnet run --project examples/09-Completion/Manual -- '[completion:bash]'
 ```
 
@@ -81,6 +82,11 @@ dispatch. It derives `greet` and `--name` from the C# identifiers and derives
 the scalar arity from `string`. Option packs can group reusable options in
 either API. Generated handlers may return `void`, `int`, `Task`, `Task<int>`,
 `ValueTask`, or `ValueTask<int>`; async-void handlers are unsupported.
+
+Declare command relationships on a parent with `[CliChild<TChild>]` or on a
+child with `[CliParent<TParent>]`; both forms can be mixed in one hierarchy.
+Standard help includes `--help-tree` to display the visible command hierarchy,
+or the selected command's subtree when used after a subcommand.
 
 Generated roots can add predefined directives at the host entry point:
 

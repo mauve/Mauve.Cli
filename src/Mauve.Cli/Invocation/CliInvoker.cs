@@ -187,6 +187,11 @@ public sealed class CliInvoker(CliParser? parser = null)
             return InvocationResult.HelpRequested(parseResult);
         }
 
+        if (parseResult.Outcome == ParseOutcome.HelpTreeRequested)
+        {
+            return InvocationResult.HelpTreeRequested(parseResult);
+        }
+
         if (cancellationToken.IsCancellationRequested)
         {
             return InvocationResult.Cancelled(parseResult);
@@ -266,6 +271,14 @@ public sealed class CliInvoker(CliParser? parser = null)
                     options.StandardOutput.WriteLine,
                     options.HelpWidth,
                     options.HelpRenderer);
+                return 0;
+            case InvocationOutcome.HelpTreeRequested:
+                CommandDefinition treeCommand = result.SelectedCommand
+                    ?? throw new InvalidOperationException("A help-tree request has no selected command.");
+                HelpTreeOutput.Write(
+                    HelpTreeDocument.Create(model, treeCommand),
+                    options.StandardOutput.WriteLine,
+                    options.HelpTreeRenderer);
                 return 0;
             case InvocationOutcome.InvalidInput:
                 foreach (string line in result.FormatDiagnostics())

@@ -174,11 +174,24 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 directivesValid);
         }
 
-        if (inScopeOccurrences.Exists(static occurrence =>
-            occurrence.Option.IsHelpOption && occurrence.BooleanValue == true))
+        bool helpRequested = inScopeOccurrences.Exists(static occurrence =>
+            occurrence.Option.IsHelpOption && occurrence.BooleanValue == true);
+        bool helpTreeRequested = inScopeOccurrences.Exists(static occurrence =>
+            occurrence.Option.IsHelpTreeOption && occurrence.BooleanValue == true);
+        if (helpRequested && helpTreeRequested)
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.ConflictingOptions,
+                "Options '--help' and '--help-tree' cannot be used together."));
+            return InvalidResult(tokens, [.. selectedPath], diagnostics.ToOrderedArray(), unmatched,
+                directivesValid ? [.. parsedDirectives] : [],
+                directivesValid);
+        }
+
+        if (helpRequested || helpTreeRequested)
         {
             return new ParseResult(
-                ParseOutcome.HelpRequested,
+                helpRequested ? ParseOutcome.HelpRequested : ParseOutcome.HelpTreeRequested,
                 [.. selectedPath],
                 [],
                 [.. unmatched],
@@ -766,7 +779,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     {
         foreach (OptionOccurrence occurrence in occurrences)
         {
-            if (occurrence.Option.IsHelpOption
+            if ((occurrence.Option.IsHelpOption || occurrence.Option.IsHelpTreeOption)
                 && occurrence.Values.Count > 0
                 && occurrence.BooleanValue is null)
             {

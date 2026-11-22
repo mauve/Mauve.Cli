@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Invocation;
 
@@ -9,10 +8,6 @@ namespace Hello.Declarative;
 internal sealed partial class HelloCommand
 {
     [CliHandler]
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Generated command handlers are instance methods.")]
     private int Run()
     {
         Console.WriteLine("Hello, world!");

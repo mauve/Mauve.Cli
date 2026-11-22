@@ -58,6 +58,15 @@ public sealed class CliChildAttribute<TCommand> : Attribute
     public Type CommandType => typeof(TCommand);
 }
 
+/// <summary>Declares a parent command type for this command.</summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+public sealed class CliParentAttribute<TCommand> : Attribute
+    where TCommand : class
+{
+    /// <summary>Gets the parent command declaration type.</summary>
+    public Type CommandType => typeof(TCommand);
+}
+
 /// <summary>Declares an option on a generated command or option-pack type.</summary>
 [AttributeUsage(AttributeTargets.Property, Inherited = false)]
 public sealed class CliOptionAttribute(string? name = null) : Attribute

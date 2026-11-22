@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
@@ -34,19 +33,15 @@ internal sealed partial class InspectCommand
     public partial IReadOnlyList<string> Paths { get; }
 
     [CliHandler]
-    private int Run(CommandInvocationContext context)
+    private int Run()
     {
+        // The Filter property throws when --filter is absent; TryGetFilter distinguishes
+        // "absent" from an explicit bare --filter (which binds null).
+        string? filter = TryGetFilter(out string? value) ? value : null;
         Console.WriteLine(
-            $"verbose={Verbose}; filter={GetFilter(context) ?? "(null)"}; tags=[{string.Join(", ", Tags)}]; paths=[{string.Join(", ", Paths)}]");
+            $"verbose={Verbose}; filter={filter ?? "(null)"}; tags=[{string.Join(", ", Tags)}]; paths=[{string.Join(", ", Paths)}]");
         return 0;
     }
-
-    private static string? GetFilter(CommandInvocationContext context)
-    {
-        OptionDefinition filter = context.Command.Options.Single(static option => option.Name == "--filter");
-        return context.TryGetOptionValue(filter, out string? value) ? value : null;
-    }
-
 }
 
 internal static class Program

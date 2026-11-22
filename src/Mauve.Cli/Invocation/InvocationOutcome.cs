@@ -16,5 +16,8 @@ public enum InvocationOutcome
     NoHandler,
 
     /// <summary>Caller cancellation stopped the invocation.</summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>The parser requested a help tree; no command handler ran.</summary>
+    HelpTreeRequested
 }
