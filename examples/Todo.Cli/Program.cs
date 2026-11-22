@@ -73,6 +73,6 @@ internal static class Program
     private static Task<int> Main(string[] args)
     {
         return CliInvoker.RunAsync<TodoCommand>(
-            args, [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateSuggest()]);
+            args, [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateCompletion("todo")]);
     }
 }

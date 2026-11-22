@@ -1,7 +1,8 @@
 # FEAT-10: Completion
 
 ## Status
-**ACTIVE**
+**ACTIVE** - shell integration supports the bounded syntax described below;
+full shell grammar and arbitrary mid-token replacement are not supported.
 
 ## Capability
 Offer shell-independent command, option and value suggestions with
@@ -35,18 +36,18 @@ Return a distinguishable provider failure and constrain candidate count and work
 
 ### FEAT-10-004 - Shell boundary
 Keep core candidates separate from shell-specific quoting and adapter behavior, with an explicit supported-adapter matrix.
-**Acceptance:** Core returns a candidate containing spaces as one logical value; an enabled adapter escapes it according to that shell, and an unsupported shell is reported as unsupported.
+**Acceptance:** Core returns a candidate containing spaces as one logical value; the opt-in Bash, Zsh, Fish and PowerShell adapters safely present supported candidates, and an unsupported shell is reported as unsupported.
 **Security:** Adapters must not evaluate candidate text as shell code.
 
-### FEAT-10-005 - Suggest protocol input
-Translate a dotnet-suggest command-line payload and UTF-16 cursor position to a logical completion request.
+### FEAT-10-005 - Shell completion input
+Translate a bounded shell completion command-line payload and UTF-16 cursor position to a logical completion request.
 **Acceptance:** Executable removal and cursor mapping preserve quoted and escaped arguments and correctly handle an empty active word; invalid coordinates fail explicitly.
 **Security:** Treat the payload as inert text, never perform expansion or execution, and respect model input limits.
 
 ## Design
-#### Suggest protocol boundary
+#### Completion protocol boundary
 
-The opt-in FEAT-15 suggest directive accepts a full command-line payload
+The opt-in FEAT-15 completion directive accepts a full command-line payload
 including the executable and a UTF-16 cursor position into that payload.
 Its adapter decodes whitespace-separated words, single and double quotes,
 and backslash escapes outside single quotes; within double quotes, backslash
@@ -176,8 +177,8 @@ exception-text rendering. Await/dispose fully before reporting an outcome.
 | --- | --- |
 | Core logical-token completion | Required by this feature. |
 | Explicit static/asynchronous providers and typed safe context | Required by this feature. |
-| dotnet-suggest payload decoding | Limited quote/escape grammar above; no shell expansion or execution. |
-| Bash, Zsh, Fish, PowerShell adapters | Unsupported. The API reports `UnsupportedShell`; hosts must perform lexing and escaping themselves. |
+| Shell completion payload decoding | Limited quote/escape grammar above; no shell expansion or execution. |
+| Bash, Zsh, Fish, PowerShell adapters | Opt-in `[completion:<shell>]` directive generates registration scripts for the bounded syntax below. `CompleteForShellAsync` remains a core-only unsupported placeholder. |
 | Raw command-line tokenization / shell execution | Not part of the core API. |
 
 Acceptance fixtures include `fi|`, `file --co|`, `file --mode=fa|st`,
@@ -191,10 +192,23 @@ Add `--mo|de=fast`, `--mode|=fast`, `--mode=|fast`, `-m|=fast`,
 513 duplicate/nonmatching results, an oversized display field, provider
 dependency leakage, and cancelled-vs-finalized-result race fixtures.
 
-The implementation keeps static metadata and explicitly registered dynamic
-providers while using typed scope, logical-token cursor ranges and explicit
-failure outcomes. Shell adapters remain unsupported until separate
-per-shell lexing and escaping contracts are approved.
+The predefined completion directive uses a versioned private protocol with
+inert command-line input and base64-encoded candidates. Shell adapters do not
+perform expansion or evaluate candidate text. They accept simple words, quotes,
+and backslash escapes subject to the common decoder's grammar; expansions,
+shell operators, control characters, and shell-specific escapes are rejected.
+Bash, Zsh, and Fish also reject a suffix after the cursor in the active token;
+PowerShell supports whole-token replacement. Bash supports an open quote at
+the start of a word or immediately after `=`, and unquoted backslash escapes,
+but rejects mixed, closed, or backslash-escaped quoted active words. It uses shell-specific escaping and `noquote`
+to prevent Readline from introducing executable substitution syntax. Zsh initializes its
+completion system if needed; Bash, Zsh and Fish require a `base64` executable.
+For Bash, unquoted colons and multiple equals signs in the active word are
+rejected because programmable completion may split them into shell fragments.
+When `=` is absent from `COMP_WORDBREAKS`, Bash uses whole-token responses and
+rejects quoted active words containing `=`.
+The adapters do not expose descriptions. These are explicit limitations, not a
+claim to implement the full grammar or replacement semantics of any shell.
 
 ## Metrics Impact
 **Instruments:** none - completion adds no runtime metrics.
@@ -204,11 +218,12 @@ Focused tests cover command and option candidates, cursor replacement ranges,
 inline and pending values, optional/boolean/end-marker behavior, explicit enum
 maps, negative numeric values, negating aliases, dependency isolation,
 sensitive-target suppression, provider faults, cancellation, candidate bounds
-and unsupported shells. `SuggestCommandLineTests` cover raw cursor mapping
+and unsupported shells. `CompletionCommandLineTests` cover raw cursor mapping
 and malformed coordinates. These tests passed in the 109-test strict MTP
 suite; see the [validation ledger](../validation-gaps.md). The published
 examples also produced suggestions in trimmed and NativeAOT execution.
-No shell adapter is claimed.
+The shell adapter methods and actual shell executions are tracked separately in
+the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

@@ -48,7 +48,8 @@ command -v jq >/dev/null
         examples/FileTool.Cli/FileTool.Cli.csproj \
         src/Mauve.Cli/Invocation/CliInvoker.cs \
         src/Mauve.Cli/Invocation/PredefinedDirectives.cs \
-        src/Mauve.Cli/Completion/SuggestCommandLine.cs \
+        src/Mauve.Cli/Completion/CompletionCommandLine.cs \
+        src/Mauve.Cli/Completion/ShellCompletion.cs \
         src/Mauve.Cli/Invocation/CliHostOptions.cs \
         src/Mauve.Cli/Invocation/IGeneratedCliCommand.cs \
         src/Mauve.Cli.Generators/CliModelGenerator.cs \
@@ -91,15 +92,17 @@ verify_example_directives() {
 
     {
         printf '$'
-        printf ' %q' "$@" "[suggest:${#payload}]" "$payload"
+        printf ' %q' "$@" '[completion:query-v1]' -- bash "$payload" "$payload"
         printf '\n'
     } | tee -a "$log"
-    output="$("$@" "[suggest:${#payload}]" "$payload")"
-    printf 'Directive completion output: %s\n' "$output" | tee -a "$log"
-    if [[ "$output" != "$expected" ]]; then
-        echo "$example returned unexpected directive completion." >&2
+    output="$("$@" "[completion:query-v1]" -- bash "$payload" "$payload")"
+    printf 'Shell completion output: %s\n' "$output" | tee -a "$log"
+    if [[ "$output" != "x$(printf '%s' "$expected" | base64)" ]]; then
+        echo "$example returned unexpected shell completion." >&2
         exit 1
     fi
+    "$@" '[completion:bash]' | bash -n
+    echo "Bash registration syntax verified." | tee -a "$log"
 
     {
         printf '$'
@@ -108,7 +111,7 @@ verify_example_directives() {
     } | tee -a "$log"
     output="$("$@" --help)"
     printf '%s\n' "$output" >>"$log"
-    if [[ "$output" != *"[debug]"* || "$output" != *"[suggest"* ]]; then
+    if [[ "$output" != *"[debug]"* || "$output" != *"[completion"* ]]; then
         echo "$example did not register both predefined directives." >&2
         exit 1
     fi

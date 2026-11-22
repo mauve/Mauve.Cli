@@ -5,7 +5,7 @@ using Mauve.Cli.Definitions;
 
 namespace Mauve.Cli.Completion;
 
-internal static class SuggestCommandLine
+internal static class CompletionCommandLine
 {
     internal static CompletionRequest CreateRequest(CommandModel model, string text, int cursor)
     {

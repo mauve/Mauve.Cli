@@ -59,10 +59,10 @@ Provide an opt-in `[debug]` directive that waits for an attached debugger and th
 **Acceptance:** The directive waits without busy-spinning, continues after attachment, and reports caller cancellation without dispatching later handlers.
 **Security:** It never launches a debugger or attaches one on the application's behalf.
 
-### FEAT-15-007 - Suggest directive
-Provide an opt-in `[suggest:NN]` directive that adapts a command-line payload into a completion request and writes newline-delimited insertion texts.
-**Acceptance:** Successful completion stops normal dispatch with exit code zero; invalid payloads, incomplete completion and provider failures return a nonzero result and cancellation remains cancellation.
-**Security:** Do not execute shell input, log raw payloads or emit partial results after a completion failure; reject multiline candidates.
+### FEAT-15-008 - Shell completion directive
+Provide an opt-in completion directive which emits a shell registration script and handles bounded versioned completion requests.
+**Acceptance:** Each supported shell can obtain a registration script; valid requests return encoded candidates without dispatching handlers and unsupported modes or invalid requests fail without candidate output.
+**Security:** Validate the registered command name, never evaluate candidate text, reject control characters and unsafe shell syntax, and return no partial results on failure.
 
 ## Design
 
@@ -99,16 +99,16 @@ on metadata only.
 
 `PredefinedDirectives.CreateDebug()` creates an independent registration
 which polls for debugger attachment and cooperates with caller cancellation.
-`PredefinedDirectives.CreateSuggest()` uses the invocation's host writers;
-an overload accepts explicit output/error writers and optional completion
-configuration. The directive accepts
-a required UTF-16 position and treats the last argv token outside all directive
-spans as the full command-line payload, including the executable. It uses
-FEAT-10's raw-payload adapter and writes candidates to the selected writer.
-Only a completed result succeeds; context/provider/limit failures, malformed
-payloads, and multiline candidates write a safe diagnostic and stop with exit
-code 2. Earlier directives may run first; normal parse errors do not prevent
-a valid suggest directive from completing.
+
+`PredefinedDirectives.CreateCompletion(commandName, service, providers)`
+registers shell integration. `[completion:bash]`,
+`[completion:zsh]`, `[completion:fish]`, and `[completion:powershell]` emit
+scripts for the configured command name. The scripts use an internal
+`query-v1` mode; its interface is not a public compatibility contract. See
+FEAT-10 for its grammar, safety and replacement limitations.
+
+The former FEAT-15-007 suggest directive is retired and its ID will not be
+reused. FEAT-15-008 owns the current shell integration.
 
 ## Metrics Impact
 **Instruments:** none - directive registration and invocation add no telemetry.
@@ -121,9 +121,9 @@ validate requirement metadata, build and test the solution, and publish/run
 the trimmed and NativeAOT acceptance scenarios. NativeAOT support is claimed
 only after that gate records successful generated and explicit directive
 execution; ordinary unit tests are not AOT evidence. The repository gate
-passed with 111 tests, including predefined debugger wait and suggest
-directive behavior. Both example applications exposed the predefined
-directives and produced expected suggestions in trimmed and NativeAOT
+previously passed with 120 tests, including predefined debugger wait and shell
+completion directive behavior. Both example applications exposed the predefined
+directives and produced expected shell completion in trimmed and NativeAOT
 execution on Linux x64. Debugger attachment was simulated in portable tests;
 no live debugger attachment is claimed.
 

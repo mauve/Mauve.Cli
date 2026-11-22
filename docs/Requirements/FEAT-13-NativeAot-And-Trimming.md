@@ -145,7 +145,7 @@ focused scenario checks valid nested alias binding, inherited and nested pack
 values, custom and enum conversion, nullable values, help/completion without
 handler dispatch, invalid input without dispatch, and sequential invocation
 isolation. Both published example modes also check that the predefined debug
-and suggest directives are registered and execute a suggest request.
+and shell completion directives are registered and execute a completion request.
 
 Observed on Ubuntu 26.04, .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`.
 Both example modes printed `AOT smoke check passed.` The managed and native

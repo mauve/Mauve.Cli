@@ -52,6 +52,64 @@ public sealed class CliModelGeneratorTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-15")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-15-008")]
+    public async Task Generate_RegistersCompletionProvidersFromGeneratedModel()
+    {
+        const string declaration = """
+            using System.Collections.Generic;
+            using System.IO;
+            using System.Threading.Tasks;
+            using Mauve.Cli.Completion;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Definitions;
+            using Mauve.Cli.Invocation;
+
+            namespace CompletionFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root
+            {
+                [CliOption(IsRequired = true)]
+                public partial string Name { get; }
+            }
+
+            public static class Fixture
+            {
+                public static async Task<string> Run()
+                {
+                    OptionDefinition option = Root.CreateModel().Root.Options[0];
+                    CompletionProviderRegistry providers = new CompletionProviderRegistryBuilder()
+                        .Register(option, static (_, _) => Values())
+                        .Build();
+                    using StringWriter output = new();
+                    using StringWriter errors = new();
+                    int code = await CliInvoker.RunAsync<Root>(
+                        ["[completion:query-v1]", "--", "bash", "tool --name=a", "tool --name=a"],
+                        [PredefinedDirectives.CreateCompletion("tool", providers: providers)],
+                        new CliHostOptions(output, errors));
+                    return $"{code}:{output}:{errors}";
+                }
+
+                private static async IAsyncEnumerable<CompletionValue> Values()
+                {
+                    yield return new CompletionValue("alpha");
+                    await Task.CompletedTask;
+                }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type type = fixture.GetType("CompletionFixture.Fixture", throwOnError: true)!;
+        Task<string> task = (Task<string>)type.GetMethod("Run")!.Invoke(null, null)!;
+        string output = await task.ConfigureAwait(false);
+
+        Assert.AreEqual($"0:xYWxwaGE={Environment.NewLine}:", output);
+    }
+
+    [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
@@ -263,7 +321,7 @@ public sealed class CliModelGeneratorTests
                 public static Task<int> RunAsync() => CliInvoker.RunAsync<SyncRoot>([]);
                 public static int RunHandlerless() => CliInvoker.Run<EmptyRoot>([]);
                 public static Task<int> RunWithDirectives() => CliInvoker.RunAsync<SyncRoot>(
-                    [], [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateSuggest()]);
+                    [], [PredefinedDirectives.CreateDebug(), PredefinedDirectives.CreateCompletion("sync")]);
             }
             """;
         const string asyncDeclaration = """

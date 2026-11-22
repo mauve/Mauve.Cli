@@ -392,17 +392,17 @@ public sealed class CliInvokerTests
 
         int completed = await CliInvoker.RunAsync<SyncHostCommand>(
             ["[first]", "[second]", "sync"], [first, second], options, TestContext.CancellationToken).ConfigureAwait(false);
-        int suggest = await CliInvoker.RunAsync<SyncHostCommand>(
-            ["[suggest:7]", "host sy"],
-            [PredefinedDirectives.CreateSuggest()], options, TestContext.CancellationToken).ConfigureAwait(false);
+        int completion = await CliInvoker.RunAsync<SyncHostCommand>(
+            ["[completion:query-v1]", "--", "bash", "host sy", "host sy"],
+            [PredefinedDirectives.CreateCompletion("host")], options, TestContext.CancellationToken).ConfigureAwait(false);
         int invalid = await CliInvoker.RunAsync<SyncHostCommand>(
-            ["[suggest:90]", "host sy"],
-            [PredefinedDirectives.CreateSuggest()], options, TestContext.CancellationToken).ConfigureAwait(false);
+            ["[completion:query-v1]", "--", "bash", "invalid", "host sy"],
+            [PredefinedDirectives.CreateCompletion("host")], options, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(23, completed);
         Assert.AreSequenceEqual(["first", "second"], calls);
-        Assert.AreEqual(0, suggest);
-        Assert.AreEqual($"sync{Environment.NewLine}", output.ToString());
+        Assert.AreEqual(0, completion);
+        Assert.AreEqual($"xc3luYw=={Environment.NewLine}", output.ToString());
         Assert.AreEqual(2, invalid);
         Assert.IsTrue(errors.ToString().Contains("Invalid completion", StringComparison.Ordinal));
     }

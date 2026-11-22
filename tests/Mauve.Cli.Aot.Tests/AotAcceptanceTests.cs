@@ -55,11 +55,11 @@ public sealed class AotAcceptanceTests
         using StringWriter output = new();
         using StringWriter errors = new();
         int exitCode = await CliInvoker.RunAsync<AotDirectiveRootCommand>(
-            ["[suggest:13]", "directive [ve"],
-            [PredefinedDirectives.CreateSuggest()],
+            ["[completion:query-v1]", "--", "bash", "directive ", "directive "],
+            [PredefinedDirectives.CreateCompletion("directive")],
             new CliHostOptions(output, errors), TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(0, exitCode, errors.ToString());
-        Assert.AreEqual($"[version]{Environment.NewLine}", output.ToString());
+        StringAssert.Contains(output.ToString(), "xW3ZlcnNpb25d", StringComparison.Ordinal);
         Assert.AreEqual(string.Empty, errors.ToString());
     }
 

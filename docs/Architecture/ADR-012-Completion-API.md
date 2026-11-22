@@ -29,19 +29,29 @@ belong to host adapters and must not be inferred by the core.
   and 1024 UTF-16 code units per candidate. Return explicit cancellation,
   provider-failure, context-failure and limit outcomes; never turn a failure
   into an empty successful result.
-- Do not implement shell adapters in the core. `CompleteForShellAsync`
-  reports `UnsupportedShell` until an adapter has an approved per-shell
-  tokenization and escaping contract.
-- The opt-in FEAT-15 `[suggest:NN]` directive provides a narrow raw-payload
-  adapter with the quote and escape grammar specified in FEAT-10. It removes
-  the executable and translates UTF-16 cursor positions to the existing
-  logical-token API. It is not a shell adapter and does not execute text.
+- Keep shell adapters outside the logical-token core. `CompleteForShellAsync`
+  remains an unsupported core placeholder; the opt-in completion directive
+  emits registration scripts for Bash, Zsh, Fish and PowerShell.
+- The shell adapter's narrow raw-payload decoder removes the executable and
+  translates UTF-16 cursor positions to the existing logical-token API using
+  the quote and escape grammar specified in FEAT-10.
+- Shell registration uses a private versioned request and base64 candidate
+  protocol. The shared bounded decoder rejects shell expansion, operators,
+  unsupported shell-specific escapes, and, except in PowerShell, active-token
+  suffixes rather than
+  executing input or guessing at its meaning. Bash uses shell-escaped literals
+  and supports a limited open-quote form and unquoted escapes, but rejects
+  mixed, closed, or escaped quoted active words. The current adapters
+  deliberately support a subset of each shell's grammar; a complete native
+  lexer and arbitrary mid-token replacement are future work.
+- Retire the separate `[suggest:NN]` directive and its dotnet-suggest-style
+  wire protocol; shell integration uses `[completion:<shell>]` instead.
 
 ## Consequences
 
-The API is safe for hosts that already own shell parsing, and provider work
-remains application-controlled. Completion support does not imply a shell
-integration or a hard time limit for non-cooperative callbacks.
+The core remains usable by hosts that already own shell parsing, and provider
+work remains application-controlled. Shell adapters have documented syntax
+limits and do not imply a hard time limit for non-cooperative callbacks.
 
 Affected requirement:
 [FEAT-10](../Requirements/FEAT-10-Completion.md).

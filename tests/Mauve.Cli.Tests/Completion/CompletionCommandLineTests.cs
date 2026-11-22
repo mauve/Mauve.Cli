@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Mauve.Cli.Tests.Completion;
 
 [TestClass]
-public sealed class SuggestCommandLineTests
+public sealed class CompletionCommandLineTests
 {
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
@@ -17,11 +17,11 @@ public sealed class SuggestCommandLineTests
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
         string payload = "tool copy \"hello world\" a\\ b '' tail";
 
-        CompletionRequest quoted = SuggestCommandLine.CreateRequest(model, payload, 17);
-        CompletionRequest escaped = SuggestCommandLine.CreateRequest(model, payload, 27);
-        CompletionRequest empty = SuggestCommandLine.CreateRequest(model, payload, 30);
-        CompletionRequest between = SuggestCommandLine.CreateRequest(model, payload, 24);
-        CompletionRequest append = SuggestCommandLine.CreateRequest(model, "tool ", 5);
+        CompletionRequest quoted = CompletionCommandLine.CreateRequest(model, payload, 17);
+        CompletionRequest escaped = CompletionCommandLine.CreateRequest(model, payload, 27);
+        CompletionRequest empty = CompletionCommandLine.CreateRequest(model, payload, 30);
+        CompletionRequest between = CompletionCommandLine.CreateRequest(model, payload, 24);
+        CompletionRequest append = CompletionCommandLine.CreateRequest(model, "tool ", 5);
 
         Assert.AreSequenceEqual(["copy", "hello world", "a b", string.Empty, "tail"], quoted.Arguments);
         Assert.AreEqual(1, quoted.CursorTokenIndex);
@@ -43,14 +43,14 @@ public sealed class SuggestCommandLineTests
     {
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
         string payload = "tool '$(echo x)' \"unfinished";
-        CompletionRequest request = SuggestCommandLine.CreateRequest(model, payload, payload.Length);
+        CompletionRequest request = CompletionCommandLine.CreateRequest(model, payload, payload.Length);
 
         Assert.AreSequenceEqual(["$(echo x)", "unfinished"], request.Arguments);
         Assert.AreEqual(1, request.CursorTokenIndex);
         Assert.AreEqual("unfinished".Length, request.CursorCharacterOffset);
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SuggestCommandLine.CreateRequest(model, payload, -1));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SuggestCommandLine.CreateRequest(model, payload, payload.Length + 1));
-        Assert.ThrowsExactly<ArgumentException>(() => SuggestCommandLine.CreateRequest(model, payload, 2));
-        Assert.ThrowsExactly<ArgumentException>(() => SuggestCommandLine.CreateRequest(model, string.Empty, 0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CompletionCommandLine.CreateRequest(model, payload, -1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CompletionCommandLine.CreateRequest(model, payload, payload.Length + 1));
+        Assert.ThrowsExactly<ArgumentException>(() => CompletionCommandLine.CreateRequest(model, payload, 2));
+        Assert.ThrowsExactly<ArgumentException>(() => CompletionCommandLine.CreateRequest(model, string.Empty, 0));
     }
 }

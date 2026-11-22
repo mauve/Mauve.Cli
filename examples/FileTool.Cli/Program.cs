@@ -35,7 +35,7 @@ internal static class Program
         return CommandModel.Create(
             new CommandBuilder("file-tool")
                 .AddDirective(PredefinedDirectives.CreateDebug())
-                .AddDirective(PredefinedDirectives.CreateSuggest())
+                .AddDirective(PredefinedDirectives.CreateCompletion("file-tool"))
                 .AddChild(new CommandBuilder("copy")
                     .AddOption(overwrite)
                     .AddPositional(source)
