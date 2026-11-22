@@ -13,6 +13,64 @@ public sealed class HelpDocumentTests
 {
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-005")]
+    public void Create_ExpandsCanonicalExamplesWithoutReplacingDeclaredCommandNames()
+    {
+        CommandBuilder add = new CommandBuilder("add")
+            .AddAlias("new")
+            .AddExample("add --text \"A  A\"")
+            .AddExample("todo item add --text AAA")
+            .AddExample("$0 item add --text AAA")
+            .AddExample("$0 add --text AAA")
+            .AddExample("new --text AAA")
+            .AddExample("additional --text AAA")
+            .AddExample("add --text $00 --path x$0 --literal \"$0\"")
+            .AddExample("add --text AAA\u001b\u202e");
+        CommandModel model = CommandModel.Create(new CommandBuilder("todo")
+            .AddExample("$0 --help")
+            .AddChild(new CommandBuilder("item").AddChild(add)));
+        CommandDefinition selected = model.Root.Children[0].Children[0];
+        HelpDocument help = HelpDocument.Create(model, selected, "runner\u001b\u202e");
+
+        Assert.AreSequenceEqual(
+            [
+                "todo item add --text \"A  A\"",
+                "todo item add --text AAA",
+                "runner item add --text AAA",
+                "runner item add --text AAA",
+                "new --text AAA",
+                "additional --text AAA",
+                "todo item add --text $00 --path x$0 --literal \"$0\"",
+                "todo item add --text AAA"
+            ],
+            [.. help.Examples]);
+        Assert.AreEqual("$0 add --text AAA", selected.Examples[3]);
+        Assert.AreEqual("todo --help", HelpDocument.Create(model).Examples[0]);
+        Assert.AreEqual("runner --help", HelpDocument.Create(model, executableName: "runner").Examples[0]);
+        string output = HelpTextRenderer.Render(help);
+        StringAssert.Contains(output, "Examples:\n  todo item add --text \"A  A\"\n", StringComparison.Ordinal);
+        Assert.IsTrue(HelpTextRenderer.Render(help, 20).Split('\n').All(static line => line.Length <= 20));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-005")]
+    public void Create_SnapshotsExamplesAndRejectsInvalidExampleInputs()
+    {
+        CommandBuilder builder = new CommandBuilder("tool").AddExample("  $0 --help  ");
+        CommandModel model = CommandModel.Create(builder);
+        _ = builder.AddExample("$0 --version");
+
+        Assert.AreSequenceEqual(["$0 --help"], [.. model.Root.Examples]);
+        Assert.ThrowsExactly<ArgumentNullException>(() => builder.AddExample(null!));
+        Assert.ThrowsExactly<ArgumentException>(() => builder.AddExample(" "));
+        Assert.ThrowsExactly<ArgumentException>(() => builder.AddExample("one\ntwo"));
+        Assert.ThrowsExactly<ArgumentException>(() => builder.AddExample("one\rtwo"));
+        Assert.ThrowsExactly<ArgumentException>(() => HelpDocument.Create(model, executableName: ""));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-001")]
     public void Create_ProjectsVisibleCommandsPositionalsAndOptionAliases()
     {

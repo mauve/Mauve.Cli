@@ -14,6 +14,7 @@ public sealed class HelpDocument
     private readonly ReadOnlyCollection<HelpPositionalItem> _positionals;
     private readonly ReadOnlyCollection<HelpOptionGroup> _optionGroups;
     private readonly ReadOnlyCollection<HelpDirectiveItem> _directives;
+    private readonly ReadOnlyCollection<string> _examples;
 
     internal HelpDocument(
         string usage,
@@ -22,7 +23,8 @@ public sealed class HelpDocument
         HelpCommandItem[] children,
         HelpPositionalItem[] positionals,
         HelpOptionGroup[] optionGroups,
-        HelpDirectiveItem[] directives)
+        HelpDirectiveItem[] directives,
+        string[] examples)
     {
         Usage = usage;
         Description = description;
@@ -31,6 +33,7 @@ public sealed class HelpDocument
         _positionals = Array.AsReadOnly(positionals);
         _optionGroups = Array.AsReadOnly(optionGroups);
         _directives = Array.AsReadOnly(directives);
+        _examples = Array.AsReadOnly(examples);
     }
 
     /// <summary>Gets the deterministic usage line.</summary>
@@ -54,13 +57,24 @@ public sealed class HelpDocument
     /// <summary>Gets visible directive syntax in root registration order.</summary>
     public IReadOnlyList<HelpDirectiveItem> Directives => _directives;
 
+    /// <summary>Gets ordered, sanitized example invocations with canonical ancestors and executable substitutions.</summary>
+    public IReadOnlyList<string> Examples => _examples;
+
     /// <summary>Creates a sanitized help projection for the root or a command in the model.</summary>
     /// <param name="model">The validated command model.</param>
     /// <param name="command">The command to describe, or the root when omitted.</param>
+    /// <param name="executableName">The executable display name for <c>$0</c>, or the root display label when omitted.</param>
     /// <returns>A read-only help document.</returns>
-    public static HelpDocument Create(CommandModel model, CommandDefinition? command = null)
+    public static HelpDocument Create(
+        CommandModel model,
+        CommandDefinition? command = null,
+        string? executableName = null)
     {
         ArgumentNullException.ThrowIfNull(model);
+        if (executableName is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(executableName);
+        }
         CommandDefinition selected = command ?? model.Root;
         if (!Contains(model.Root, selected))
         {
@@ -138,7 +152,9 @@ public sealed class HelpDocument
             children,
             positionals,
             [.. groups.Select(static group => group.Build())],
-            directives);
+            directives,
+            [.. selected.Examples.Select(example => HelpExampleExpander.Expand(
+                example, selected.Path, executableName ?? model.Root.Name))]);
     }
 
     private static HelpDirectiveItem CreateDirectiveItem(DirectiveDefinition directive)

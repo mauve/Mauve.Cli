@@ -42,7 +42,30 @@ Generated roots expose a common static model-factory contract; roots whose reach
 **Acceptance:** `RunAsync<TCommand>` compiles and runs for any generated root; `Run<TCommand>` compiles for a synchronous tree, including a handlerless tree, and fails C# generic constraint checking when any reachable handler is asynchronous.
 **Security:** Capability classification is deterministic over the validated generated command tree and never relies on runtime reflection, async detection, or fallback dispatch.
 
+### FEAT-11-006 - XML documentation metadata
+Infer omitted display metadata and shell invocation examples from command, option, positional and OptionPack XML documentation at build time.
+**Acceptance:** Command summary/remarks become Description/LongDescription; option and positional summaries become Description; pack summary/remarks become Title/Description. Explicit attribute values, including empty strings and null, win. Ordered shell code examples compile into the same metadata as explicit builders; non-shell examples remain documentation-only. XML-only edits update generated output.
+**Security:** Read documentation without expanding external includes or resolving XML entities; do not execute example text or discover documentation at runtime. Invalid shell examples produce MCLI002 and suppress root registration.
+
 ## Design
+XML documentation is optional. Command `<summary>` and `<remarks>` supply
+short and long descriptions; property `<summary>` supplies an option or
+positional description; pack `<summary>` supplies its short title and
+`<remarks>` its longer description. A named attribute argument is authoritative,
+including explicit empty or null values. A missing XML element remains null.
+Whitespace introduced by source formatting is normalized; inline code and
+references remain plain text and `<para>` preserves paragraph breaks.
+External `<include>` and `<inheritdoc>` expansion is not supported.
+
+Command examples use `<example><code>add --text AAA</code></example>`, with
+one nonempty invocation line per code element. Omitted `language` defaults to
+shell; `language="shell"` is explicit (case-insensitive). Other languages,
+including `language="csharp"`, are ignored by help extraction and may contain
+multiline or empty code. Multiple shell examples retain XML order. Nested
+markup in shell code is rejected; XML-escaped text or CDATA can represent
+literal command text. Plain example prose is not an invocation. The runtime
+projection and executable/path expansion are owned by FEAT-08-005.
+
 The public declarations live in `Mauve.Cli.Declarations`. Commands are
 top-level, non-generic partial classes. Children and members have
 source-derived order. Bound properties are partial, get-only instance
@@ -103,6 +126,12 @@ verification for the replacement is recorded in the validation ledger.
 **Instruments:** none - source generation adds no runtime instrumentation.
 
 ## Verification
+`CliModelGeneratorTests.Generate_InfersXmlMetadataAndShellExamplesWithExplicitModelParity`,
+`Generate_PreservesExplicitXmlMetadataOverridesIncludingEmptyAndNull`,
+`Generate_RejectsInvalidShellExamplesButIgnoresOtherLanguages`, and
+`Generate_UpdatesXmlOnlyEditsWithStableUnchangedOutput` verify FEAT-11-006.
+Observed results belong in the validation ledger.
+
 Generator-driver tests compile and execute nested generated consumers,
 compare an invocation outcome with an explicit model, and verify all
 supported asynchronous handler return shapes (`Task`, `Task<int>`,

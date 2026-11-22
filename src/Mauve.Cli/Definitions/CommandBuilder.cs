@@ -11,6 +11,7 @@ namespace Mauve.Cli.Definitions;
 public sealed class CommandBuilder
 {
     private readonly List<string> _aliases = [];
+    private readonly List<string> _examples = [];
     private readonly List<CommandBuilder> _children = [];
     private readonly List<DirectiveBuilder> _directives = [];
     private readonly List<OptionDefinition> _options = [];
@@ -37,6 +38,21 @@ public sealed class CommandBuilder
 
     /// <summary>Gets or sets whether ordinary help and completion hide this command.</summary>
     public bool IsHidden { get; set; }
+
+    /// <summary>Adds an ordered, single-line shell invocation example.</summary>
+    /// <param name="example">Inert example text, optionally containing a standalone executable placeholder <c>$0</c>.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder AddExample(string example)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(example);
+        if (example.Contains('\r', StringComparison.Ordinal) || example.Contains('\n', StringComparison.Ordinal))
+        {
+            throw new ArgumentException("A command example must contain one invocation line.", nameof(example));
+        }
+
+        _examples.Add(example.Trim());
+        return this;
+    }
 
     /// <summary>Adds an alias to this command.</summary>
     /// <param name="alias">The command alias.</param>
@@ -224,6 +240,8 @@ public sealed class CommandBuilder
     internal DirectiveBuilder[] CopyDirectives() => [.. _directives];
 
     internal string[] CopyAliases() => [.. _aliases];
+
+    internal string[] CopyExamples() => [.. _examples];
 
     internal CommandBuilder[] CopyChildren() => [.. _children];
 

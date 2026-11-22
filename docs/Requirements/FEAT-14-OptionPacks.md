@@ -48,7 +48,7 @@ invocation values in static state or resolve arbitrary constructor services.
 
 ### FEAT-14-004 - Help integration
 Project pack titles into help groups without mutating option metadata.
-**Acceptance:** Nested titled packs form separate groups in child-first option order; an untitled child inherits the nearest titled parent.
+**Acceptance:** Nested titled packs form separate groups in child-first option order; an untitled child inherits the nearest titled parent. Generated packs infer Title from XML summary and Description from remarks unless the corresponding attribute argument is explicit, including empty or null values.
 **Security:** Pack titles and descriptions pass through the existing help sanitizer.
 
 ### FEAT-14-005 - Per-invocation isolation
@@ -57,6 +57,12 @@ Keep values and mutable collections in each parse result, not reusable pack defi
 **Security:** Reusing a pack blueprint cannot expose another invocation's values.
 
 ## Design
+Generated pack display metadata can come from XML documentation, as specified
+by FEAT-11-006. Summary is the short title and remarks the longer description.
+This changes metadata sources only: root help already includes visible packed
+options, and child help includes ancestor pack options only when their options
+declare inherited scope. Empty or hidden-only pack visibility is unchanged.
+
 `OptionPackBuilder` composes immutable `OptionDefinition` instances and nested
 packs. In the explicit builder API, a command or nested pack gives each
 inclusion a stable key; keys are unique among siblings. `CommandModel.Create`
@@ -107,6 +113,9 @@ Focused tests cover nested values, generated/explicit parity, constructor
 dependencies, inferred names and arity, manual root options, help grouping,
 empty packs, cycles, collisions, disjoint reuse and concurrent/sequential
 isolation. Observed MTP evidence is recorded in the validation ledger.
+XML-derived pack titles/descriptions and explicit overrides are additionally
+verified by the FEAT-11-006 generator tests in the passing 132-test Release MTP
+run; no scope or visibility rule changed.
 
 ## Diagrams
 

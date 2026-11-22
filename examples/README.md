@@ -16,6 +16,7 @@ commands to run both versions.
 | [Option packs](08-OptionPacks/) | Reusable groups of options |
 | [Completion](09-Completion/) | Suggestions and shell registration |
 | [Directives](10-Directives/) | Custom and predefined directives |
+| [XML documentation](11-XmlDocumentation/) | XML-derived help metadata, attribute overrides and invocation examples |
 
 These applications print results without changing files or contacting
 services. The Commands pair also serves as a representative trimmed and

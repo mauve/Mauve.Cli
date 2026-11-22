@@ -16,10 +16,10 @@ public sealed class CliCommandAttribute(string? name = null) : Attribute
     /// <summary>Gets or sets ordered command aliases.</summary>
     public string[] Aliases { get; set; } = [];
 
-    /// <summary>Gets or sets the short description.</summary>
+    /// <summary>Gets or sets the short description, overriding the command's XML summary when explicitly supplied.</summary>
     public string? Description { get; set; }
 
-    /// <summary>Gets or sets the long description.</summary>
+    /// <summary>Gets or sets the long description, overriding the command's XML remarks when explicitly supplied.</summary>
     public string? LongDescription { get; set; }
 
     /// <summary>Gets or sets whether ordinary help and completion hide the command.</summary>
@@ -83,7 +83,7 @@ public sealed class CliOptionAttribute(string? name = null) : Attribute
     /// <summary>Gets or sets whether values are sensitive.</summary>
     public bool IsSensitive { get; set; }
 
-    /// <summary>Gets or sets the option description.</summary>
+    /// <summary>Gets or sets the option description, overriding the property's XML summary when explicitly supplied.</summary>
     public string? Description { get; set; }
 
     /// <summary>Gets or sets the display label for a value.</summary>
@@ -118,7 +118,7 @@ public sealed class CliArgumentAttribute(string? name = null) : Attribute
     /// <summary>Gets or sets whether values are sensitive.</summary>
     public bool IsSensitive { get; set; }
 
-    /// <summary>Gets or sets the argument description.</summary>
+    /// <summary>Gets or sets the argument description, overriding the property's XML summary when explicitly supplied.</summary>
     public string? Description { get; set; }
 }
 
@@ -132,9 +132,9 @@ public sealed class CliHandlerAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class CliOptionPackAttribute : Attribute
 {
-    /// <summary>Gets or sets the optional help-group title.</summary>
+    /// <summary>Gets or sets the help-group title, overriding the pack's XML summary when explicitly supplied.</summary>
     public string? Title { get; set; }
 
-    /// <summary>Gets or sets the optional help-group description for the pack.</summary>
+    /// <summary>Gets or sets the help-group description, overriding the pack's XML remarks when explicitly supplied.</summary>
     public string? Description { get; set; }
 }

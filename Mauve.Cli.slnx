@@ -20,6 +20,8 @@
     <Project Path="examples/09-Completion/Manual/Completion.Manual.csproj" />
     <Project Path="examples/10-Directives/Declarative/Directives.Declarative.csproj" />
     <Project Path="examples/10-Directives/Manual/Directives.Manual.csproj" />
+    <Project Path="examples/11-XmlDocumentation/Declarative/XmlDocumentation.Declarative.csproj" />
+    <Project Path="examples/11-XmlDocumentation/Manual/XmlDocumentation.Manual.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj" />

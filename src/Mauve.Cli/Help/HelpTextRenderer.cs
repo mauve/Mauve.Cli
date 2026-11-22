@@ -22,6 +22,18 @@ public static class HelpTextRenderer
         AppendDescription(output, document.Description, width);
         AppendDescription(output, document.LongDescription, width);
 
+        if (document.Examples.Count > 0)
+        {
+            AppendLine(output, "Examples:");
+            foreach (string example in document.Examples)
+            {
+                for (int offset = 0; offset < example.Length; offset += width - 2)
+                {
+                    AppendLine(output, string.Concat("  ", example.AsSpan(offset, Math.Min(width - 2, example.Length - offset))));
+                }
+            }
+        }
+
         if (document.Children.Count > 0)
         {
             List<HelpDisplayItem> children = [.. document.Children.Select(static child =>

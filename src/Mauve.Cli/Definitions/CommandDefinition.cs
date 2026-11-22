@@ -11,6 +11,7 @@ namespace Mauve.Cli.Definitions;
 public sealed class CommandDefinition
 {
     private readonly ReadOnlyCollection<string> _aliases;
+    private readonly ReadOnlyCollection<string> _examples;
     private readonly ReadOnlyCollection<CommandDefinition> _children;
     private readonly ReadOnlyCollection<OptionDefinition> _options;
     private readonly ReadOnlyCollection<PositionalDefinition> _positionals;
@@ -37,6 +38,7 @@ public sealed class CommandDefinition
         LongDescription = builder.LongDescription;
         IsHidden = builder.IsHidden;
         _aliases = Array.AsReadOnly(aliases);
+        _examples = Array.AsReadOnly(builder.CopyExamples());
         _children = Array.AsReadOnly(children);
         _options = Array.AsReadOnly(options);
         _positionals = Array.AsReadOnly(positionals);
@@ -61,6 +63,9 @@ public sealed class CommandDefinition
 
     /// <summary>Gets the ordered aliases.</summary>
     public IReadOnlyList<string> Aliases => _aliases;
+
+    /// <summary>Gets ordered shell invocation examples before help expansion and sanitization.</summary>
+    public IReadOnlyList<string> Examples => _examples;
 
     /// <summary>Gets the short description.</summary>
     public string? Description { get; }

@@ -39,7 +39,38 @@ Specify whether help bypasses requiredness and validation and how it interacts w
 **Acceptance:** Leaf help works without required inputs, but malformed definitions and unknown options still produce failure; no handler executes.
 **Security:** Help must not mask malformed models or transform a failed parse into an invocation.
 
+### FEAT-08-005 - Command invocation examples
+Expose ordered immutable command examples through the explicit builder and generated models, and project sanitized full invocation examples into help.
+**Acceptance:** A child `add --text AAA` under `todo item add` becomes `todo item add --text AAA`; full paths and alias/nonmatching prefixes stay unchanged. Standalone `$0` denotes only the executable, with a configurable host value and deterministic root-label fallback for direct projection. Default and custom renderers receive identical expanded, sanitized examples. Invalid empty or multiline builder examples are rejected.
+**Security:** Examples are inert text, never parsed or executed. Sanitize all example and executable display text before exposing it, and do not change canonical routing identities or invoke application callbacks.
+
 ## Design
+#### Command examples
+
+`CommandBuilder.AddExample` accepts one nonempty invocation line; the immutable
+`CommandDefinition.Examples` snapshot preserves declaration order.
+`HelpDocument.Create(model, command, executableName)` exposes expanded,
+sanitized `Examples`. Default rendering places `Examples:` after descriptions
+and before the other sections. Preserve internal spaces and quotation marks;
+long example lines are visually wrapped to the configured width without
+interpreting shell syntax.
+
+An example starting with the selected child's canonical name gains its missing
+canonical ancestors, including the declared root display label. An already
+full canonical path stays unchanged. Alias-led and nonmatching examples remain
+as authored; this is not shell parsing or partial-path guessing.
+
+A standalone `$0` (bounded by whitespace or line boundaries) substitutes the
+executable display value, never a declared application command. For example,
+`$0 item add --text AAA` uses the binary plus its authored application path;
+`$0 add --text AAA` on the nested add command becomes
+`<binary> item add --text AAA`. Quoted `"$0"`, `x$0`, and `$00` stay literal.
+The direct projection defaults the executable value to the root display label;
+`CliHostOptions.ExecutableName` defaults to `Environment.GetCommandLineArgs()[0]`
+and is supplied by both high-level entry points. Parser and `Main(string[] args)`
+tokens still exclude the executable. Substitution is display-only and does
+not perform platform-dependent shell quoting or change the Usage path.
+
 #### Help model and rendering
 
 Separate a pure `HelpDocument` data projection from text rendering. Input is
@@ -153,6 +184,12 @@ unnecessary.
 **Instruments:** none - help does not introduce runtime metrics.
 
 ## Verification
+`HelpDocumentTests.Create_ExpandsCanonicalExamplesWithoutReplacingDeclaredCommandNames`,
+`Create_SnapshotsExamplesAndRejectsInvalidExampleInputs`, and
+`CliInvokerTests.Run_PassesExecutableExamplesToDefaultHelpRenderer`, and
+`RunAsync_PassesExecutableExamplesToCustomHelpRenderer`
+verify FEAT-08-005. Observed results belong in the validation ledger.
+
 `HelpDocumentTests.Create_ProjectsVisibleCommandsPositionalsAndOptionAliases`,
 `HelpDocumentTests.Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults`,
 `HelpDocumentTests.Write_PreservesGroupOrderAndUsesCustomRendererAndSink`,

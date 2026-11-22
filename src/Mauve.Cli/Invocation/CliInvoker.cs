@@ -262,7 +262,7 @@ public sealed class CliInvoker(CliParser? parser = null)
                 CommandDefinition selectedCommand = result.SelectedCommand
                     ?? throw new InvalidOperationException("A help request has no selected command.");
                 HelpOutput.Write(
-                    HelpDocument.Create(model, selectedCommand),
+                    HelpDocument.Create(model, selectedCommand, options.ExecutableName),
                     options.StandardOutput.WriteLine,
                     options.HelpWidth,
                     options.HelpRenderer);

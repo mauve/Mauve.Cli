@@ -274,15 +274,20 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     {
         string name = GetConstructorString(attribute, 0) ?? DeriveCommandName(symbol.Name);
         bool isRoot = GetNamedBoolean(attribute, "IsRoot");
+        CliXmlDocumentation documentation = ReadDocumentation(context, symbol, attribute, readExamples: true);
         CommandInfo command = new(
             symbol,
             attribute,
             name,
             isRoot,
-            GetNamedString(attribute, "Description"),
-            GetNamedString(attribute, "LongDescription"),
+            GetDisplayString(attribute, "Description", documentation.Summary),
+            GetDisplayString(attribute, "LongDescription", documentation.Remarks),
             GetNamedBoolean(attribute, "IsHidden"),
-            GetNamedStrings(attribute, "Aliases"));
+            GetNamedStrings(attribute, "Aliases"))
+        {
+            IsValid = documentation.IsValid
+        };
+        command.Examples.AddRange(documentation.Examples);
 
         if (symbol.TypeKind != TypeKind.Class
             || symbol.IsStatic
@@ -340,13 +345,18 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 optionAttribute ?? argumentAttribute!,
                 property,
                 syntaxTreeOrder);
+            CliXmlDocumentation propertyDocumentation = ReadDocumentation(
+                context, property, optionAttribute ?? argumentAttribute!, readExamples: false);
+            command.IsValid &= propertyDocumentation.IsValid;
             if (optionAttribute is not null)
             {
-                command.Options.Add(new OptionInfo(property, optionAttribute, sourceOrder));
+                command.Options.Add(new OptionInfo(property, optionAttribute, sourceOrder,
+                    GetDisplayString(optionAttribute, "Description", propertyDocumentation.Summary)));
             }
             else
             {
-                command.Arguments.Add(new ArgumentInfo(property, argumentAttribute!, sourceOrder));
+                command.Arguments.Add(new ArgumentInfo(property, argumentAttribute!, sourceOrder,
+                    GetDisplayString(argumentAttribute!, "Description", propertyDocumentation.Summary)));
             }
         }
 
@@ -385,7 +395,13 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         AttributeData attribute,
         IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
     {
-        PackInfo pack = new(symbol, attribute);
+        CliXmlDocumentation documentation = ReadDocumentation(context, symbol, attribute, readExamples: false);
+        PackInfo pack = new(symbol, attribute,
+            GetDisplayString(attribute, "Title", documentation.Summary),
+            GetDisplayString(attribute, "Description", documentation.Remarks))
+        {
+            IsValid = documentation.IsValid
+        };
         if (symbol.TypeKind != TypeKind.Class
             || symbol.IsStatic
             || symbol.IsGenericType
@@ -427,10 +443,13 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
+            CliXmlDocumentation propertyDocumentation = ReadDocumentation(context, property, optionAttribute, readExamples: false);
+            pack.IsValid &= propertyDocumentation.IsValid;
             pack.Options.Add(new OptionInfo(
                 property,
                 optionAttribute,
-                GetSourceOrder(optionAttribute, property, syntaxTreeOrder)));
+                GetSourceOrder(optionAttribute, property, syntaxTreeOrder),
+                GetDisplayString(optionAttribute, "Description", propertyDocumentation.Summary)));
         }
 
         pack.Options.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
@@ -1184,6 +1203,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             _ = builder.Append("        _ = command.AddAlias(").Append(Literal(alias)).AppendLine(");");
         }
 
+        foreach (string example in command.Examples)
+        {
+            _ = builder.Append("        _ = command.AddExample(").Append(Literal(example)).AppendLine(");");
+        }
+
         for (int index = 0; index < command.Options.Count; index++)
         {
             _ = builder.Append("        _ = command.AddOption(").Append(OptionInfo.FieldName(suffix, index)).AppendLine(");");
@@ -1689,12 +1713,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
     }
 
-    private static string GenerateOption(OptionInfo option) => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name);
+    private static string GenerateOption(OptionInfo option)
+        => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name, option.Description);
 
     private static string GenerateOption(
         AttributeData attribute,
         ITypeSymbol valueType,
-        string? inferredMemberName = null)
+        string? inferredMemberName = null,
+        string? description = null)
     {
         string name = GetConstructorString(attribute, 0)
             ?? (inferredMemberName is null ? string.Empty : DeriveOptionName(inferredMemberName));
@@ -1730,7 +1756,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", isRequired: ",
             GetNamedBoolean(attribute, "IsRequired") ? "true" : "false",
             ", description: ",
-            Literal(GetNamedString(attribute, "Description")),
+            Literal(description ?? GetNamedString(attribute, "Description")),
             ", valueLabel: ",
             Literal(GetNamedString(attribute, "ValueLabel")),
             ", isHidden: ",
@@ -1766,7 +1792,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", allowsNull: ",
             GetNamedBoolean(argument.Attribute, "AllowsNull") || IsNullable(argument.Property.Type) ? "true" : "false",
             ", description: ",
-            Literal(GetNamedString(argument.Attribute, "Description")),
+            Literal(argument.Description),
             ", isHidden: ",
             GetNamedBoolean(argument.Attribute, "IsHidden") ? "true" : "false",
             ", isSensitive: ",
@@ -2067,6 +2093,25 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static string? GetNamedString(AttributeData attribute, string name) => attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value.Value as string;
 
+    private static string? GetDisplayString(AttributeData attribute, string name, string? fallback)
+        => HasNamedArgument(attribute, name) ? GetNamedString(attribute, name) : fallback;
+
+    private static CliXmlDocumentation ReadDocumentation(
+        SourceProductionContext context,
+        ISymbol symbol,
+        AttributeData attribute,
+        bool readExamples)
+    {
+        CliXmlDocumentation documentation = CliXmlDocumentation.Read(symbol, readExamples, context.CancellationToken);
+        if (!documentation.IsValid)
+        {
+            Report(context, _invalidMember, GetLocation(attribute, symbol),
+                "CLI documentation must be valid XML and shell examples must contain a non-empty, single-line code element.");
+        }
+
+        return documentation;
+    }
+
     private static int GetNamedInt(AttributeData attribute, string name, int defaultValue = 0)
     {
         KeyValuePair<string, TypedConstant> value = attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name);
@@ -2211,6 +2256,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public List<ChildInfo> Children { get; } = [];
 
+        public List<string> Examples { get; } = [];
+
         public List<PackInclusionInfo> Packs { get; } = [];
 
         public List<DirectiveRegistrationInfo> Directives { get; } = [];
@@ -2268,13 +2315,17 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         public SourceOrder SourceOrder { get; } = sourceOrder;
     }
 
-    private sealed class PackInfo(INamedTypeSymbol symbol, AttributeData attribute)
+    private sealed class PackInfo(INamedTypeSymbol symbol, AttributeData attribute, string? title, string? description)
     {
         public INamedTypeSymbol Symbol { get; } = symbol;
 
         public AttributeData Attribute { get; } = attribute;
 
         public string Name => Symbol.Name;
+
+        public string? Title { get; } = title;
+
+        public string? Description { get; } = description;
 
         public List<OptionInfo> Options { get; } = [];
 
@@ -2291,9 +2342,9 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public string Key => GetPackKey(Pack.Symbol);
 
-        public string? Title => GetNamedString(Pack.Attribute, "Title");
+        public string? Title => Pack.Title;
 
-        public string? Description => GetNamedString(Pack.Attribute, "Description");
+        public string? Description => Pack.Description;
 
         public IParameterSymbol Parameter { get; } = parameter;
     }
@@ -2301,13 +2352,16 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private sealed class OptionInfo(
         IPropertySymbol property,
         AttributeData attribute,
-        SourceOrder sourceOrder)
+        SourceOrder sourceOrder,
+        string? description = null)
     {
         public IPropertySymbol Property { get; } = property;
 
         public AttributeData Attribute { get; } = attribute;
 
         public SourceOrder SourceOrder { get; } = sourceOrder;
+
+        public string? Description { get; } = description ?? GetNamedString(attribute, "Description");
 
         public static string FieldName(string suffix, int index) => string.Concat("__mauveOption_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
     }
@@ -2315,7 +2369,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private sealed class ArgumentInfo(
         IPropertySymbol property,
         AttributeData attribute,
-        SourceOrder sourceOrder)
+        SourceOrder sourceOrder,
+        string? description)
     {
         public IPropertySymbol Property { get; } = property;
 
@@ -2323,6 +2378,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public SourceOrder SourceOrder { get; } = sourceOrder;
 
+        public string? Description { get; } = description;
         public static string FieldName(string suffix, int index) => string.Concat("__mauveArgument_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
     }
 

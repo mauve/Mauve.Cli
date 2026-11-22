@@ -55,6 +55,10 @@ internal sealed partial class DebugDirective
     private int Run() => AotDirectiveState.RecordDebug(Text);
 }
 
+/// <summary>Add an AOT scenario item.</summary>
+/// <example><code>add --count 2 AAA</code></example>
+/// <example><code language="shell">$0 add --count 2 AAA</code></example>
+/// <example><code language="csharp">new object();</code></example>
 [CliCommand("add", Aliases = ["new"])]
 [SuppressMessage(
     "Performance",
@@ -65,6 +69,7 @@ internal sealed partial class AotAddCommand(NetworkPack network)
     [CliOption(IsRequired = true)]
     public partial int Count { get; }
 
+    /// <summary>The item text.</summary>
     [CliArgument]
     public partial string Text { get; }
 

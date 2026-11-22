@@ -52,6 +52,232 @@ public sealed class CliModelGeneratorTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-006")]
+    public void Generate_InfersXmlMetadataAndShellExamplesWithExplicitModelParity()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            namespace XmlFixture;
+
+            /// <summary>Manage &amp; inspect tasks.</summary>
+            /// <remarks>Root details.</remarks>
+            [CliCommand("todo", IsRoot = true)]
+            [CliChild<ItemCommand>]
+            public partial class Root { }
+
+            [CliCommand]
+            [CliChild<AddCommand>]
+            public partial class ItemCommand { }
+
+            /// <summary>Add a task.</summary>
+            /// <remarks>First paragraph.<para>More details.</para></remarks>
+            /// <example><code>add --text "A  A"</code></example>
+            /// <example><code language="shell">$0 item add --text AAA</code></example>
+            /// <example><code language="csharp">
+            /// var builder = new AddCommand();
+            /// builder.ToString();
+            /// </code></example>
+            [CliCommand]
+            public partial class AddCommand(NetworkPack network)
+            {
+                /// <summary>Task text.</summary>
+                [CliOption(IsRequired = true)]
+                public partial string Text { get; }
+
+                /// <summary>Optional <see langword="string"/> label.</summary>
+                [CliArgument(MinimumValues = 0)]
+                public partial string? Label { get; }
+            }
+
+            /// <summary>Network</summary>
+            /// <remarks>Network settings.</remarks>
+            [CliOptionPack]
+            public partial class NetworkPack
+            {
+                /// <summary>Endpoint address.</summary>
+                [CliOption(IsRequired = true)]
+                public partial string Endpoint { get; }
+            }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        CommandModel model = (CommandModel)fixture.GetType("XmlFixture.Root", throwOnError: true)!
+            .GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        CommandDefinition add = model.Root.Children[0].Children[0];
+        HelpDocument help = HelpDocument.Create(model, add, "runner");
+
+        CommandBuilder explicitAdd = new("add")
+        {
+            Description = "Add a task.",
+            LongDescription = "First paragraph.\nMore details."
+        };
+        _ = explicitAdd.AddOption(new OptionDefinition("--text", typeof(string), OptionArity.RequiredScalar,
+            isRequired: true, description: "Task text."));
+        _ = explicitAdd.AddPositional(new PositionalDefinition("label", typeof(string), minimumValues: 0,
+            allowsNull: true, description: "Optional string label."));
+        _ = explicitAdd.AddPack("network", new OptionPackBuilder()
+            .AddOption(new OptionDefinition("--endpoint", typeof(string), OptionArity.RequiredScalar,
+                isRequired: true, description: "Endpoint address.")), "Network", "Network settings.");
+        _ = explicitAdd.AddExample("add --text \"A  A\"").AddExample("$0 item add --text AAA");
+        CommandModel explicitModel = CommandModel.Create(new CommandBuilder("todo")
+            .AddChild(new CommandBuilder("item").AddChild(explicitAdd)));
+
+        Assert.AreEqual("Manage & inspect tasks.", model.Root.Description);
+        Assert.AreEqual("Root details.", model.Root.LongDescription);
+        Assert.AreEqual("Add a task.", add.Description);
+        Assert.AreEqual("First paragraph.\nMore details.", add.LongDescription);
+        Assert.AreEqual("Task text.", add.Options[0].Description);
+        Assert.AreEqual("Optional string label.", add.Positionals[0].Description);
+        Assert.AreEqual("Network", help.OptionGroups[1].Title);
+        Assert.AreEqual("Network settings.", help.OptionGroups[1].Description);
+        Assert.AreSequenceEqual(["todo item add --text \"A  A\"", "runner item add --text AAA"], [.. help.Examples]);
+        Assert.AreEqual(
+            HelpTextRenderer.Render(HelpDocument.Create(explicitModel, explicitModel.Root.Children[0].Children[0], "runner")),
+            HelpTextRenderer.Render(help));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-006")]
+    public void Generate_PreservesExplicitXmlMetadataOverridesIncludingEmptyAndNull()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            namespace XmlOverrides;
+
+            /// <summary>Inferred command summary.</summary>
+            /// <remarks>Inferred long description.</remarks>
+            [CliCommand("tool", IsRoot = true, Description = "Attribute summary", LongDescription = "")]
+            public partial class Root(Pack pack)
+            {
+                /// <summary>Inferred option.</summary>
+                [CliOption(IsRequired = true, Description = "Attribute option")]
+                public partial string First { get; }
+
+                /// <summary>Inferred option.</summary>
+                [CliOption(IsRequired = true, Description = "")]
+                public partial string Second { get; }
+
+                /// <summary>Inferred option.</summary>
+                [CliOption(IsRequired = true, Description = null)]
+                public partial string Third { get; }
+
+                /// <summary>Inferred argument.</summary>
+                [CliArgument(Description = "")]
+                public partial string Argument { get; }
+            }
+
+            /// <summary>Inferred title.</summary>
+            /// <remarks>Inferred pack description.</remarks>
+            [CliOptionPack(Title = "Attribute title", Description = "")]
+            public partial class Pack
+            {
+                /// <summary>Inferred pack option.</summary>
+                [CliOption(Description = "")]
+                public partial bool Flag { get; }
+            }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        CommandModel model = (CommandModel)fixture.GetType("XmlOverrides.Root", throwOnError: true)!
+            .GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        HelpDocument help = HelpDocument.Create(model);
+
+        Assert.AreEqual("Attribute summary", model.Root.Description);
+        Assert.AreEqual(string.Empty, model.Root.LongDescription);
+        Assert.AreEqual("Attribute option", model.Root.Options[0].Description);
+        Assert.AreEqual(string.Empty, model.Root.Options[1].Description);
+        Assert.IsNull(model.Root.Options[2].Description);
+        Assert.AreEqual(string.Empty, model.Root.Positionals[0].Description);
+        Assert.AreEqual("Attribute title", help.OptionGroups[1].Title);
+        Assert.AreEqual(string.Empty, help.OptionGroups[1].Description);
+        Assert.AreEqual(string.Empty, help.OptionGroups[1].Options[0].Description);
+
+        GeneratorResult emptyTitle = Generate(declaration.Replace(
+            "Title = \"Attribute title\"", "Title = \"\"", StringComparison.Ordinal));
+        AssertNoErrors(emptyTitle);
+        Assembly emptyTitleFixture = EmitAndLoad(emptyTitle.OutputCompilation);
+        CommandModel emptyTitleModel = (CommandModel)emptyTitleFixture.GetType("XmlOverrides.Root", throwOnError: true)!
+            .GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        Assert.AreEqual(string.Empty, HelpDocument.Create(emptyTitleModel).OptionGroups[1].Title);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-006")]
+    public void Generate_RejectsInvalidShellExamplesButIgnoresOtherLanguages()
+    {
+        string[] examples =
+        [
+            "<code> </code>",
+            "<code language=\"shell\">one\n/// two</code>",
+            "<code language=\"shell\"><c>add</c></code>",
+            "<code>add &undefined;</code>",
+            "<code>add</broken>"
+        ];
+        foreach (string example in examples)
+        {
+            GeneratorResult generated = Generate($$"""
+                using Mauve.Cli.Declarations;
+                /// <example>{{example}}</example>
+                [CliCommand("tool", IsRoot = true)]
+                public partial class Root { }
+                """);
+            Assert.Contains(static diagnostic => diagnostic.Id == "MCLI002", generated.GeneratorDiagnostics);
+            Assert.IsEmpty(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+
+        GeneratorResult nonShell = Generate("""
+            using Mauve.Cli.Declarations;
+            /// <example><code language="csharp">
+            /// int value = 1;
+            /// value++;
+            /// </code></example>
+            /// <example><code language="other"></code></example>
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root { }
+            """);
+        AssertNoErrors(nonShell);
+        Assert.DoesNotContain(static source => source.Contains("command.AddExample", StringComparison.Ordinal),
+            nonShell.RunResult.Results.SelectMany(static result => result.GeneratedSources)
+                .Select(static source => source.SourceText.ToString()));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-006")]
+    public void Generate_UpdatesXmlOnlyEditsWithStableUnchangedOutput()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            /// <summary>Initial description.</summary>
+            /// <example><code>$0 --help</code></example>
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root { }
+            """;
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.Parse);
+        CSharpCompilation compilation = CreateCompilation(CSharpSyntaxTree.ParseText(
+            declaration, parseOptions, cancellationToken: TestContext.CancellationToken));
+        GeneratorDriver driver = CreateDriver(parseOptions).RunGenerators(compilation, TestContext.CancellationToken);
+        string[] initial = GetGeneratedSources(driver);
+        driver = driver.RunGenerators(compilation, TestContext.CancellationToken);
+        Assert.AreSequenceEqual(initial, GetGeneratedSources(driver));
+        CSharpCompilation edited = CreateCompilation(CSharpSyntaxTree.ParseText(
+            declaration.Replace("Initial description.", "Updated description.", StringComparison.Ordinal)
+                .Replace("$0 --help", "$0 --version", StringComparison.Ordinal), parseOptions,
+            cancellationToken: TestContext.CancellationToken));
+        driver = driver.RunGenerators(edited, TestContext.CancellationToken);
+        Assert.Contains(static source => source.Contains("Updated description.", StringComparison.Ordinal)
+            && source.Contains("$0 --version", StringComparison.Ordinal), GetGeneratedSources(driver));
+    }
+
+    [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-15")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-15-008")]
     public async Task Generate_RegistersCompletionProvidersFromGeneratedModel()
@@ -1352,7 +1578,7 @@ public sealed class CliModelGeneratorTests
 
     private GeneratorResult Generate(params string[] sources)
     {
-        CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.None);
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.Parse);
         CSharpCompilation compilation = CreateCompilation(
             [.. sources.Select(source => CSharpSyntaxTree.ParseText(
                 source, parseOptions, cancellationToken: TestContext.CancellationToken))]);

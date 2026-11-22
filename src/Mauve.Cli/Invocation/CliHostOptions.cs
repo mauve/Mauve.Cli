@@ -15,6 +15,7 @@ public sealed class CliHostOptions
     /// <param name="invalidInputExitCode">The returned code for malformed command input.</param>
     /// <param name="noHandlerExitCode">The returned code when the selected command has no handler.</param>
     /// <param name="cancelledExitCode">The returned code for caller cancellation.</param>
+    /// <param name="executableName">The executable display name used for help examples, defaulting to process argv zero.</param>
     public CliHostOptions(
         TextWriter? standardOutput = null,
         TextWriter? standardError = null,
@@ -22,9 +23,16 @@ public sealed class CliHostOptions
         Func<HelpDocument, int, string>? helpRenderer = null,
         int invalidInputExitCode = 2,
         int noHandlerExitCode = 1,
-        int cancelledExitCode = 130)
+        int cancelledExitCode = 130,
+        string? executableName = null)
     {
         HelpTextRenderer.ValidateWidth(helpWidth);
+        if (executableName is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(executableName);
+        }
+
+        ExecutableName = executableName ?? Environment.GetCommandLineArgs()[0];
         StandardOutput = standardOutput ?? Console.Out;
         StandardError = standardError ?? Console.Error;
         HelpWidth = helpWidth;
@@ -54,4 +62,7 @@ public sealed class CliHostOptions
 
     /// <summary>Gets the exit code for caller cancellation.</summary>
     public int CancelledExitCode { get; }
+
+    /// <summary>Gets the executable display name substituted for <c>$0</c> in help examples.</summary>
+    public string ExecutableName { get; }
 }

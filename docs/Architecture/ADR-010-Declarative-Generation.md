@@ -12,6 +12,17 @@ and generator diagnostics had not previously been selected.
 
 ## Decision
 
+- Infer omitted display metadata from Roslyn XML documentation at build time:
+  command summary/remarks become short/long descriptions, property summaries
+  become descriptions, and pack summary/remarks become title/description.
+  Explicit attribute arguments, including null and empty strings, win.
+  Do not expand external includes or inherited documentation.
+- Extract one-line shell `<example><code>` entries in XML order. The optional
+  `language` attribute defaults to shell; other languages remain ordinary
+  documentation and do not become help invocations. Emit ordinary builder
+  metadata and keep XML processing out of runtime code. Invalid shell entries
+  use MCLI002 rather than silently rewriting source text.
+
 - Place declaration attributes in `Mauve.Cli.Declarations`: `CliCommand`,
   `CliChild`, `CliOption`, `CliArgument` and `CliHandler`.
 - Use generic `CliChild<TCommand>` attributes instead of `Type` constructor
@@ -85,5 +96,5 @@ rules.
 
 Affected requirements:
 [FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md),
-including FEAT-11-005, and
+including FEAT-11-005 and FEAT-11-006, and
 [FEAT-14](../Requirements/FEAT-14-OptionPacks.md).

@@ -13,6 +13,15 @@ irrelevant to displaying the selected command's usage.
 
 ## Decision
 
+- Store ordered command example lines in immutable model metadata, with
+  `CommandBuilder.AddExample` providing explicit-model parity. Expose expanded
+  sanitized examples to default and custom renderers after descriptions.
+- Expand only canonical selected-command prefixes; never infer aliases or
+  shell syntax. `$0` represents the executable only, distinct from the
+  model's root display label. Inject the executable into help projection;
+  high-level host settings default to process argv zero, while direct
+  projection remains deterministic with a root-label fallback.
+
 - Project a validated model and optional command into an immutable
   `HelpDocument` before rendering. Reject command definitions outside the
   model and commands marked hidden.

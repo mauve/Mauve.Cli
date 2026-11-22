@@ -37,6 +37,9 @@ ordinary definitions governed by existing scope, conversion and result rules.
   inclusion keys.
 - Declare a generated pack as a `[CliOptionPack(Title = ..., Description = ...)]`
   partial class, with `[CliOption]` partial properties for its options.
+  Omitted Title and Description come from XML summary and remarks respectively,
+  following FEAT-11-006; explicit attribute values take precedence. This
+  metadata inference does not alter grouping identity or option scope.
   Constructors on commands and packs declare direct nested pack dependencies
   by type; a direct pack type can appear only once for a given parent. A pack
   type may still be reused on separate branches.

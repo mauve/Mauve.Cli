@@ -529,6 +529,45 @@ public sealed class CliInvokerTests
         Assert.AreEqual(0, handlerCalls);
     }
 
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-005")]
+    public void Run_PassesExecutableExamplesToDefaultHelpRenderer()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("declared")
+            .AddChild(new CommandBuilder("add").AddExample("$0 add --text AAA")),
+            includeStandardHelp: true);
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions options = new(output, errors, executableName: "actual-binary");
+
+        int synchronous = CliInvoker.Run(model, ["add", "--help"], options, TestContext.CancellationToken);
+        StringAssert.Contains(output.ToString(), "actual-binary add --text AAA", StringComparison.Ordinal);
+        Assert.AreEqual(0, synchronous);
+        Assert.AreEqual(Environment.GetCommandLineArgs()[0], new CliHostOptions().ExecutableName);
+        Assert.AreEqual(string.Empty, errors.ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-005")]
+    public async Task RunAsync_PassesExecutableExamplesToCustomHelpRenderer()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("declared")
+            .AddChild(new CommandBuilder("add").AddExample("$0 add --text AAA")),
+            includeStandardHelp: true);
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions custom = new(output, errors,
+            helpRenderer: static (document, _) => string.Join('|', document.Examples),
+            executableName: "custom-binary");
+        int asynchronous = await CliInvoker.RunAsync(model, ["add", "--help"], custom, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        StringAssert.Contains(output.ToString(), "custom-binary add --text AAA", StringComparison.Ordinal);
+        Assert.AreEqual(0, asynchronous);
+        Assert.AreEqual(string.Empty, errors.ToString());
+    }
+
     private async Task<InvocationResult> Invoke(CommandBuilder command)
     {
         return await new CliInvoker()

@@ -12,9 +12,35 @@ FEAT-01-001 through FEAT-01-003, FEAT-02-001 through FEAT-02-004,
 FEAT-03-001 through FEAT-03-004, FEAT-04-001 through FEAT-04-004, and all of
 FEAT-05, FEAT-06, FEAT-07, FEAT-08, FEAT-09, FEAT-10, FEAT-11, FEAT-12,
 FEAT-13 through FEAT-15 are active except retired FEAT-15-007.
-Portable test methods are declared for each. The strict Release solution build
-passes with no warnings, and the repository-wide MTP run passes 124 tests:
-98 runtime tests, 24 generator tests and 2 focused AOT tests.
+Portable test methods are declared for each. The XML-documentation change
+passed the repository-wide Release MTP run with 132 tests:
+102 runtime tests, 28 generator tests and 2 focused AOT tests. Per-project
+metadata-bearing TRX and imported requirement evidence are under
+`artifacts/test-results/xml-documentation-20261122-final/`.
+
+The full `bash scripts/verify.sh` gate and full-solution format verification
+remain blocked by the pre-existing removal of the CA1822 suppression from
+`examples/01-Hello/Declarative/Program.cs`: its instance handler does not access
+instance data. That unrelated edit was preserved. All changed projects built
+with strict analyzers, and changed-project format verification, locked restore,
+Governance validation/source generation, tooling probes, and the no-op managed
+update check passed independently. This is not a passing full repository gate.
+
+The first post-publication `--no-build` solution test attempt could not launch
+the managed AOT test apphost after native publication. Rebuilding that test
+project restored the managed host; the final 132-test run passed without skips.
+The initial 130-test artifacts remain separate under
+`artifacts/test-results/xml-documentation-20261122/` and are not claimed as
+a complete suite observation.
+
+`bash scripts/verify-aot.sh` passed independently on Linux x64, including
+XML-derived descriptions and shell example filtering/expansion in the generated
+AOT scenario. Evidence is under
+`artifacts/aot-verification/linux-x64/20261122T133238Z/`.
+Both new XML-documentation examples also passed managed trimmed and NativeAOT
+publication/run checks for help metadata, attribute precedence, C# example
+exclusion, and actual command invocation; see `XmlDocumentation-examples.log`
+and `XmlDocumentation-environment.txt` in that directory.
 
 The standalone runner/analyzer/MTP TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
@@ -39,6 +65,8 @@ is claimed.
 
 | Requirement | Validation method | Evidence or procedure | Owner | Environment / prerequisites | Gap or waiver details |
 | --- | --- | --- | --- | --- | --- |
+| FEAT-08-005 | portable automated | `HelpDocumentTests.Create_ExpandsCanonicalExamplesWithoutReplacingDeclaredCommandNames`; `HelpDocumentTests.Create_SnapshotsExamplesAndRejectsInvalidExampleInputs`; `CliInvokerTests.Run_PassesExecutableExamplesToDefaultHelpRenderer`; `CliInvokerTests.RunAsync_PassesExecutableExamplesToCustomHelpRenderer` | Mauve.Cli maintainers | .NET 11 | All four methods passed in the 102-test runtime suite and final 132-test Release MTP run; metadata-bearing TRX imported under `artifacts/test-results/xml-documentation-20261122-final/`. The full repository gate remains blocked by the unrelated Hello CA1822 edit. |
+| FEAT-11-006 | portable automated | `CliModelGeneratorTests.Generate_InfersXmlMetadataAndShellExamplesWithExplicitModelParity`; `CliModelGeneratorTests.Generate_PreservesExplicitXmlMetadataOverridesIncludingEmptyAndNull`; `CliModelGeneratorTests.Generate_RejectsInvalidShellExamplesButIgnoresOtherLanguages`; `CliModelGeneratorTests.Generate_UpdatesXmlOnlyEditsWithStableUnchangedOutput` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | All four methods passed in the 28-test generator suite and final 132-test Release MTP run, including malformed XML diagnostics; metadata-bearing TRX imported under `artifacts/test-results/xml-documentation-20261122-final/`. The full repository gate remains blocked by the unrelated Hello CA1822 edit. |
 | FEAT-01-001 | portable automated | `CommandModelTests.Create_PreservesOrderedHierarchyMetadataAndCanonicalPaths`; `CommandModelTests.Create_AllowsACommandWithoutChildren` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; passed in the strict 83-test MTP suite. |
 | FEAT-01-002 | portable automated | `CommandModelTests.Create_RejectsSiblingNameAndAliasCollisions`; `CommandModelTests.Create_AllowsSameNamesOnDisjointBranches`; `CommandModelTests.Create_RejectsEmptyOrMalformedCommandNames`; `CommandModelTests.Create_RejectsCommandCycles`; `CommandModelTests.Create_RejectsCommandNodesWithMultipleParents` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; passed in the strict 83-test MTP suite. |
 | FEAT-02-001 | portable automated | `CommandModelTests.Create_PreservesOptionAliasesVisibilityAndTypeMetadata`; `CommandModelTests.Create_PreservesOmittedAndExplicitEmptyDisplayMetadata` | Mauve.Cli maintainers | .NET 11; no privileged environment | Test methods are declared; passed in the strict 83-test MTP suite. |

@@ -25,6 +25,9 @@ FEAT-03-002, FEAT-03-003, FEAT-03-004 and all requirements of
 [FEAT-15](FEAT-15-Directives.md) except retired FEAT-15-007 have active implementation owners.
 Focused tests are declared for active requirements. The validation ledger
 records which test and publish/run evidence has actually been observed.
+FEAT-08-005 owns command invocation examples; FEAT-11-006 owns XML-derived
+declarative display metadata and shell example extraction. These extend the
+existing active features rather than introducing a separate feature.
 
 Keep implemented and partially implemented features in
 `docs/Requirements/FEAT-<id>-<name>.md`. Each document records Status,
