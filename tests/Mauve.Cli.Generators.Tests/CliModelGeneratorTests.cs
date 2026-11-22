@@ -679,35 +679,40 @@ public sealed class CliModelGeneratorTests
             namespace GeneratorPackFixture;
 
             [CliCommand("fetch", IsRoot = true)]
-            [CliPack<NetworkPack>("network", Title = "Network")]
-            public partial class Root
+            public partial class Root(NetworkPack network)
             {
+                private readonly string _endpointAtConstruction = network.Endpoint;
+
                 [CliHandler]
-                private int Run(CommandInvocationContext context)
+                private int Run()
                 {
-                    OptionPackContext network = context.GetOptionPack("network");
-                    OptionPackContext retry = network.GetNestedPack("retry");
-                    if (!network.TryGetOptionValue(NetworkPack.Option0, out string? address)
-                        || !retry.TryGetOptionValue(RetryPack.Option0, out int count))
+                    if (!network.TryGetEndpoint(out string address)
+                        || !network.Retry.TryGetRetries(out int count)
+                        || address != _endpointAtConstruction
+                        || count != network.RetriesAtConstruction)
                     {
                         throw new System.InvalidOperationException("The generated pack values are unavailable.");
                     }
 
-                    return address!.Length + count;
+                    return address.Length + count;
                 }
             }
 
-            [CliOptionPack]
-            [CliPack<RetryPack>("retry", Title = "Retry")]
-            [CliPackOption<string>("--endpoint", IsRequired = true)]
-            public partial class NetworkPack
+            [CliOptionPack(Title = "Network", Description = "Network settings")]
+            public partial class NetworkPack(RetryPack retry)
             {
+                public RetryPack Retry { get; } = retry;
+                public int RetriesAtConstruction { get; } = retry.Retries;
+
+                [CliOption(IsRequired = true)]
+                public partial string Endpoint { get; }
             }
 
-            [CliOptionPack]
-            [CliPackOption<int>("--retries", IsRequired = true)]
+            [CliOptionPack(Title = "Retry", Description = "Retry settings")]
             public partial class RetryPack
             {
+                [CliOption(IsRequired = true)]
+                public partial int Retries { get; }
             }
             """;
 
@@ -725,8 +730,8 @@ public sealed class CliModelGeneratorTests
         ParseResult generatedWithManualOptionResult = new CliParser().Parse(
             generatedWithManualOption,
             ["--endpoint=https://example.test", "--retries=2", "--profile=fast"]);
-        OptionDefinition generatedEndpoint = ReadPackOption(fixture, "GeneratorPackFixture.NetworkPack");
-        OptionDefinition generatedRetries = ReadPackOption(fixture, "GeneratorPackFixture.RetryPack");
+        OptionDefinition generatedEndpoint = generatedModel.Root.Options.Single(static option => option.Name == "--endpoint");
+        OptionDefinition generatedRetries = generatedModel.Root.Options.Single(static option => option.Name == "--retries");
         InvocationResult generatedInvocation = await new CliInvoker().InvokeAsync(
             generatedModel,
             ["--endpoint=https://example.test", "--retries=2"], TestContext.CancellationToken).ConfigureAwait(false);
@@ -737,10 +742,10 @@ public sealed class CliModelGeneratorTests
         OptionPackBuilder retryPack = new OptionPackBuilder().AddOption(retries);
         OptionPackBuilder networkPack = new OptionPackBuilder()
             .AddOption(endpoint)
-            .AddPack("retry", retryPack, "Retry");
+            .AddPack("retry", retryPack, "Retry", "Retry settings");
         CommandModel explicitModel = CommandModel.Create(
             new CommandBuilder("fetch")
-                .AddPack("network", networkPack, "Network")
+                .AddPack("network", networkPack, "Network", "Network settings")
                 .SetHandler((context, _) =>
                 {
                     OptionPackContext network = context.GetOptionPack("network");
@@ -775,6 +780,289 @@ public sealed class CliModelGeneratorTests
             [.. explicitResult.SelectedCommand!.Path], [.. generatedResult.SelectedCommand!.Path]);
         Assert.AreSequenceEqual(
             [.. HelpDocument.Create(explicitModel).OptionGroups.Select(static group => group.Title)], [.. HelpDocument.Create(generatedModel).OptionGroups.Select(static group => group.Title)]);
+        Assert.AreSequenceEqual(
+            [.. HelpDocument.Create(explicitModel).OptionGroups.Select(static group => group.Description)],
+            [.. HelpDocument.Create(generatedModel).OptionGroups.Select(static group => group.Description)]);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-005")]
+    public async Task Generate_InjectsInvocationLocalNestedPacksWithoutConstructingDuringParsing()
+    {
+        const string declaration = """
+            using System;
+            using System.Collections.Concurrent;
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Definitions;
+            using Mauve.Cli.Invocation;
+            using Mauve.Cli.Parsing;
+
+            namespace PackIsolationFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Network network)
+            {
+                public static int Created;
+                private readonly int _id = Interlocked.Increment(ref Created);
+
+                [CliHandler]
+                private async Task<int> Run()
+                {
+                    string name = network.Name;
+                    int retries = network.Retry.Retries;
+                    IReadOnlyList<string> tags = network.Tags;
+                    bool hasLabel = network.TryGetLabel(out string? label);
+                    await Fixture.ArriveAsync();
+                    if (network.Name != name || network.Retry.Retries != retries
+                        || !network.Tags.SequenceEqual(tags)
+                        || network.TryGetLabel(out string? currentLabel) != hasLabel
+                        || (hasLabel && currentLabel != label))
+                    {
+                        throw new InvalidOperationException("Pack values changed across invocations.");
+                    }
+
+                    Fixture.Results[name] = (_id, network.Id, network.Retry.Id, retries, hasLabel ? label : null, tags);
+                    return retries;
+                }
+            }
+
+            [CliOptionPack]
+            public partial class Network(Retry retry)
+            {
+                public static int Created;
+                public int Id { get; } = Interlocked.Increment(ref Created);
+                public Retry Retry { get; } = retry;
+
+                [CliOption(IsRequired = true)]
+                public partial string Name { get; }
+
+                [CliOption]
+                public partial string? Label { get; }
+
+                [CliOption(IsRequired = true)]
+                public partial IReadOnlyList<string> Tags { get; }
+            }
+
+            [CliOptionPack]
+            public partial class Retry
+            {
+                public static int Created;
+                public int Id { get; } = Interlocked.Increment(ref Created);
+
+                [CliOption(IsRequired = true)]
+                public partial int Retries { get; }
+            }
+
+            public static class Fixture
+            {
+                private static readonly TaskCompletionSource Ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                private static int _arrived;
+                public static ConcurrentDictionary<string, (int Root, int Network, int Retry, int Count, string? Label, IReadOnlyList<string> Tags)> Results { get; } = new();
+
+                public static Task ArriveAsync()
+                {
+                    if (Interlocked.Increment(ref _arrived) == 2)
+                    {
+                        Ready.SetResult();
+                    }
+
+                    return Ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                }
+
+                public static async Task<string> Run()
+                {
+                    CommandModel model = Root.CreateModel();
+                    ParseResult valid = new CliParser().Parse(model, ["--name=parsed", "--retries=3", "--tags=parsed"]);
+                    ParseResult invalid = new CliParser().Parse(model, ["--name=missing-retries", "--tags=parsed"]);
+                    InvocationResult rejected = await new CliInvoker().InvokeAsync(model, ["--name=missing-retries", "--tags=parsed"]);
+                    if (valid.Outcome != ParseOutcome.Validated || invalid.Outcome == ParseOutcome.Validated
+                        || rejected.Outcome == InvocationOutcome.Completed
+                        || Root.Created != 0 || Network.Created != 0 || Retry.Created != 0)
+                    {
+                        throw new InvalidOperationException("Parsing or a rejected invocation constructed application objects.");
+                    }
+
+                    CliInvoker invoker = new();
+                    Task<InvocationResult> first = invoker.InvokeAsync(model, ["--name=alpha", "--retries=1", "--label=first", "--tags=one"]).AsTask();
+                    Task<InvocationResult> second = invoker.InvokeAsync(model, ["--name=beta", "--retries=2", "--tags=two"]).AsTask();
+                    InvocationResult[] outcomes = await Task.WhenAll(first, second);
+                    var alpha = Results["alpha"];
+                    var beta = Results["beta"];
+                    if (outcomes.Any(static outcome => outcome.Outcome != InvocationOutcome.Completed)
+                        || outcomes[0].ExitCode != 1 || outcomes[1].ExitCode != 2
+                        || alpha.Root == beta.Root || alpha.Network == beta.Network || alpha.Retry == beta.Retry
+                        || alpha.Count != 1 || beta.Count != 2 || alpha.Label != "first" || beta.Label is not null
+                        || ReferenceEquals(alpha.Tags, beta.Tags) || !alpha.Tags.SequenceEqual(["one"]) || !beta.Tags.SequenceEqual(["two"])
+                        || Root.Created != 2 || Network.Created != 2 || Retry.Created != 2)
+                    {
+                        throw new InvalidOperationException("Pack instances or values were not isolated.");
+                    }
+
+                    return "isolated";
+                }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type type = fixture.GetType("PackIsolationFixture.Fixture", throwOnError: true)!;
+        Task<string> task = (Task<string>)type.GetMethod("Run")!.Invoke(null, null)!;
+
+        Assert.AreEqual("isolated", await task.ConfigureAwait(false));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    public async Task Generate_OrdersInjectedPacksAndIgnoresParameterNames()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            namespace PackOrderFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(First first, Second second)
+            {
+                [CliHandler]
+                private int Run() => first.Enabled && second.Forced ? 1 : 0;
+            }
+
+            [CliOptionPack(Title = "First")]
+            public partial class First
+            {
+                [CliOption]
+                public partial bool Enabled { get; }
+            }
+
+            [CliOptionPack(Title = "Second")]
+            public partial class Second
+            {
+                [CliOption]
+                public partial bool Forced { get; }
+            }
+            """;
+
+        GeneratorResult original = Generate(declaration);
+        GeneratorResult renamed = Generate(declaration
+            .Replace("First first", "First renamed", StringComparison.Ordinal)
+            .Replace("first.Enabled", "renamed.Enabled", StringComparison.Ordinal));
+        AssertNoErrors(original);
+        AssertNoErrors(renamed);
+        Type firstRoot = EmitAndLoad(original.OutputCompilation).GetType("PackOrderFixture.Root", throwOnError: true)!;
+        Type secondRoot = EmitAndLoad(renamed.OutputCompilation).GetType("PackOrderFixture.Root", throwOnError: true)!;
+        CommandModel firstModel = (CommandModel)firstRoot.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        CommandModel secondModel = (CommandModel)secondRoot.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+
+        Assert.AreSequenceEqual(["--enabled", "--forced"], [.. firstModel.Root.Options.Select(static option => option.Name)]);
+        Assert.AreSequenceEqual(
+            [.. HelpDocument.Create(firstModel).OptionGroups.Select(static group => group.Key)],
+            [.. HelpDocument.Create(secondModel).OptionGroups.Select(static group => group.Key)]);
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            secondModel, ["--enabled", "--forced"], TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(1, result.ExitCode);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
+    public async Task Generate_ReportsPackValueAccessBeforeOwnContextIsAttached()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            namespace PackConstructionFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Network network)
+            {
+                [CliHandler]
+                private int Run() => network.Enabled ? 1 : 0;
+            }
+
+            [CliOptionPack]
+            public partial class Network
+            {
+                public Network() => _ = Enabled;
+
+                [CliOption]
+                public partial bool Enabled { get; }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type root = EmitAndLoad(generated.OutputCompilation).GetType("PackConstructionFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+
+        InvalidOperationException error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await new CliInvoker().InvokeAsync(model, ["--enabled"], TestContext.CancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
+        Assert.AreEqual("Option-pack binding is not attached.", error.Message);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-12")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-12-002")]
+    public async Task Generate_ExposesRootPackInheritedOptionBeforeAndAfterChild()
+    {
+        const string declaration = """
+            using System.Linq;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Definitions;
+            using Mauve.Cli.Invocation;
+
+            namespace InheritedPackFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            [CliChild<Show>]
+            public partial class Root(Global global)
+            {
+                public Global Global { get; } = global;
+            }
+
+            [CliOptionPack]
+            public partial class Global
+            {
+                [CliOption(IsRequired = true, Scope = OptionScope.Inherited)]
+                public partial string Environment { get; }
+            }
+
+            [CliCommand]
+            public partial class Show
+            {
+                [CliHandler]
+                private int Run(CommandInvocationContext context)
+                {
+                    OptionDefinition option = context.ParseResult.SelectedPath[0].Options
+                        .Single(static value => value.Name == "--environment");
+                    return context.TryGetOptionValue(option, out string? value) && value == "dev" ? 7 : 0;
+                }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type root = EmitAndLoad(generated.OutputCompilation).GetType("InheritedPackFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        CliInvoker invoker = new();
+        InvocationResult before = await invoker.InvokeAsync(
+            model, ["--environment=dev", "show"], TestContext.CancellationToken).ConfigureAwait(false);
+        InvocationResult after = await invoker.InvokeAsync(
+            model, ["show", "--environment=dev"], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, before.Outcome);
+        Assert.AreEqual(7, before.ExitCode);
+        Assert.AreEqual(InvocationOutcome.Completed, after.Outcome);
+        Assert.AreEqual(7, after.ExitCode);
     }
 
     [TestMethod]
@@ -787,22 +1075,22 @@ public sealed class CliModelGeneratorTests
             using Mauve.Cli.Definitions;
 
             [CliCommand("tool", IsRoot = true)]
-            [CliPack<FirstPack>("first")]
-            [CliPack<SecondPack>("second")]
-            public partial class Root
+            public partial class Root(FirstPack first, SecondPack second)
             {
             }
 
             [CliOptionPack]
-            [CliPackOption<string>("--first", IsRequired = true, Aliases = ["-x"])]
             public partial class FirstPack
             {
+                [CliOption(IsRequired = true, Aliases = ["-x"])]
+                public partial string First { get; }
             }
 
             [CliOptionPack]
-            [CliPackOption<string>("--second", IsRequired = true, Aliases = ["-x"])]
             public partial class SecondPack
             {
+                [CliOption(IsRequired = true, Aliases = ["-x"])]
+                public partial string Second { get; }
             }
             """;
 
@@ -820,26 +1108,188 @@ public sealed class CliModelGeneratorTests
             using Mauve.Cli.Declarations;
 
             [CliCommand("tool", IsRoot = true)]
-            [CliPack<FirstPack>("first")]
-            public partial class Root
+            public partial class Root(FirstPack first)
             {
             }
 
             [CliOptionPack]
-            [CliPack<SecondPack>("second")]
-            public partial class FirstPack
+            public partial class FirstPack(SecondPack second)
             {
             }
 
             [CliOptionPack]
-            [CliPack<FirstPack>("first")]
-            public partial class SecondPack
+            public partial class SecondPack(FirstPack first)
             {
+            }
+            """;
+        const string selfCycle = """
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Pack pack) { }
+
+            [CliOptionPack]
+            public partial class Pack(Pack nested) { }
+            """;
+
+        foreach (string source in new[] { declaration, selfCycle })
+        {
+            GeneratorResult generated = Generate(source);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
+            Assert.DoesNotContain(static generatedSource => generatedSource.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
+    public async Task Generate_AllowsPackTypeReuseOnDisjointCommands()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            namespace PackReuseFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            [CliChild<First>]
+            [CliChild<Second>]
+            public partial class Root { }
+
+            [CliCommand("first")]
+            public partial class First(Shared pack)
+            {
+                [CliHandler]
+                private int Run() => pack.Value;
+            }
+
+            [CliCommand("second")]
+            public partial class Second(Shared pack)
+            {
+                [CliHandler]
+                private int Run() => pack.Value;
+            }
+
+            [CliOptionPack]
+            public partial class Shared
+            {
+                [CliOption(IsRequired = true)]
+                public partial int Value { get; }
             }
             """;
 
         GeneratorResult generated = Generate(declaration);
-        Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type type = fixture.GetType("PackReuseFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)type.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        CliInvoker invoker = new();
+        InvocationResult first = await invoker.InvokeAsync(model, ["first", "--value=7"], TestContext.CancellationToken).ConfigureAwait(false);
+        InvocationResult second = await invoker.InvokeAsync(model, ["second", "--value=9"], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, first.Outcome);
+        Assert.AreEqual(7, first.ExitCode);
+        Assert.AreEqual(InvocationOutcome.Completed, second.Outcome);
+        Assert.AreEqual(9, second.ExitCode);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
+    public void Generate_RejectsDuplicateDirectPackTypesWithoutRegisteringRoot()
+    {
+        const string duplicateCommandPacks = """
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Pack first, Pack second) { }
+
+            [CliOptionPack]
+            public partial class Pack { }
+            """;
+        const string duplicateNestedPacks = """
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Outer outer) { }
+
+            [CliOptionPack]
+            public partial class Outer(Pack first, Pack second) { }
+
+            [CliOptionPack]
+            public partial class Pack { }
+            """;
+
+        foreach (string declaration in new[] { duplicateCommandPacks, duplicateNestedPacks })
+        {
+            GeneratorResult generated = Generate(declaration);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI003"));
+            Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsUnsupportedPackConstructorsWithoutRegisteringRoot()
+    {
+        const string unsupportedParameter = """
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Pack pack) { }
+
+            [CliOptionPack]
+            public partial class Pack(string value) { }
+            """;
+        const string ambiguousConstructors = """
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Pack pack) { }
+
+            [CliOptionPack]
+            public partial class Pack
+            {
+                public Pack() { }
+                public Pack(Nested nested) { }
+            }
+
+            [CliOptionPack]
+            public partial class Nested { }
+            """;
+
+        foreach (string declaration in new[] { unsupportedParameter, ambiguousConstructors })
+        {
+            GeneratorResult generated = Generate(declaration);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
+            Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
+    public void Generate_RejectsUnsupportedPackPropertiesWithoutRegisteringRoot()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Pack pack) { }
+
+            [CliOptionPack]
+            public partial class Pack
+            {
+                [CliOption]
+                public bool NotPartial { get; }
+
+                [CliArgument]
+                public partial string Positional { get; }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        Assert.AreEqual(2, generated.GeneratorDiagnostics.Count(static diagnostic => diagnostic.Id == "MCLI002"));
         Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal), generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
@@ -964,12 +1414,6 @@ public sealed class CliModelGeneratorTests
         EmitResult emit = compilation.Emit(assemblyStream, cancellationToken: TestContext.CancellationToken);
         Assert.IsTrue(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics));
         return Assembly.Load(assemblyStream.ToArray());
-    }
-
-    private static OptionDefinition ReadPackOption(Assembly fixture, string packTypeName)
-    {
-        Type packType = fixture.GetType(packTypeName, throwOnError: true)!;
-        return (OptionDefinition)packType.GetField("Option0", BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
     }
 
     private static string[] GetGeneratedSources(GeneratorDriver driver)

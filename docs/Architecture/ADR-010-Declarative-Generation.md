@@ -14,15 +14,18 @@ and generator diagnostics had not previously been selected.
 
 - Place declaration attributes in `Mauve.Cli.Declarations`: `CliCommand`,
   `CliChild`, `CliOption`, `CliArgument` and `CliHandler`.
-- Use generic `CliChild<TCommand>`, `CliPack<TPack>` and
-  `CliPackOption<TValue>` attributes instead of `Type` constructor arguments.
+- Use generic `CliChild<TCommand>` attributes instead of `Type` constructor
+  arguments for command-child declarations. OptionPack declarations follow
+  [ADR-011](ADR-011-OptionPack-Composition.md).
 - Require top-level, non-generic partial command classes and partial get-only
   bound properties. Infer order from compilation syntax-tree order and source
   span, including declarations split across partial class files.
 - Infer omitted command, option and positional names as kebab-case C#
   identifiers, stripping a trailing `Command` suffix from command types.
-  Explicit names override inference. Pack keys and pack-option names remain
-  explicit because repeated class attributes have no owning member name.
+  Explicit names override inference. Generated pack inclusion keys are
+  internal and type-derived, not user-authored; pack option names are inferred
+  from their `[CliOption]` property names. Explicit builder keys and runtime
+  context keys remain unchanged, as specified by ADR-011.
 - Infer `bool` options as flags, `IReadOnlyList<T>` options as greedy
   repeatable collections, other options as required-value scalars, scalar
   positionals as `1..1`, and collection positionals as `1..N`. Named arity
@@ -56,10 +59,19 @@ and generator diagnostics had not previously been selected.
   explicit `ConverterRegistry` to the shared parser.
 - Preserve ordered immutable runtime definitions and expose the same typed
   values to generated handlers and explicit-model handlers.
-- Declare generated packs with `CliOptionPack`, `CliPack<TPack>` and
-  `CliPackOption<TValue>`. Generated root builders may be extended with explicit
-  root-owned options before the shared `CommandModel.Create` validation.
-  Generated handlers use `CommandInvocationContext` to access pack values.
+- **Superseded for OptionPack declarations by
+  [ADR-011](ADR-011-OptionPack-Composition.md):** use
+  `[CliOptionPack(Title = ..., Description = ...)]` partial pack classes with
+  `[CliOption]` partial option properties, and declare nested pack dependencies
+  in command/pack constructors. Every generated command and pack must have
+  exactly one instance constructor; a parameterless constructor is supported,
+  while constructor parameters may only be declared pack dependencies.
+  Unsupported parameter types or ambiguous multiple constructors are invalid
+  members (MCLI002) and suppress root registration. The generator constructs
+  and binds nested packs before parent constructors and attaches each
+  instance's own context afterward. Generated root builders continue to
+  permit explicit root-owned options before shared `CommandModel.Create`
+  validation.
 
 ## Consequences
 

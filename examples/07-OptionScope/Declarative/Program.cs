@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
@@ -8,21 +9,23 @@ namespace OptionScope.Declarative;
 
 [CliCommand("deploy", IsRoot = true, Description = "Show deployment settings.")]
 [CliChild<ShowCommand>]
-[CliPack<GlobalOptions>("global", Title = "Global")]
-internal sealed partial class DeployCommand
+internal sealed partial class DeployCommand(GlobalOptions global)
 {
+    public GlobalOptions Global { get; } = global;
+
     [CliOption("--root-only", Arity = OptionArity.BooleanFlag, Description = "Available only on the root.")]
     public partial bool RootOnly { get; }
 }
 
-[CliOptionPack]
-[CliPackOption<string>(
-    "--environment",
-    IsRequired = true,
-    Scope = Mauve.Cli.Definitions.OptionScope.Inherited,
-    Description = "Deployment environment.")]
+[CliOptionPack(Title = "Global", Description = "Global deployment settings.")]
 internal sealed partial class GlobalOptions
 {
+    [CliOption(
+        "--environment",
+        IsRequired = true,
+        Scope = Mauve.Cli.Definitions.OptionScope.Inherited,
+        Description = "Deployment environment.")]
+    public partial string Environment { get; }
 }
 
 [CliCommand("show", Description = "Show the selected environment.")]
@@ -34,8 +37,9 @@ internal sealed partial class ShowCommand
     [CliHandler]
     internal int Run(CommandInvocationContext context)
     {
-        OptionPackContext global = context.GetOptionPack(context.ParseResult.SelectedPath[0], "global");
-        if (!global.TryGetOptionValue(GlobalOptions.Option0, out string? environment))
+        OptionDefinition environmentOption = context.ParseResult.SelectedPath[0].Options
+            .Single(static option => option.Name == "--environment");
+        if (!context.TryGetOptionValue(environmentOption, out string? environment))
         {
             return 2;
         }

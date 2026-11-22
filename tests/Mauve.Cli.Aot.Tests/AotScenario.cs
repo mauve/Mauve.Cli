@@ -51,64 +51,36 @@ internal static class AotScenario
             .Build();
     }
 
-    internal static ScenarioHandles CreateGeneratedHandles(
-        CommandModel model,
-        OptionDefinition workspace,
-        OptionDefinition verbose,
-        OptionDefinition tag,
-        OptionDefinition priority,
-        OptionDefinition backupPriority,
-        OptionDefinition code,
-        OptionDefinition limit,
-        OptionDefinition retries)
-    {
-        ArgumentNullException.ThrowIfNull(model);
-        CommandDefinition add = model.Root.Children[0];
-        return new ScenarioHandles(
-            model.Root,
-            workspace,
-            verbose,
-            tag,
-            priority,
-            backupPriority,
-            code,
-            limit,
-            retries,
-            add.Options[0],
-            add.Positionals[0]);
-    }
-
     internal static int HandleGenerated(
         CommandInvocationContext context,
         int generatedCount,
         string generatedText,
-        OptionDefinition workspace,
-        OptionDefinition verbose,
-        OptionDefinition tag,
-        OptionDefinition priority,
-        OptionDefinition backupPriority,
-        OptionDefinition code,
-        OptionDefinition limit,
-        OptionDefinition retries)
+        NetworkPack network)
     {
-        ScenarioHandles handles = new(
-            context.ParseResult.SelectedPath[0],
-            workspace,
-            verbose,
-            tag,
-            priority,
-            backupPriority,
-            code,
-            limit,
-            retries,
-            context.Command.Options[0],
-            context.Command.Positionals[0]);
-        return !context.TryGetOptionValue(handles.Count, out int parsedCount)
-            || !context.TryGetPositionalValue(handles.Text, out string? parsedText)
+        _handlerInvocations++;
+        return !context.TryGetOptionValue(context.Command.Options[0], out int parsedCount)
+            || !context.TryGetPositionalValue(context.Command.Positionals[0], out string? parsedText)
             || parsedCount != generatedCount
             || !string.Equals(parsedText, generatedText, StringComparison.Ordinal)
+            || !context.TryGetOptionValue(context.ParseResult.SelectedPath[0].Options[0], out string? workspace)
+            || !context.TryGetOptionValue(context.ParseResult.SelectedPath[0].Options[1], out bool verbose)
+            || !network.TryGetTag(out string? tag)
+            || !network.TryGetPriority(out Priority priority)
+            || !network.TryGetBackupPriority(out Priority? backupPriority)
+            || !network.TryGetCode(out BuildCode code)
+            || !network.TryGetLimit(out int? limit)
+            || !network.Retry.TryGetRetries(out int retries)
             ? throw new InvalidOperationException("Generated typed binding differs from the parsed values.")
-            : Handle(context, handles);
+            : parsedCount
+            + parsedText!.Length
+            + workspace!.Length
+            + tag!.Length
+            + (verbose ? 1 : 0)
+            + (int)priority
+            + (int)backupPriority!.Value
+            + code.Value
+            + limit!.Value
+            + retries;
     }
 
     internal static CommandModel CreateExplicitModel(out ScenarioHandles handles)
@@ -222,15 +194,15 @@ internal static class AotScenario
         Justification = "The handler count changes through delegate dispatch during invocation.")]
     internal static async Task VerifyAsync(
         CommandModel model,
-        ScenarioHandles handles,
+        ScenarioHandles? handles,
         ConverterRegistry converters)
     {
         _handlerInvocations = 0;
         CliInvoker invoker = new(new CliParser(converters));
         string[] firstArguments =
         [
-            "new",
             "--workspace=north",
+            "new",
             "--verbose",
             "--tag=alpha",
             "--priority=urgent",
@@ -246,7 +218,8 @@ internal static class AotScenario
             "The first generated/explicit invocation did not bind all values.");
         Require(string.Join(" ", first.ParseResult!.SelectedCommand!.Path) == "aot-todo add",
             "The command alias did not resolve to the canonical path.");
-        Require(first.ParseResult.TryGetOptionValue(model.Root, handles.Workspace, out string? workspace)
+        OptionDefinition workspaceOption = handles?.Workspace ?? model.Root.Options[0];
+        Require(first.ParseResult.TryGetOptionValue(model.Root, workspaceOption, out string? workspace)
             && workspace == "north",
             "The inherited workspace option was not bound.");
 

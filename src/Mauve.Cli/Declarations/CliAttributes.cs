@@ -58,7 +58,7 @@ public sealed class CliChildAttribute<TCommand> : Attribute
     public Type CommandType => typeof(TCommand);
 }
 
-/// <summary>Declares an option on a generated command type.</summary>
+/// <summary>Declares an option on a generated command or option-pack type.</summary>
 [AttributeUsage(AttributeTargets.Property, Inherited = false)]
 public sealed class CliOptionAttribute(string? name = null) : Attribute
 {
@@ -132,63 +132,9 @@ public sealed class CliHandlerAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class CliOptionPackAttribute : Attribute
 {
-}
-
-/// <summary>Declares an ordered command or nested-pack inclusion.</summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
-public sealed class CliPackAttribute<TPack>(string key) : Attribute
-    where TPack : class
-{
-    /// <summary>Gets the included option-pack declaration type.</summary>
-    public Type PackType => typeof(TPack);
-
-    /// <summary>Gets the stable inclusion key.</summary>
-    public string Key { get; } = key;
-
     /// <summary>Gets or sets the optional help-group title.</summary>
     public string? Title { get; set; }
 
-    /// <summary>Gets or sets the optional help-group description.</summary>
+    /// <summary>Gets or sets the optional help-group description for the pack.</summary>
     public string? Description { get; set; }
-}
-
-/// <summary>Declares an ordered option definition owned by a generated pack.</summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
-public sealed class CliPackOptionAttribute<TValue>(string name) : Attribute
-{
-    /// <summary>Gets the canonical option spelling.</summary>
-    public string Name { get; } = name;
-
-    /// <summary>Gets the value type.</summary>
-    public Type ValueType => typeof(TValue);
-
-    /// <summary>Gets or sets an explicit option arity override.</summary>
-    public OptionArity Arity { get; set; }
-
-    /// <summary>Gets or sets option aliases.</summary>
-    public string[] Aliases { get; set; } = [];
-
-    /// <summary>Gets or sets whether the option is required.</summary>
-    public bool IsRequired { get; set; }
-
-    /// <summary>Gets or sets whether null values are allowed.</summary>
-    public bool AllowsNull { get; set; }
-
-    /// <summary>Gets or sets whether the option is hidden from help and completion.</summary>
-    public bool IsHidden { get; set; }
-
-    /// <summary>Gets or sets whether values are sensitive.</summary>
-    public bool IsSensitive { get; set; }
-
-    /// <summary>Gets or sets the option description.</summary>
-    public string? Description { get; set; }
-
-    /// <summary>Gets or sets the display label for a value.</summary>
-    public string? ValueLabel { get; set; }
-
-    /// <summary>Gets or sets the inherited visibility scope.</summary>
-    public OptionScope Scope { get; set; }
-
-    /// <summary>Gets or sets the behavior for an optional-valued option used without a value.</summary>
-    public BareValuePolicy BareValuePolicy { get; set; }
 }

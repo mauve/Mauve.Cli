@@ -8,13 +8,13 @@ namespace Mauve.Cli.Aot.Tests;
 
 [CliCommand("aot-todo", IsRoot = true)]
 [CliChild<AotAddCommand>]
-[CliPack<GlobalPack>("global", Title = "Global")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
     Justification = "This generated declaration supplies the static model factory.")]
-internal sealed partial class AotRootCommand
+internal sealed partial class AotRootCommand(GlobalPack global)
 {
+    public GlobalPack Global { get; } = global;
 }
 
 [CliCommand("directive", IsRoot = true)]
@@ -56,12 +56,11 @@ internal sealed partial class DebugDirective
 }
 
 [CliCommand("add", Aliases = ["new"])]
-[CliPack<NetworkPack>("network", Title = "Network")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
     Justification = "The generated dispatcher instantiates this command at invocation.")]
-internal sealed partial class AotAddCommand
+internal sealed partial class AotAddCommand(NetworkPack network)
 {
     [CliOption(IsRequired = true)]
     public partial int Count { get; }
@@ -76,54 +75,58 @@ internal sealed partial class AotAddCommand
             context,
             Count,
             Text,
-            GlobalPack.Option0,
-            GlobalPack.Option1,
-            NetworkPack.Option0,
-            NetworkPack.Option1,
-            NetworkPack.Option2,
-            NetworkPack.Option3,
-            NetworkPack.Option4,
-            RetryPack.Option0);
+            network);
     }
 }
 
-[CliOptionPack]
-[CliPackOption<string>(
-    "--workspace",
-    IsRequired = true,
-    Scope = OptionScope.Inherited)]
-[CliPackOption<bool>("--verbose", Scope = OptionScope.Inherited)]
+[CliOptionPack(Title = "Global", Description = "Global AOT scenario options.")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
-    Justification = "Generated pack descriptors are static and are not instantiated.")]
+    Justification = "The generated binding instantiates this pack when needed.")]
 internal sealed partial class GlobalPack
 {
+    [CliOption("--workspace", IsRequired = true, Scope = OptionScope.Inherited)]
+    public partial string Workspace { get; }
+
+    [CliOption("--verbose", Scope = OptionScope.Inherited)]
+    public partial bool Verbose { get; }
 }
 
-[CliOptionPack]
-[CliPack<RetryPack>("retry", Title = "Retry")]
-[CliPackOption<string>("--tag", IsRequired = true)]
-[CliPackOption<Priority>("--priority", IsRequired = true)]
-[CliPackOption<Priority?>("--backup-priority", IsRequired = true)]
-[CliPackOption<BuildCode>("--code", IsRequired = true)]
-[CliPackOption<int?>("--limit", IsRequired = true)]
+[CliOptionPack(Title = "Network", Description = "Network AOT scenario options.")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
-    Justification = "Generated pack descriptors are static and are not instantiated.")]
-internal sealed partial class NetworkPack
+    Justification = "The generated binding instantiates this pack for each invocation.")]
+internal sealed partial class NetworkPack(RetryPack retry)
 {
+    public RetryPack Retry { get; } = retry;
+
+    [CliOption("--tag", IsRequired = true)]
+    public partial string Tag { get; }
+
+    [CliOption("--priority", IsRequired = true)]
+    public partial Priority Priority { get; }
+
+    [CliOption("--backup-priority", IsRequired = true)]
+    public partial Priority? BackupPriority { get; }
+
+    [CliOption("--code", IsRequired = true)]
+    public partial BuildCode Code { get; }
+
+    [CliOption("--limit", IsRequired = true)]
+    public partial int? Limit { get; }
 }
 
-[CliOptionPack]
-[CliPackOption<int>("--retries", IsRequired = true)]
+[CliOptionPack(Title = "Retry", Description = "Retry AOT scenario options.")]
 [SuppressMessage(
     "Performance",
     "CA1812:Avoid uninstantiated internal classes",
-    Justification = "Generated pack descriptors are static and are not instantiated.")]
+    Justification = "The generated binding instantiates this nested pack for each invocation.")]
 internal sealed partial class RetryPack
 {
+    [CliOption("--retries", IsRequired = true)]
+    public partial int Retries { get; }
 }
 
 internal static class AotDirectiveState

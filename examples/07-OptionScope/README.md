@@ -14,3 +14,8 @@ dotnet run --project examples/07-OptionScope/Manual -- --root-only show --enviro
 The inherited value is accepted before or after the child command and bound
 once in the selected command. A root-local option supplied before descent is
 reported as out of scope instead of being rebound on the child.
+
+In the declarative tree, `GlobalOptions` is a constructor dependency of the
+root, which owns its inherited option. The child reads the inherited
+definition through its invocation context; adding the pack to the child
+constructor would instead declare a separate child-owned inclusion.

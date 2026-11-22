@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,17 +18,15 @@ internal sealed partial class CompletionCommand
 }
 
 [CliCommand(Description = "Search without changing data.")]
-[CliPack<ColorPack>("filters", Title = "Filters")]
-internal sealed partial class SearchCommand
+internal sealed partial class SearchCommand(ColorPack filters)
 {
     [CliArgument(Description = "Search text.")]
     public partial string Query { get; }
 
     [CliHandler]
-    private int Run(CommandInvocationContext context)
+    private int Run()
     {
-        OptionPackContext filters = context.GetOptionPack("filters");
-        if (!filters.TryGetOptionValue(ColorPack.Option0, out string? color))
+        if (!filters.TryGetColor(out string? color))
         {
             throw new InvalidOperationException("The generated color option is unavailable.");
         }
@@ -38,16 +37,20 @@ internal sealed partial class SearchCommand
 
 }
 
-[CliOptionPack]
-[CliPackOption<string>("--color", IsRequired = true, Description = "Search result color.")]
+[CliOptionPack(Title = "Filters", Description = "Search filters.")]
 internal sealed partial class ColorPack
 {
+    [CliOption("--color", IsRequired = true, Description = "Search result color.")]
+    public partial string Color { get; }
 }
 
 internal static class Program
 {
+    private static readonly OptionDefinition _colorOption = CompletionCommand.CreateModel()
+        .Root.Children[0].Options.Single(static option => option.Name == "--color");
+
     private static readonly CompletionProviderRegistry _providers = new CompletionProviderRegistryBuilder()
-        .Register(ColorPack.Option0, GetColors)
+        .Register(_colorOption, GetColors)
         .Build();
 
     private static Task<int> Main(string[] args)

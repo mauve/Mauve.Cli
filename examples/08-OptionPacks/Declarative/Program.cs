@@ -14,66 +14,51 @@ internal sealed partial class OptionPacksCommand
 }
 
 [CliCommand(Description = "Fetch a resource.")]
-[CliPack<NetworkPack>("network", Title = "Network")]
-internal sealed partial class FetchCommand
+internal sealed partial class FetchCommand(NetworkPack network)
 {
     [CliHandler]
     [SuppressMessage(
         "Performance",
         "CA1822:Mark members as static",
         Justification = "Generated command handlers are instance methods.")]
-    private int Run(CommandInvocationContext context)
+    private int Run()
     {
-        OptionPackContext network = context.GetOptionPack("network");
-        OptionPackContext retry = network.GetNestedPack("retry");
-        if (!network.TryGetOptionValue(NetworkPack.Option0, out string? endpoint)
-            || !retry.TryGetOptionValue(RetryPack.Option0, out int retries))
-        {
-            throw new InvalidOperationException("The generated network pack values are unavailable.");
-        }
-
-        Console.WriteLine($"Fetch {endpoint} with {retries} retries.");
+        Console.WriteLine($"Fetch {network.Endpoint} with {network.Retry.Retries} retries.");
         return 0;
     }
 
 }
 
 [CliCommand(Description = "Inspect a resource.")]
-[CliPack<NetworkPack>("network", Title = "Network")]
-internal sealed partial class InspectCommand
+internal sealed partial class InspectCommand(NetworkPack network)
 {
     [CliHandler]
     [SuppressMessage(
         "Performance",
         "CA1822:Mark members as static",
         Justification = "Generated command handlers are instance methods.")]
-    private int Run(CommandInvocationContext context)
+    private int Run()
     {
-        OptionPackContext network = context.GetOptionPack("network");
-        OptionPackContext retry = network.GetNestedPack("retry");
-        if (!network.TryGetOptionValue(NetworkPack.Option0, out string? endpoint)
-            || !retry.TryGetOptionValue(RetryPack.Option0, out int retries))
-        {
-            throw new InvalidOperationException("The generated network pack values are unavailable.");
-        }
-
-        Console.WriteLine($"Inspect {endpoint} with {retries} retries.");
+        Console.WriteLine($"Inspect {network.Endpoint} with {network.Retry.Retries} retries.");
         return 0;
     }
 
 }
 
-[CliOptionPack]
-[CliPack<RetryPack>("retry", Title = "Retry")]
-[CliPackOption<string>("--endpoint", IsRequired = true, Description = "Resource address.")]
-internal sealed partial class NetworkPack
+[CliOptionPack(Title = "Network", Description = "Network options.")]
+internal sealed partial class NetworkPack(RetryPack retry)
 {
+    public RetryPack Retry { get; } = retry;
+
+    [CliOption("--endpoint", IsRequired = true, Description = "Resource address.")]
+    public partial string Endpoint { get; }
 }
 
-[CliOptionPack]
-[CliPackOption<int>("--retries", IsRequired = true, Description = "Maximum retry count.")]
+[CliOptionPack(Title = "Retry", Description = "Retry options.")]
 internal sealed partial class RetryPack
 {
+    [CliOption("--retries", IsRequired = true, Description = "Maximum retry count.")]
+    public partial int Retries { get; }
 }
 
 internal static class Program

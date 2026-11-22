@@ -27,17 +27,7 @@ public sealed class AotAcceptanceTests
     {
         ConverterRegistry converters = AotScenario.CreateConverters();
         CommandModel generated = AotRootCommand.CreateModel(includeStandardHelp: true);
-        ScenarioHandles generatedHandles = AotScenario.CreateGeneratedHandles(
-            generated,
-            GlobalPack.Option0,
-            GlobalPack.Option1,
-            NetworkPack.Option0,
-            NetworkPack.Option1,
-            NetworkPack.Option2,
-            NetworkPack.Option3,
-            NetworkPack.Option4,
-            RetryPack.Option0);
-        await AotScenario.VerifyAsync(generated, generatedHandles, converters).ConfigureAwait(false);
+        await AotScenario.VerifyAsync(generated, null, converters).ConfigureAwait(false);
 
         CommandModel explicitModel = AotScenario.CreateExplicitModel(out ScenarioHandles explicitHandles);
         await AotScenario.VerifyAsync(explicitModel, explicitHandles, converters).ConfigureAwait(false);

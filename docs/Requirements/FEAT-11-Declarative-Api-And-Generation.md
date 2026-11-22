@@ -74,14 +74,30 @@ error while remaining accepted by `RunAsync<Root>()`.
 
 `MCLI001` identifies invalid command declarations, `MCLI002` invalid members,
 and `MCLI003` hierarchy or visible-name conflicts. Unsupported shapes are
-compiler errors rather than runtime fallback. Packs are declared using
-`CliOptionPack`, `CliPack<TPack>` and `CliPackOption<TValue>` as specified by
-[FEAT-14](FEAT-14-OptionPacks.md). Handlers may accept no parameter, a
-`CancellationToken`, or a `CommandInvocationContext`. Defaults inferred from
-source initializers, generated converter registration and completion
-providers are not part of this surface; they remain owned by their respective
-feature work. Applications may use the explicit converter registry with
-either model path.
+compiler errors rather than runtime fallback. Option packs use the same
+property-based declaration model: `[CliOption]` marks partial option
+properties on `[CliOptionPack(Title = ..., Description = ...)]` partial
+classes. Command and pack constructors declare their nested pack dependencies;
+each generated command and pack has exactly one instance constructor, with
+parameterless constructors supported and parameters limited to declared pack
+dependencies. Unsupported parameter types or ambiguous multiple constructors
+produce MCLI002 and suppress root registration. The generator creates fresh
+pack instances for each invocation, constructing and binding nested packs
+before invoking their parent constructor. Each instance receives its own
+scoped context after construction. Pack type uniqueness and internal identity
+are specified by [FEAT-14](FEAT-14-OptionPacks.md). A root with an instance
+method directive still requires a parameterless constructor: directives can
+execute before command input is valid. Standalone directive declarations do
+not impose that restriction on the root.
+
+Handlers may accept no parameter, a `CancellationToken`, or a
+`CommandInvocationContext`. Defaults inferred from source initializers,
+generated converter registration and completion providers are not part of this
+surface; they remain owned by their respective feature work. Applications may
+use the explicit converter registry with either model path. This approved
+OptionPack declaration replacement is a breaking API change; verification of
+the previous declaration shape is not evidence for the replacement. Observed
+verification for the replacement is recorded in the validation ledger.
 
 ## Metrics Impact
 **Instruments:** none - source generation adds no runtime instrumentation.

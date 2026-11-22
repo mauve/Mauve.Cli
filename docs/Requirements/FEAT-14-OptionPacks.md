@@ -25,14 +25,26 @@ Allow commands to include reusable packs containing ordered options and nested p
 **Security:** A pack adds no implicit global scope, configuration access or service execution.
 
 ### FEAT-14-002 - Composition integrity
-Validate nested composition for cycles, duplicate inclusion keys and duplicate visible names or aliases before parsing.
-**Acceptance:** A self-inclusion and a collision across two packs fail deterministically; the same pack can be reused on disjoint commands.
+Validate nested composition for cycles, duplicate inclusion keys in the explicit builder model, duplicate direct pack types in generated declarations, and duplicate visible names or aliases before parsing.
+**Acceptance:** A self-inclusion, repeated direct pack type, or collision across two packs fails deterministically; the same pack type can be reused on disjoint commands.
 **Security:** Snapshot traversal is bounded by the configured model node and nesting limits.
 
 ### FEAT-14-003 - Generated and explicit parity
-Declare reusable packs with `CliOptionPack`, generic `CliPack<TPack>` and generic `CliPackOption<TValue>`, infer inclusion/option order from source position and option arity from the value type, and generate a model that uses the shared runtime validation and invocation behavior.
-**Acceptance:** Equivalent nested packs created through generated and explicit APIs bind the same values and help groups; invalid pack aliases and cycles produce generator errors without root registration; an option added to the generated root builder works alongside generated packs.
-**Security:** Neither construction path bypasses definition validation or converter registration rules, and generated declarations never store invocation values in static state.
+Declare packs as `[CliOptionPack(Title = ..., Description = ...)]` partial
+classes whose `[CliOption]` partial properties declare options. Command and
+pack constructors declare nested pack dependencies by pack type; a direct
+dependency type may occur only once for a given command or pack. Infer option
+order from source position and option arity from the property type. Generated
+pack identity is a stable internal key derived from its type, not a
+user-authored declarative key. Generate a model that uses the shared runtime
+validation and invocation behavior.
+**Acceptance:** Equivalent nested packs created through generated and explicit
+APIs bind the same values and help groups; duplicate direct pack types and
+cyclic dependencies produce generator errors without root registration; an
+option added to the generated root builder works alongside generated packs.
+**Security:** Neither construction path bypasses definition validation or
+converter registration rules, and generated declarations never store
+invocation values in static state or resolve arbitrary constructor services.
 
 ### FEAT-14-004 - Help integration
 Project pack titles into help groups without mutating option metadata.
@@ -46,9 +58,11 @@ Keep values and mutable collections in each parse result, not reusable pack defi
 
 ## Design
 `OptionPackBuilder` composes immutable `OptionDefinition` instances and nested
-packs. A command or nested pack gives each inclusion a stable key; keys are
-unique among siblings. `CommandModel.Create` snapshots the composition,
-rejects cycles and collisions, and applies the configured model bounds.
+packs. In the explicit builder API, a command or nested pack gives each
+inclusion a stable key; keys are unique among siblings. `CommandModel.Create`
+snapshots the composition, rejects cycles and collisions, and applies the
+configured model bounds. These explicit builder keys and the public runtime
+context key contract do not change.
 
 Flattening preserves command options first, then pack inclusion order; each
 nested pack is visited before its parent's own options. The snapshot retains
@@ -57,28 +71,42 @@ remain in `ParseResult`, keyed by their declaring command and option
 definition. An option's explicit display group wins; otherwise the nearest
 titled pack supplies its group.
 
-Generated pack options expose immutable definition handles. Generated
-handlers that accept `CommandInvocationContext` resolve a pack by its inclusion
-key and read values from the current invocation. A generated root also exposes
-`CreateBuilder()` so callers can add explicit root-owned options before
-`CommandModel.Create` validates the combined model. Completion and providers
-remain owned by FEAT-10.
+The generated declaration form replaces `CliPack<TPack>` and
+`CliPackOption<TValue>`: `[CliOptionPack(Title = ..., Description = ...)]`
+marks a partial pack class and `[CliOption]` marks its partial option
+properties. Command and pack constructors declare direct nested-pack
+dependencies by type. A parent cannot declare the same direct pack type more
+than once; reuse on separate branches remains valid. Generated declarations
+have no user-facing inclusion key. The generator assigns a stable internal
+key derived from pack type identity, while the existing runtime context key
+contract remains unchanged.
 
-Pack inclusion keys and pack-option names remain explicit. Pack and option
-order follows compilation syntax-tree order and source span. Pack option
-`bool` values infer BooleanFlag, `IReadOnlyList<T>` values infer greedy
-repeatable collection semantics, and other values infer RequiredScalar unless
-an explicit named arity override is supplied.
+Generated pack options expose typed properties and use the shared immutable
+definitions and invocation-local parsed values. Every pack instance is fresh
+per invocation. Pack dependencies are constructed recursively and their
+values bound before the parent constructor runs; after each parent constructor,
+its own scoped context is attached. Constructor dependencies are limited to
+declared pack types; this is not general dependency injection. A generated
+root still exposes `CreateBuilder()` so callers can add explicit root-owned
+options before `CommandModel.Create` validates the combined model.
+Completion and providers remain owned by FEAT-10.
+
+Pack inclusion order follows constructor parameter order; option order follows
+compilation syntax-tree order and source span.
+Pack option `bool` values infer BooleanFlag, `IReadOnlyList<T>` values infer
+greedy repeatable collection semantics, and other values infer RequiredScalar
+unless an explicit named arity override is supplied. The replacement is an
+approved breaking declarative API change; earlier strict-suite results for the
+previous form are not acceptance evidence for this design.
 
 ## Metrics Impact
 **Instruments:** none - option-pack composition adds no runtime instrumentation.
 
 ## Verification
-Focused tests cover nested values, generated/explicit parity, generic
-attributes, inferred source order and arity, nullable versus explicitly empty
-pack metadata, manual root options, help grouping, empty packs, cycles,
-collisions, disjoint reuse and concurrent/sequential isolation. Observed MTP
-evidence is recorded in the validation ledger.
+Focused tests cover nested values, generated/explicit parity, constructor
+dependencies, inferred names and arity, manual root options, help grouping,
+empty packs, cycles, collisions, disjoint reuse and concurrent/sequential
+isolation. Observed MTP evidence is recorded in the validation ledger.
 
 ## Diagrams
 
