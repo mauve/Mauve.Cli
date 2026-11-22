@@ -37,15 +37,15 @@ command -v jq >/dev/null
     sha256sum \
         src/Mauve.Cli/packages.lock.json \
         src/Mauve.Cli.Generators/packages.lock.json \
-        examples/Todo.Cli/packages.lock.json \
-        examples/FileTool.Cli/packages.lock.json \
+        examples/02-Commands/Declarative/packages.lock.json \
+        examples/02-Commands/Manual/packages.lock.json \
         tests/Mauve.Cli.Aot.Tests/packages.lock.json
     echo "Acceptance source SHA-256:"
     sha256sum \
-        examples/Todo.Cli/Program.cs \
-        examples/Todo.Cli/Todo.Cli.csproj \
-        examples/FileTool.Cli/Program.cs \
-        examples/FileTool.Cli/FileTool.Cli.csproj \
+        examples/02-Commands/Declarative/Program.cs \
+        examples/02-Commands/Declarative/Commands.Declarative.csproj \
+        examples/02-Commands/Manual/Program.cs \
+        examples/02-Commands/Manual/Commands.Manual.csproj \
         src/Mauve.Cli/Invocation/CliInvoker.cs \
         src/Mauve.Cli/Invocation/PredefinedDirectives.cs \
         src/Mauve.Cli/Completion/CompletionCommandLine.cs \
@@ -82,13 +82,8 @@ verify_example_directives() {
     local output
     local payload
     local expected
-    if [[ "$example" == "Todo.Cli" ]]; then
-        payload="todo ad"
-        expected="add"
-    else
-        payload="tool c"
-        expected="copy"
-    fi
+    payload="commands gr"
+    expected="greet"
 
     {
         printf '$'
@@ -117,8 +112,42 @@ verify_example_directives() {
     fi
 }
 
-for example in Todo.Cli FileTool.Cli; do
-    project="examples/$example/$example.csproj"
+verify_example_commands() {
+    local log="$1"
+    shift
+    local output
+    local status
+    {
+        printf '$'
+        printf ' %q' "$@" hi "AOT check"
+        printf '\n'
+    } | tee -a "$log"
+    output="$("$@" hi "AOT check")"
+    printf 'Valid command output: %s\n' "$output" | tee -a "$log"
+    if [[ "$output" != "Hello, AOT check!" ]]; then
+        echo "Representative command returned unexpected output." >&2
+        exit 1
+    fi
+    {
+        printf '$'
+        printf ' %q' "$@" greet
+        printf '\n'
+    } | tee -a "$log"
+    if "$@" greet >>"$log" 2>&1; then
+        status=0
+    else
+        status=$?
+    fi
+    echo "Missing-input exit code: $status" | tee -a "$log"
+    if [[ "$status" != 2 ]]; then
+        echo "Representative command returned an unexpected missing-input exit code." >&2
+        exit 1
+    fi
+}
+
+for variant in Declarative Manual; do
+    example="Commands.$variant"
+    project="examples/02-Commands/$variant/$example.csproj"
     run_logged "$evidence/$example.log" dotnet restore "$project" --locked-mode
     run_logged "$evidence/$example.log" dotnet build "$project" --configuration Release --no-restore
 
@@ -133,12 +162,7 @@ for example in Todo.Cli FileTool.Cli; do
         -p:SelfContained=true \
         -p:EnableTrimAnalyzer=true \
         -p:ILLinkTreatWarningsAsErrors=true
-    if [[ "$example" == "Todo.Cli" ]]; then
-        run_logged "$evidence/$example.log" dotnet "$trimmed/$example.dll" new "AOT check"
-        grep -Fqx "Added: AOT check" "$evidence/$example.log"
-    else
-        run_logged "$evidence/$example.log" dotnet "$trimmed/$example.dll" --verify-aot
-    fi
+    verify_example_commands "$evidence/$example.log" dotnet "$trimmed/$example.dll"
     verify_example_directives "$evidence/$example.log" "$example" dotnet "$trimmed/$example.dll"
     if find "$trimmed" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example trimmed output contains the build-time generator." >&2
@@ -157,12 +181,7 @@ for example in Todo.Cli FileTool.Cli; do
         -p:ILLinkTreatWarningsAsErrors=true \
         -p:IlcTreatWarningsAsErrors=true \
         "-p:CppCompilerAndLinker=$compiler"
-    if [[ "$example" == "Todo.Cli" ]]; then
-        run_logged "$evidence/$example.log" "$native/$example" new "AOT check"
-        grep -Fqx "Added: AOT check" "$evidence/$example.log"
-    else
-        run_logged "$evidence/$example.log" "$native/$example" --verify-aot
-    fi
+    verify_example_commands "$evidence/$example.log" "$native/$example"
     verify_example_directives "$evidence/$example.log" "$example" "$native/$example"
     if find "$native" -iname '*Mauve.Cli.Generators*' -print -quit | grep -q .; then
         echo "$example native output contains the build-time generator." >&2
@@ -200,8 +219,11 @@ run_logged "$evidence/$test_name.log" \
     "$native/$test_name" --report-trx --results-directory "$native_results"
 
 for mode in managed native; do
-    results_variable="${mode}_results"
-    results_directory="${!results_variable}"
+    if [[ "$mode" == "managed" ]]; then
+        results_directory="$managed_results"
+    else
+        results_directory="$native_results"
+    fi
     mapfile -t reports < <(find "$results_directory" -maxdepth 1 -type f -name '*.trx')
     if (( ${#reports[@]} != 1 )); then
         echo "Expected exactly one $mode AOT test TRX report." >&2

@@ -14,10 +14,9 @@ available in this environment.
 ## Decision
 
 - Linux x64 is the first verified NativeAOT and trimming target.
-- The generated `Todo.Cli` and explicit `FileTool.Cli` consumers must each
-  pass small managed trimmed and NativeAOT publish/run checks using their
-  normal user-facing models, with linker and compiler warnings treated as
-  errors.
+- The generated and explicit `02-Commands` example consumers must each pass
+  small managed trimmed and NativeAOT publish/run checks using their normal
+  user-facing models, with linker and compiler warnings treated as errors.
 - `Mauve.Cli.Aot.Tests` must run the comprehensive generated and explicit
   parser matrix through managed MTP and as a NativeAOT MTP executable. Both
   runs must report exactly two passing tests, covering FEAT-13 and FEAT-15,

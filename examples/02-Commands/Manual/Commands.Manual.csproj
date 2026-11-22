@@ -11,8 +11,6 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Mauve.Cli/Mauve.Cli.csproj" />
-    <ProjectReference Include="../../src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj"
-                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../../src/Mauve.Cli/Mauve.Cli.csproj" />
   </ItemGroup>
 </Project>

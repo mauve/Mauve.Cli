@@ -20,8 +20,9 @@ The standalone runner/analyzer/MTP TRX probe verifies only infrastructure.
 Its synthetic feature is intentionally outside this repository's product
 inventory and is excluded from source traceability. The focused FEAT-13 and FEAT-15 tests passed through managed MTP and as a
 NativeAOT executable with exact test-count and metadata parity. Both actual
-example consumers passed managed trimmed and NativeAOT publish/run checks on
-Linux x64; see FEAT-13 and the rows below. See
+previous Todo and FileTool consumers and the replacement Commands examples
+passed managed trimmed and NativeAOT publish/run checks on Linux x64; see
+FEAT-13 and the rows below. See
 [POL-01](Policies/POL-01-Strict-Dotnet-And-Aot.md) for executable local gates.
 Hosted/protected CI remains unavailable.
 
@@ -109,7 +110,7 @@ is claimed.
 | FEAT-10-004 | environment-gated automated | `python3 scripts/verify-shells.py --require-all` | Mauve.Cli maintainers | Linux; Bash, Zsh, Fish, PowerShell, Python 3, base64, .NET 11 | Executed successfully on Linux x64 with Bash 5.3, Zsh 5.9, Fish 4.2.1 and PowerShell 7.5.4. Exercises registration, spaces, quotes, Unicode and hostile candidate insertion; Bash also exercises simple open quotes. Missing shells are unavailable, not passing evidence. Scope does not cover the full shell grammar. |
 | FEAT-10-005 | portable automated | `CompletionCommandLineTests.CreateRequest_MapsQuotedEscapedAndWhitespacePositions` | Mauve.Cli maintainers | .NET 11 | Tests the shared shell completion decoder. |
 | FEAT-10-005 | portable automated | `CompletionCommandLineTests.CreateRequest_TreatsPayloadAsTextAndRejectsInvalidCoordinates` | Mauve.Cli maintainers | .NET 11 | Tests the shared shell completion decoder. |
-| FEAT-13-001 | portable automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`; `scripts/verify-aot.sh` | Mauve.Cli maintainers | .NET 11; focused AOT tests plus generated Todo and explicit FileTool examples | Managed and native focused tests passed; published examples contain no generator assembly. |
+| FEAT-13-001 | portable automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`; `scripts/verify-aot.sh` | Mauve.Cli maintainers | .NET 11; focused AOT tests plus generated and explicit Commands examples | Managed and native focused tests passed; the published Commands examples contained no generator assembly in the 2026-11-22 run. |
 | FEAT-13-002 | environment-gated automated | `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios`; `scripts/verify-aot.sh` managed trimmed publishes | Mauve.Cli maintainers | Native Linux x64; .NET SDK 11.0.100 | The managed focused test and both trimmed example outputs ran successfully; evidence and hashes are retained under `artifacts/aot-verification/linux-x64/`. |
 | FEAT-13-003 | environment-gated automated | `scripts/verify-aot.sh` NativeAOT test and example publishes/executions | Mauve.Cli maintainers | Native Linux x64; Clang 21.1.8 | The native focused test reported exactly one pass with four requirement traits, and both native examples passed their model smoke checks. |
 | FEAT-13-004 | environment-gated automated | FEAT-13 support matrix; ADR-013; native-host guard in `scripts/verify-aot.sh` | Mauve.Cli maintainers | Linux x64 verified; ARM64 and other RIDs unavailable/unverified | Only Linux x64 is claimed. Other targets remain explicitly unverified; cross-publish alone is rejected. |

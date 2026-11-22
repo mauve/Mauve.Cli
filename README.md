@@ -24,18 +24,15 @@ NuGet package yet.
 ## Try the examples
 
 ```sh
-dotnet run --project examples/Todo.Cli -- add "Buy milk"
-dotnet run --project examples/Todo.Cli -- --help
-dotnet run --project examples/FileTool.Cli -- copy source.txt backup.txt
-dotnet run --project examples/Todo.Cli -- '[completion:bash]'
+dotnet run --project examples/01-Hello/Declarative
+dotnet run --project examples/01-Hello/Manual
+dotnet run --project examples/02-Commands/Declarative -- greet Ada
+dotnet run --project examples/09-Completion/Manual -- '[completion:bash]'
 ```
 
-`[debug]` waits for a debugger to attach. `[completion:bash]` emits a Bash
-completion registration script.
-
-`Todo.Cli` uses generated commands. `FileTool.Cli` builds a command model
-directly. These examples print the requested action; they do not manage files
-or save tasks.
+Each [example](examples/) has a declarative, generated version and an
+explicit manual-model version. The examples print their results without
+changing files or contacting services.
 
 ## Define a command directly
 

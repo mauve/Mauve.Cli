@@ -73,8 +73,8 @@ without an owner and narrow tested rationale.
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
 | Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix plus generated and explicit directive scenarios run through managed MTP and as a NativeAOT MTP executable. Both TRX reports must contain two passing tests covering FEAT-13 and FEAT-15. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs, directives or invocation behavior. |
-| Generated Todo.Cli, Linux x64 | Managed trimmed and NativeAOT publishes ran a small check of the normal generated Todo model with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the generator or example model. |
-| Explicit FileTool.Cli without a generator reference, Linux x64 | Managed trimmed and NativeAOT publishes ran a small check of the normal explicit copy model with warnings treated as errors. | Repeat with `bash scripts/verify-aot.sh` when changing the runtime or example model. |
+| Generated `02-Commands/Declarative`, Linux x64 | Managed trimmed and NativeAOT publishes ran the generated Commands model with warnings treated as errors. | Run `bash scripts/verify-aot.sh` when changing the generator or example model. |
+| Explicit `02-Commands/Manual` without a generator reference, Linux x64 | Managed trimmed and NativeAOT publishes ran the explicit Commands model with warnings treated as errors. | Run `bash scripts/verify-aot.sh` when changing the runtime or example model. |
 | Linux ARM64 and all other RIDs | Unverified. No support claim is made. | Add a native or cross-publish-plus-execution environment and retain its independent evidence before claiming support. |
 
 The host reports Ubuntu 26.04, `linux-x64`, .NET SDK 11.0.100, and Clang
@@ -147,17 +147,31 @@ handler dispatch, invalid input without dispatch, and sequential invocation
 isolation. Both published example modes also check that the predefined debug
 and shell completion directives are registered and execute a completion request.
 
-Observed on Ubuntu 26.04, .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`.
-Both example modes printed `AOT smoke check passed.` The managed and native
+The previous Todo.Cli and FileTool.Cli gate was observed on Ubuntu 26.04,
+.NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`. The managed and native
 focused executions each reported two passing tests, covering FEAT-13 and
 FEAT-15. The gate imported four FEAT-13 requirements and three FEAT-15
-requirements from both reports. Artifact SHA-256 values for this run were:
+requirements from both reports. The following artifact SHA-256 values are
+historical evidence for that run, not evidence for the replacement examples:
 
 | Consumer | Trimmed managed DLL | Native executable |
 | --- | --- | --- |
 | Todo.Cli | `12e62b0fae8ee96f5302a080b917436b51f2e8388568d220fe4cecb2b9dbe48f` | `9d6cac7becedc7209d2b86ae7dff894e776f5604c8611f8c76d72c4ed894c2ed` |
 | FileTool.Cli | `3a6881a658aaad8e81bb645ff67bed59aa8f693da98311fb221ace1ae465bdfd` | `cabe360b99e928e4884d05d683c62f2e93acf9759151f0b8d107bae513853f84` |
 | Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `088c0cd9d0ebbb2e57f270b50204ccc1fef3714fd4686ada1e4f7801df7750d7` |
+
+On 2026-11-22, `bash scripts/verify.sh` ran the replacement Commands examples
+and the focused tests on Linux x64. Both examples passed trimmed and NativeAOT
+execution, including the alias, invalid input and completion checks. The
+managed and native focused executions each reported two passing tests with
+the expected FEAT-13 and FEAT-15 metadata. The run retained logs and hashes
+under `artifacts/aot-verification/linux-x64/20261122T115415Z/`:
+
+| Consumer | Trimmed managed DLL | Native executable |
+| --- | --- | --- |
+| Commands.Declarative | `bffe997bd464e128b5ba864eeb3843512547a82c14aed976e2f139b2a19f6ff5` | `9e19244d2114e079ab2d9e17301a22db902de82ad551d452ab8a55ecfed07b85` |
+| Commands.Manual | `52944f521b897602cf44109a01401842d74292fea5bd83ffe0c082bcc2aa4287` | `d304a0c376a418087dac52e0a16701f7cb36024eeba1a581d093ada9a57e9ca6` |
+| Mauve.Cli.Aot.Tests | managed MTP TRX evidence | `31d22cf69104e2204bb6bea6321bba73c38e92c34a254a65b19178ec4fe10b65` |
 
 The metadata-bearing behavioral tests are
 `AotAcceptanceTests.VerifyGeneratedAndExplicitScenarios` and

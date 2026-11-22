@@ -1,7 +1,25 @@
 <Solution>
   <Folder Name="/examples/">
-    <Project Path="examples/FileTool.Cli/FileTool.Cli.csproj" />
-    <Project Path="examples/Todo.Cli/Todo.Cli.csproj" />
+    <Project Path="examples/01-Hello/Declarative/Hello.Declarative.csproj" />
+    <Project Path="examples/01-Hello/Manual/Hello.Manual.csproj" />
+    <Project Path="examples/02-Commands/Declarative/Commands.Declarative.csproj" />
+    <Project Path="examples/02-Commands/Manual/Commands.Manual.csproj" />
+    <Project Path="examples/03-Values/Declarative/Values.Declarative.csproj" />
+    <Project Path="examples/03-Values/Manual/Values.Manual.csproj" />
+    <Project Path="examples/04-ValueShapes/Declarative/ValueShapes.Declarative.csproj" />
+    <Project Path="examples/04-ValueShapes/Manual/ValueShapes.Manual.csproj" />
+    <Project Path="examples/05-Validation/Declarative/Validation.Declarative.csproj" />
+    <Project Path="examples/05-Validation/Manual/Validation.Manual.csproj" />
+    <Project Path="examples/06-HelpAndErrors/Declarative/HelpAndErrors.Declarative.csproj" />
+    <Project Path="examples/06-HelpAndErrors/Manual/HelpAndErrors.Manual.csproj" />
+    <Project Path="examples/07-OptionScope/Declarative/OptionScope.Declarative.csproj" />
+    <Project Path="examples/07-OptionScope/Manual/OptionScope.Manual.csproj" />
+    <Project Path="examples/08-OptionPacks/Declarative/OptionPacks.Declarative.csproj" />
+    <Project Path="examples/08-OptionPacks/Manual/OptionPacks.Manual.csproj" />
+    <Project Path="examples/09-Completion/Declarative/Completion.Declarative.csproj" />
+    <Project Path="examples/09-Completion/Manual/Completion.Manual.csproj" />
+    <Project Path="examples/10-Directives/Declarative/Directives.Declarative.csproj" />
+    <Project Path="examples/10-Directives/Manual/Directives.Manual.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj" />
