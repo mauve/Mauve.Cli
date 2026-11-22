@@ -52,14 +52,28 @@ command -v jq >/dev/null
         src/Mauve.Cli/Completion/ShellCompletion.cs \
         src/Mauve.Cli/Invocation/CliHostOptions.cs \
         src/Mauve.Cli/Invocation/IGeneratedCliCommand.cs \
+        src/Mauve.Cli/Conversion/ICliValueConverter.cs \
+        src/Mauve.Cli/Conversion/ValueConverterRegistration.cs \
+        src/Mauve.Cli/Conversion/UnionConverterBuilder.cs \
+        src/Mauve.Cli/Conversion/ConversionResolver.cs \
+        src/Mauve.Cli/Conversion/ConverterRegistry.cs \
+        src/Mauve.Cli/Conversion/ValueConverterEngine.cs \
+        src/Mauve.Cli/Definitions/CommandBuilder.cs \
+        src/Mauve.Cli/Definitions/CommandModel.cs \
+        src/Mauve.Cli/Definitions/OptionDefinition.cs \
+        src/Mauve.Cli/Definitions/PositionalDefinition.cs \
+        src/Mauve.Cli/Definitions/DirectiveValueDefinition.cs \
+        src/Mauve.Cli/Completion/CompletionService.cs \
         src/Mauve.Cli.Generators/CliModelGenerator.cs \
         tests/Mauve.Cli.Tests/Invocation/CliInvokerTests.cs \
         tests/Mauve.Cli.Generators.Tests/CliModelGeneratorTests.cs \
         tests/Mauve.Cli.Aot.Tests/AotScenario.cs \
+        tests/Mauve.Cli.Aot.Tests/AotConversionScenario.cs \
         tests/Mauve.Cli.Aot.Tests/AotDeclarations.cs \
         tests/Mauve.Cli.Aot.Tests/AotAcceptanceTests.cs \
         tests/Mauve.Cli.Aot.Tests/Mauve.Cli.Aot.Tests.csproj \
         scripts/verify-aot.sh \
+        scripts/verify-conversion-examples.sh \
         docs/Architecture/ADR-013-NativeAot-Support-Matrix.md \
         docs/Requirements/FEAT-13-NativeAot-And-Trimming.md
 } >"$evidence/environment.txt" 2>&1
@@ -289,5 +303,7 @@ for mode in managed native; do
 done
 
 sha256sum "$native/$test_name" | tee -a "$evidence/$test_name.log"
+
+bash scripts/verify-conversion-examples.sh "$evidence" "$compiler"
 
 echo "Trimmed examples and managed/NativeAOT test evidence: $evidence"

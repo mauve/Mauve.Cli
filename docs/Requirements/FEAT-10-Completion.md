@@ -127,8 +127,14 @@ selected path and only successfully converted, prior, non-sensitive values
 from its explicit dependency-handle list (empty by default), never arbitrary
 values in scope. A dependency must be visible on the selected path; an
 unavailable value stays unavailable. Built-in conversions and enum maps are
-safe; custom converters must use `RegisterCompletionSafe` before completion
-will invoke them. No absent factory or validator is called to invent context.
+safe; custom converters must use `RegisterCompletionSafe`, an explicit
+completion-safe model registration, or `CliConverter`/definition metadata with
+`CompletionSafe = true` before completion will invoke them. Definition-local
+overrides participate in the same selection as ordinary parsing. A union is
+completion-safe only when every reachable case converter is safe. Model/host
+exact-type conflicts fail before callbacks; configuration is operation-local.
+See [ADR-015](../Architecture/ADR-015-Converter-Ownership-And-Unions.md).
+No absent factory or validator is called to invent context.
 
 Pack lookup uses FEAT-14 inclusion identity and safe data views, not arbitrary
 application helper invocation or a first-match search of the root tree.

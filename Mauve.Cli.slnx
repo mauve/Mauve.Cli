@@ -22,6 +22,10 @@
     <Project Path="examples/10-Directives/Manual/Directives.Manual.csproj" />
     <Project Path="examples/11-XmlDocumentation/Declarative/XmlDocumentation.Declarative.csproj" />
     <Project Path="examples/11-XmlDocumentation/Manual/XmlDocumentation.Manual.csproj" />
+    <Project Path="examples/12-BuiltInTypes/Declarative/BuiltInTypes.Declarative.csproj" />
+    <Project Path="examples/12-BuiltInTypes/Manual/BuiltInTypes.Manual.csproj" />
+    <Project Path="examples/13-CustomConverters/Declarative/CustomConverters.Declarative.csproj" />
+    <Project Path="examples/13-CustomConverters/Manual/CustomConverters.Manual.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj" />

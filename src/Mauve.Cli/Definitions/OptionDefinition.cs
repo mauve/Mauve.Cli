@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
@@ -33,6 +34,7 @@ public sealed class OptionDefinition
     /// <param name="defaultDisplay">Explicit non-sensitive text allowed in generated help.</param>
     /// <param name="displayGroup">Optional stable group metadata for generated help.</param>
     /// <param name="scope">Whether descendants can see this option.</param>
+    /// <param name="converter">An exact scalar or collection-element conversion override.</param>
     public OptionDefinition(
         string name,
         Type valueType,
@@ -54,7 +56,8 @@ public sealed class OptionDefinition
         IEnumerable<IValueValidator>? validators = null,
         string? defaultDisplay = null,
         OptionDisplayGroup? displayGroup = null,
-        OptionScope scope = OptionScope.Local)
+        OptionScope scope = OptionScope.Local,
+        ValueConverterRegistration? converter = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -78,6 +81,7 @@ public sealed class OptionDefinition
         DefaultDisplay = defaultDisplay;
         DisplayGroup = displayGroup;
         Scope = scope;
+        Converter = converter;
 
         List<OptionAlias> aliasCopy = aliases is null ? [] : [with(aliases)];
         if (aliasCopy.Exists(static alias => alias is null))
@@ -157,6 +161,9 @@ public sealed class OptionDefinition
 
     /// <summary>Gets whether the option is local to its owner or inherited by descendants.</summary>
     public OptionScope Scope { get; }
+
+    /// <summary>Gets the definition-local scalar or element converter.</summary>
+    public ValueConverterRegistration? Converter { get; }
 
     internal bool IsHelpOption { get; private init; }
 

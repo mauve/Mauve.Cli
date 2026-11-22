@@ -34,6 +34,17 @@ public sealed class CompletionService(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        CompletionService configured = request.Model.Converters.IsEmpty
+            ? this : new CompletionService(ConverterRegistry.Combine(request.Model.Converters, _converters), _numericCulture);
+        return await configured.CompleteCoreAsync(request, providers, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<CompletionResult> CompleteCoreAsync(
+        CompletionRequest request,
+        CompletionProviderRegistry? providers,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
         providers ??= CompletionProviderRegistry.Empty();
         if (cancellationToken.IsCancellationRequested)
         {
@@ -87,7 +98,7 @@ public sealed class CompletionService(
             && input.ActiveToken.StartsWith('-', StringComparison.Ordinal))
         {
             bool negativeNumericValue = scan.Pending is PendingValue activePending
-                && ValueConverterEngine.IsNumericType(activePending.ValueType)
+                && ConversionResolver.IsNumericType(activePending.ValueType, _converters)
                 && IsNegativeNumericCandidate(input.ActiveToken);
             if (!negativeNumericValue)
             {
@@ -136,7 +147,7 @@ public sealed class CompletionService(
         if (scan.Pending is PendingValue pending)
         {
             if (input.ActiveToken.StartsWith('-', StringComparison.Ordinal)
-                && !(ValueConverterEngine.IsNumericType(pending.ValueType)
+                && !(ConversionResolver.IsNumericType(pending.ValueType, _converters)
                     && IsNegativeNumericCandidate(input.ActiveToken)))
             {
                 AddOptionCandidates(scan, prefix, segment, input.ActiveToken, candidates, unique,
@@ -313,7 +324,7 @@ public sealed class CompletionService(
         }
 
         Type? valueType = option?.ElementType ?? positional?.ElementType ?? option?.ValueType ?? positional?.ValueType;
-        if (valueType is not null)
+        if (valueType is not null && option?.Converter is null && positional?.Converter is null)
         {
             bool candidateTooLong = false;
             string? description = option?.Description ?? positional?.Description;
@@ -684,7 +695,7 @@ public sealed class CompletionService(
             if (pending?.Arity == OptionArity.GreedyCollection
                 && (token == "--"
                     || (IsOptionCandidate(token)
-                        && !(ValueConverterEngine.IsNumericType(pending.ElementType!)
+                        && !(ConversionResolver.IsNumericType(pending.ElementType!, _converters)
                             && IsNegativeNumericCandidate(token)))))
             {
                 pending = null;
@@ -702,7 +713,7 @@ public sealed class CompletionService(
                 if (!pending.IsHidden && !pending.IsSensitive)
                 {
                     if (!TryConvertValues(pendingType, [token], pending.Name, index,
-                        false, false, out object? pendingValue))
+                        false, false, pending.Converter, out object? pendingValue))
                     {
                         scan.FailureTokenIndex = index;
                         return scan;
@@ -837,7 +848,7 @@ public sealed class CompletionService(
                 }
 
                 if (!TryConvertValues(option.ElementType ?? option.ValueType, rawValues, option.Name,
-                    index, false, isCollection, out object? converted))
+                    index, false, isCollection, option.Converter, out object? converted))
                 {
                     scan.FailureTokenIndex = index;
                     return scan;
@@ -927,7 +938,7 @@ public sealed class CompletionService(
                 ? prefix
                 : activeToken[(colonIndex + 1)..Math.Min(cursor, activeToken.Length)];
             bool limited = false;
-            foreach (string value in _converters.GetEnumNames(valueType))
+            foreach (string value in definition.Converter is null ? _converters.GetEnumNames(valueType) : [])
             {
                 if (!value.StartsWith(valuePrefix, StringComparison.Ordinal))
                 {
@@ -1076,6 +1087,7 @@ public sealed class CompletionService(
                 inputs[0].Index,
                 false,
                 definition.MaximumValues is null or > 1,
+                definition.Converter,
                 out object? converted))
             {
                 scan.FailureTokenIndex = inputs[0].Index;
@@ -1096,20 +1108,20 @@ public sealed class CompletionService(
         int tokenIndex,
         bool isSensitive,
         bool asCollection,
+        ValueConverterRegistration? converter,
         out object? converted)
     {
         List<object?> items = [];
         foreach (string value in values)
         {
-            Type effectiveType = Nullable.GetUnderlyingType(type) ?? type;
-            if (!IsSafeBuiltIn(effectiveType))
+            if (!ConversionResolver.IsCompletionSafe(type, _converters, converter))
             {
                 converted = null;
                 return true;
             }
 
             ConversionContext context = new(type, name, tokenIndex, _numericCulture, isSensitive);
-            if (!ValueConverterEngine.TryConvert(value, type, context, _converters, out object? item, out _))
+            if (!ConversionResolver.TryConvert(value, type, context, _converters, converter, out object? item, out _))
             {
                 converted = null;
                 return false;
@@ -1124,32 +1136,8 @@ public sealed class CompletionService(
             return true;
         }
 
-        converted = ValueConverterEngine.CreateReadOnlyCollection(type, items, _converters);
+        converted = ConversionResolver.CreateReadOnlyCollection(type, items, _converters, converter);
         return true;
-    }
-
-    private bool IsSafeBuiltIn(Type type)
-    {
-        Type effectiveType = Nullable.GetUnderlyingType(type) ?? type;
-        bool hasUnapprovedOverride = _converters.ContainsExact(type)
-            || _converters.ContainsExact(effectiveType);
-        return _converters.IsCompletionSafe(type)
-            || (!hasUnapprovedOverride
-                && (effectiveType == typeof(string)
-                    || effectiveType == typeof(bool)
-                    || effectiveType == typeof(sbyte)
-                    || effectiveType == typeof(byte)
-                    || effectiveType == typeof(short)
-                    || effectiveType == typeof(ushort)
-                    || effectiveType == typeof(int)
-                    || effectiveType == typeof(uint)
-                    || effectiveType == typeof(long)
-                    || effectiveType == typeof(ulong)
-                    || effectiveType == typeof(float)
-                    || effectiveType == typeof(double)
-                    || effectiveType == typeof(decimal)
-                    || effectiveType == typeof(Guid)
-                    || effectiveType == typeof(Uri)));
     }
 
     private static void StoreSafeValue(CompletionScan scan, OptionDefinition option, object value)
@@ -1194,10 +1182,11 @@ public sealed class CompletionService(
             }
         }
 
-        scan.Values[option] = ValueConverterEngine.CreateReadOnlyCollection(
+        scan.Values[option] = ConversionResolver.CreateReadOnlyCollection(
             option.ElementType!,
             values,
-            _converters);
+            _converters,
+            option.Converter);
     }
 
     private static CompletionInput? ValidateInput(CompletionRequest request)
@@ -1307,11 +1296,11 @@ public sealed class CompletionService(
         return null;
     }
 
-    private static bool CanConsumeValue(string token, Type valueType)
+    private bool CanConsumeValue(string token, Type valueType)
     {
         return token != "--"
             && (!IsOptionCandidate(token)
-                || (ValueConverterEngine.IsNumericType(valueType) && IsNegativeNumericCandidate(token)));
+                || (ConversionResolver.IsNumericType(valueType, _converters) && IsNegativeNumericCandidate(token)));
     }
 
     private static bool IsOptionCandidate(string token) => token.Length > 1 && token[0] == '-';

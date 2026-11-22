@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.IO;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Help;
 
 namespace Mauve.Cli.Invocation;
@@ -17,6 +19,8 @@ public sealed class CliHostOptions
     /// <param name="cancelledExitCode">The returned code for caller cancellation.</param>
     /// <param name="executableName">The executable display name used for help examples, defaulting to process argv zero.</param>
     /// <param name="helpTreeRenderer">An optional custom renderer for sanitized help trees.</param>
+    /// <param name="converters">Additional host converters; exact model/host conflicts are rejected.</param>
+    /// <param name="numericCulture">The optional explicit numeric decimal-separator culture.</param>
     public CliHostOptions(
         TextWriter? standardOutput = null,
         TextWriter? standardError = null,
@@ -26,7 +30,9 @@ public sealed class CliHostOptions
         int noHandlerExitCode = 1,
         int cancelledExitCode = 130,
         string? executableName = null,
-        Func<HelpTreeDocument, string>? helpTreeRenderer = null)
+        Func<HelpTreeDocument, string>? helpTreeRenderer = null,
+        ConverterRegistry? converters = null,
+        CultureInfo? numericCulture = null)
     {
         HelpTextRenderer.ValidateWidth(helpWidth);
         if (executableName is not null)
@@ -43,6 +49,8 @@ public sealed class CliHostOptions
         InvalidInputExitCode = invalidInputExitCode;
         NoHandlerExitCode = noHandlerExitCode;
         CancelledExitCode = cancelledExitCode;
+        Converters = converters ?? ConverterRegistry.Empty();
+        NumericCulture = ValueConverterEngine.CreateNumericCulture(numericCulture);
     }
 
     /// <summary>Gets the sink for rendered help.</summary>
@@ -71,4 +79,10 @@ public sealed class CliHostOptions
 
     /// <summary>Gets the executable display name substituted for <c>$0</c> in help examples.</summary>
     public string ExecutableName { get; }
+
+    /// <summary>Gets additional host-level converter registrations.</summary>
+    public ConverterRegistry Converters { get; }
+
+    /// <summary>Gets the frozen numeric culture used by high-level entry points.</summary>
+    public CultureInfo NumericCulture { get; }
 }

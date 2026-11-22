@@ -34,10 +34,16 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
     private ParseResult ParseCore(
         CommandModel model,
         IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeModelConverters = true)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
+        if (includeModelConverters && !model.Converters.IsEmpty)
+        {
+            CliParser configured = new(ConverterRegistry.Combine(model.Converters, _converters), _numericCulture);
+            return configured.ParseCore(model, arguments, cancellationToken, includeModelConverters: false);
+        }
         cancellationToken.ThrowIfCancellationRequested();
 
         string[] tokens = CopyAndValidateArguments(arguments, model.Limits, out ParseDiagnostic? inputLimit);
@@ -46,7 +52,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             return InvalidResult(tokens, inputLimit);
         }
 
-        ParseDiagnostic? unsupportedDefinition = FindUnsupportedDefinition(model.Root);
+        ParseDiagnostic? unsupportedDefinition = FindUnsupportedDefinition(model);
         if (unsupportedDefinition is not null)
         {
             return InvalidResult(tokens, unsupportedDefinition);
@@ -397,10 +403,11 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                         valid = false;
                     }
 
-                    values.Add(ValueConverterEngine.CreateReadOnlyCollection(
+                    values.Add(ConversionResolver.CreateReadOnlyCollection(
                         definition.ElementType,
                         elements,
-                        _converters));
+                        _converters,
+                        definition.Converter));
                     continue;
                 }
 
@@ -471,11 +478,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             raw.TokenIndex,
             _numericCulture,
             definition.IsSensitive);
-        bool succeeded = ValueConverterEngine.TryConvert(
+        bool succeeded = ConversionResolver.TryConvert(
             raw.Value,
             targetType,
             context,
             _converters,
+            definition.Converter,
             out value,
             out _);
         if (!succeeded)
@@ -554,10 +562,23 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return copied;
     }
 
-    private ParseDiagnostic? FindUnsupportedDefinition(CommandDefinition root)
+    private ParseDiagnostic? FindUnsupportedDefinition(CommandModel model)
     {
+        foreach (DirectiveDefinition directive in model.Directives)
+        {
+            foreach (DirectiveValueDefinition value in directive.Values)
+            {
+                Type type = value.ElementType ?? value.ValueType;
+                if (!ConversionResolver.IsSupported(type, _converters, value.Converter)
+                    || (value.ElementType is not null && !ConversionResolver.CanCreateCollection(type, _converters, value.Converter)))
+                {
+                    return ParseDiagnostic.ForInput(ParseDiagnosticCode.InvalidModel, "A directive value has unsupported conversion metadata.", null);
+                }
+            }
+        }
+
         Stack<CommandDefinition> commands = new();
-        commands.Push(root);
+        commands.Push(model.Root);
         while (commands.Count > 0)
         {
             CommandDefinition command = commands.Pop();
@@ -569,7 +590,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 }
 
                 Type valueType = option.ElementType ?? option.ValueType;
-                if (!ValueConverterEngine.IsSupported(valueType, _converters))
+                if (!ConversionResolver.IsSupported(valueType, _converters, option.Converter)
+                    || (option.ElementType is not null && !ConversionResolver.CanCreateCollection(valueType, _converters, option.Converter)))
                 {
                     return ParseDiagnostic.ForOption(
                         ParseDiagnosticCode.InvalidModel,
@@ -582,7 +604,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             foreach (PositionalDefinition positional in command.Positionals)
             {
                 Type valueType = positional.ElementType ?? positional.ValueType;
-                if (!ValueConverterEngine.IsSupported(valueType, _converters))
+                if (!ConversionResolver.IsSupported(valueType, _converters, positional.Converter)
+                    || (positional.ElementType is not null && !ConversionResolver.CanCreateCollection(valueType, _converters, positional.Converter)))
                 {
                     return ParseDiagnostic.ForPositional(
                         ParseDiagnosticCode.InvalidModel,
@@ -601,7 +624,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return null;
     }
 
-    private static void ScanOption(
+    private void ScanOption(
         string[] tokens,
         ref int index,
         IReadOnlyList<CommandOption> visibleOptions,
@@ -1009,7 +1032,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             if (IsCollection(option.Arity))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                value = CreateCollection(option.ElementType!, convertedValues);
+                value = CreateCollection(option.ElementType!, convertedValues, option.Converter);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             else
@@ -1056,7 +1079,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
             bool isRest = assignment.Definition.MaximumValues is null;
             object? value = isRest
-                ? CreateCollection(assignment.Definition.ElementType!, convertedValues)
+                ? CreateCollection(assignment.Definition.ElementType!, convertedValues, assignment.Definition.Converter)
                 : convertedValues.Count == 0 ? null : convertedValues[0];
             bool available = isRest || convertedValues.Count > 0;
             bool supplied = convertedValues.Count > 0;
@@ -1346,11 +1369,12 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 request.TokenIndex,
                 _numericCulture,
                 request.IsSensitive);
-            bool conversionSucceeded = ValueConverterEngine.TryConvert(
+            bool conversionSucceeded = ConversionResolver.TryConvert(
                 request.RawValue,
                 request.TargetType,
                 context,
                 _converters,
+                request.Option?.Converter ?? request.Positional?.Converter,
                 out object? converted,
                 out string failureCode);
             cancellationToken.ThrowIfCancellationRequested();
@@ -1392,7 +1416,8 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return convertedByTokenIndex;
     }
 
-    private object CreateCollection(Type elementType, List<object?> values) => ValueConverterEngine.CreateReadOnlyCollection(elementType, values, _converters);
+    private object CreateCollection(Type elementType, List<object?> values, ValueConverterRegistration? converter)
+        => ConversionResolver.CreateReadOnlyCollection(elementType, values, _converters, converter);
 
     private static object? InvokeFactory(Func<object?> factory, CancellationToken cancellationToken)
     {
@@ -1404,7 +1429,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private static bool IsValueCompatible(Type type, object? value, bool allowsNull)
     {
-        return (value is null && allowsNull)
+        return (value is null && allowsNull && (!type.IsValueType || Nullable.GetUnderlyingType(type) is not null))
             || (value is not null
                 && (type.IsInstanceOfType(value)
                     || Nullable.GetUnderlyingType(type)?.IsInstanceOfType(value) == true));
@@ -1412,11 +1437,11 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
 
     private static bool IsCollection(OptionArity arity) => arity is OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection;
 
-    private static bool CanConsumeValue(string token, Type valueType)
+    private bool CanConsumeValue(string token, Type valueType)
     {
         return token != "--"
             && (!IsOptionCandidate(token)
-                || (ValueConverterEngine.IsNumericType(valueType) && IsNegativeNumericCandidate(token)));
+                || (ConversionResolver.IsNumericType(valueType, _converters) && IsNegativeNumericCandidate(token)));
     }
 
     private static bool IsOptionCandidate(string token) => token.Length > 1 && token[0] == '-';

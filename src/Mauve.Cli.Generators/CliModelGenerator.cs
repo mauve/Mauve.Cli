@@ -25,6 +25,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private const string _directiveAttributeName = "Mauve.Cli.Declarations.CliDirectiveAttribute";
     private const string _directiveInclusionAttributeName = "Mauve.Cli.Declarations.CliDirectiveAttribute`1";
     private const string _optionPackAttributeName = "Mauve.Cli.Declarations.CliOptionPackAttribute";
+    private const string _converterAttributeName = "Mauve.Cli.Declarations.CliConverterAttribute`1";
     private const string _contextType = "global::Mauve.Cli.Invocation.CommandInvocationContext";
     private const string _packContextType = "global::Mauve.Cli.Invocation.OptionPackContext";
 
@@ -187,6 +188,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             }
 
             if (!ValidateCommandDirectives(context, root))
+            {
+                continue;
+            }
+
+            if (!ReadConversionRegistrations(context, root, compilation))
             {
                 continue;
             }
@@ -811,7 +817,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             return false;
         }
 
-        if (GetNamedBoolean(attribute, "AllowsNull") && !IsNullable(property.Type))
+        if (GetNamedBoolean(attribute, "AllowsNull") && !IsNullable(GetScalarType(property.Type)))
         {
             Report(context, _invalidMember, GetLocation(attribute, property), "A member that allows null values must use a nullable property type.");
             return false;
@@ -1318,6 +1324,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         if (command.IsRoot)
         {
+            EmitConversionRegistrations(builder, command);
             for (int index = 0; index < command.Directives.Count; index++)
             {
                 EmitDirectiveRegistration(builder, command.Directives[index], index);
@@ -1404,6 +1411,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 .Append(", description: ").Append(Literal(GetNamedString(value.Attribute, "Description")))
                 .Append(", isHidden: ").Append(GetNamedBoolean(value.Attribute, "IsHidden") ? "true" : "false")
                 .Append(", isSensitive: ").Append(GetNamedBoolean(value.Attribute, "IsSensitive") ? "true" : "false")
+                .Append(GeneratePropertyConverter(value.Property))
                 .AppendLine(");");
         }
 
@@ -1793,13 +1801,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     }
 
     private static string GenerateOption(OptionInfo option)
-        => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name, option.Description);
+        => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name, option.Description, GeneratePropertyConverter(option.Property));
 
     private static string GenerateOption(
         AttributeData attribute,
         ITypeSymbol valueType,
         string? inferredMemberName = null,
-        string? description = null)
+        string? description = null,
+        string converter = "")
     {
         string name = GetConstructorString(attribute, 0)
             ?? (inferredMemberName is null ? string.Empty : DeriveOptionName(inferredMemberName));
@@ -1831,7 +1840,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", aliases: new global::Mauve.Cli.Definitions.OptionAlias[] { ",
             aliases,
             " }, allowsNull: ",
-            GetNamedBoolean(attribute, "AllowsNull") || IsNullable(valueType) ? "true" : "false",
+            GetNamedBoolean(attribute, "AllowsNull") || IsNullable(GetScalarType(valueType)) ? "true" : "false",
             ", isRequired: ",
             GetNamedBoolean(attribute, "IsRequired") ? "true" : "false",
             ", description: ",
@@ -1845,6 +1854,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", scope: global::Mauve.Cli.Definitions.OptionScope.",
             EnumName("OptionScope", GetNamedInt(attribute, "Scope")),
             barePolicy,
+            converter,
             ")");
     }
 
@@ -1869,14 +1879,261 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             maximumText,
             element,
             ", allowsNull: ",
-            GetNamedBoolean(argument.Attribute, "AllowsNull") || IsNullable(argument.Property.Type) ? "true" : "false",
+            GetNamedBoolean(argument.Attribute, "AllowsNull") || IsNullable(GetScalarType(argument.Property.Type)) ? "true" : "false",
             ", description: ",
             Literal(argument.Description),
             ", isHidden: ",
             GetNamedBoolean(argument.Attribute, "IsHidden") ? "true" : "false",
             ", isSensitive: ",
             GetNamedBoolean(argument.Attribute, "IsSensitive") ? "true" : "false",
+            GeneratePropertyConverter(argument.Property),
             ")");
+    }
+
+    private static string GeneratePropertyConverter(IPropertySymbol property)
+    {
+        AttributeData? attribute = FindAttribute(property, _converterAttributeName);
+        if (attribute?.AttributeClass is not INamedTypeSymbol providerAttribute)
+        {
+            return string.Empty;
+        }
+
+        ITypeSymbol target = GetScalarType(property.Type);
+        return string.Concat(
+            ", converter: global::Mauve.Cli.Conversion.ValueConverterRegistration.Create<",
+            FormatType(target), ", ", FormatType(providerAttribute.TypeArguments[0]),
+            ">(completionSafe: ", GetNamedBoolean(attribute, "CompletionSafe") ? "true" : "false", ")");
+    }
+
+    private static ITypeSymbol GetScalarType(ITypeSymbol type)
+        => TryGetCollectionElementType(type, out ITypeSymbol? element) && element is not null ? element : type;
+
+    private static ITypeSymbol UnwrapNullable(ITypeSymbol type)
+        => type is INamedTypeSymbol named && named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+            ? named.TypeArguments[0] : type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+    private static bool ReadConversionRegistrations(SourceProductionContext context, CommandInfo root, Compilation compilation)
+    {
+        List<IPropertySymbol> properties = [];
+        HashSet<INamedTypeSymbol> packs = [with(SymbolEqualityComparer.Default)];
+        CollectConversionProperties(root, properties, packs);
+        HashSet<ITypeSymbol> active = [with(SymbolEqualityComparer.Default)];
+        HashSet<ITypeSymbol> visited = [with(SymbolEqualityComparer.Default)];
+        bool valid = true;
+        foreach (IPropertySymbol property in properties)
+        {
+            ITypeSymbol target = GetScalarType(property.Type);
+            AttributeData? local = FindAttribute(property, _converterAttributeName);
+            if (property.GetAttributes().Count(static attribute => IsAttribute(attribute, _converterAttributeName)) > 1)
+            {
+                Report(context, _invalidMember, GetLocation(local, property), "A bound property can declare only one converter override.");
+                valid = false;
+                continue;
+            }
+            if (local is not null)
+            {
+                valid &= ValidateConverterProvider(context, local, target, root.Symbol, compilation);
+                AttributeData? option = FindAttribute(property, _optionAttributeName);
+                if (option is not null && GetOptionArity(option, property.Type) == 2
+                    && FindAttribute(property.ContainingType, _directiveAttributeName) is null)
+                {
+                    Report(context, _invalidMember, GetLocation(local, property), "Boolean flags use intrinsic literal parsing; use scalar arity for a converter.");
+                    valid = false;
+                }
+            }
+            else
+            {
+                valid &= CollectConversionType(context, target, root, compilation, active, visited, property);
+            }
+        }
+
+        return valid;
+    }
+
+    private static void CollectConversionProperties(CommandInfo command, List<IPropertySymbol> properties, HashSet<INamedTypeSymbol> packs)
+    {
+        properties.AddRange(command.Options.Select(static option => option.Property));
+        properties.AddRange(command.Arguments.Select(static argument => argument.Property));
+        foreach (PackInclusionInfo inclusion in command.Packs)
+        {
+            CollectPackConversionProperties(inclusion.Pack, properties, packs);
+        }
+
+        foreach (DirectiveRegistrationInfo directive in command.Directives)
+        {
+            if (directive.Directive is not null)
+            {
+                properties.AddRange(directive.Directive.Values.Select(static value => value.Property));
+            }
+        }
+
+        foreach (ChildInfo child in command.Children)
+        {
+            CollectConversionProperties(child.Child, properties, packs);
+        }
+    }
+
+    private static void CollectPackConversionProperties(PackInfo pack, List<IPropertySymbol> properties, HashSet<INamedTypeSymbol> packs)
+    {
+        if (!packs.Add(pack.Symbol))
+        {
+            return;
+        }
+
+        properties.AddRange(pack.Options.Select(static option => option.Property));
+        foreach (PackInclusionInfo inclusion in pack.Inclusions)
+        {
+            CollectPackConversionProperties(inclusion.Pack, properties, packs);
+        }
+    }
+
+    private static bool CollectConversionType(
+        SourceProductionContext context,
+        ITypeSymbol target,
+        CommandInfo root,
+        Compilation compilation,
+        HashSet<ITypeSymbol> active,
+        HashSet<ITypeSymbol> visited,
+        ISymbol location)
+    {
+        ITypeSymbol type = UnwrapNullable(target);
+        AttributeData? provider = FindAttribute(type, _converterAttributeName);
+        if (type.GetAttributes().Count(static attribute => IsAttribute(attribute, _converterAttributeName)) > 1)
+        {
+            Report(context, _invalidMember, GetLocation(provider, location), "A value type can declare only one converter provider.");
+            return false;
+        }
+        bool isUnion = !type.UnionCaseTypes.IsDefaultOrEmpty;
+        if (provider is null && type.TypeKind != TypeKind.Enum && !isUnion)
+        {
+            return true;
+        }
+
+        if (!SymbolEqualityComparer.Default.Equals(target, type)
+            && !root.NullableConverters.Contains(type, SymbolEqualityComparer.Default))
+        {
+            root.NullableConverters.Add(type);
+        }
+
+        if (active.Contains(type))
+        {
+            Report(context, _invalidMember, location.Locations.FirstOrDefault() ?? Location.None, "CLI union conversion cannot contain recursive case dependencies.");
+            return false;
+        }
+
+        if (!visited.Add(type))
+        {
+            return true;
+        }
+
+        if (provider is not null)
+        {
+            if (!ValidateConverterProvider(context, provider, type, root.Symbol, compilation))
+            {
+                return false;
+            }
+        }
+        else if (type.TypeKind == TypeKind.Enum && !type.GetMembers().OfType<IFieldSymbol>().Any(static field => field.HasConstantValue))
+        {
+            Report(context, _invalidMember, location.Locations.FirstOrDefault() ?? Location.None, "An enum without named members requires an explicit converter.");
+            return false;
+        }
+        else if (isUnion)
+        {
+            if (!type.DeclaringSyntaxReferences.Any(static reference => reference.GetSyntax() is UnionDeclarationSyntax))
+            {
+                Report(context, _invalidMember, location.Locations.FirstOrDefault() ?? Location.None, "Automatic CLI conversion supports source union declarations; register custom unions explicitly.");
+                return false;
+            }
+
+            _ = active.Add(type);
+            foreach (ITypeSymbol unionCase in type.UnionCaseTypes)
+            {
+                if (!compilation.IsSymbolAccessibleWithin(unionCase, root.Symbol)
+                    || !CollectConversionType(context, unionCase, root, compilation, active, visited, location))
+                {
+                    Report(context, _invalidMember, location.Locations.FirstOrDefault() ?? Location.None, "Union cases must be accessible and have nonrecursive conversion metadata.");
+                    return false;
+                }
+            }
+
+            _ = active.Remove(type);
+        }
+
+        root.ConversionTypes.Add(type);
+        return true;
+    }
+
+    private static bool ValidateConverterProvider(
+        SourceProductionContext context,
+        AttributeData attribute,
+        ITypeSymbol target,
+        INamedTypeSymbol root,
+        Compilation compilation)
+    {
+        ITypeSymbol? provider = attribute.AttributeClass?.TypeArguments.FirstOrDefault();
+        bool valid = provider is INamedTypeSymbol named
+            && compilation.IsSymbolAccessibleWithin(named, root)
+            && named.AllInterfaces.Any(contract =>
+                contract.OriginalDefinition.ToDisplayString() == "Mauve.Cli.Conversion.ICliValueConverter<T>"
+                && SymbolEqualityComparer.IncludeNullability.Equals(contract.TypeArguments[0], target));
+        if (!valid)
+        {
+            Report(context, _invalidMember, GetLocation(attribute, root), "CliConverter requires an accessible static ICliValueConverter<T> provider matching the exact scalar or element type.");
+        }
+
+        return valid;
+    }
+
+    private static void EmitConversionRegistrations(StringBuilder builder, CommandInfo root)
+    {
+        if (root.ConversionTypes.Count == 0)
+        {
+            return;
+        }
+
+        _ = builder.AppendLine("        global::Mauve.Cli.Conversion.ConverterRegistryBuilder converters = new();");
+        foreach (ITypeSymbol type in root.ConversionTypes)
+        {
+            string typeName = FormatType(type);
+            AttributeData? provider = FindAttribute(type, _converterAttributeName);
+            if (provider?.AttributeClass is INamedTypeSymbol attributeClass)
+            {
+                _ = builder.Append("        _ = converters.Register<").Append(typeName).Append(", ")
+                    .Append(FormatType(attributeClass.TypeArguments[0])).Append(">(completionSafe: ")
+                    .Append(GetNamedBoolean(provider, "CompletionSafe") ? "true" : "false").AppendLine(");");
+            }
+            else if (type.TypeKind == TypeKind.Enum)
+            {
+                _ = builder.Append("        _ = converters.RegisterEnum<").Append(typeName).AppendLine(">(new global::System.Collections.Generic.KeyValuePair<string, " + typeName + ">[]");
+                _ = builder.AppendLine("        {");
+                foreach (IFieldSymbol field in type.GetMembers().OfType<IFieldSymbol>().Where(static field => field.HasConstantValue))
+                {
+                    _ = builder.Append("            new(").Append(Literal(field.Name)).Append(", ").Append(typeName)
+                        .Append('.').Append(EscapeIdentifier(field.Name)).AppendLine("),");
+                }
+
+                _ = builder.AppendLine("        });");
+            }
+            else
+            {
+                _ = builder.Append("        _ = converters.RegisterUnion<").Append(typeName).AppendLine(">(union => union");
+                foreach (ITypeSymbol unionCase in type.UnionCaseTypes)
+                {
+                    _ = builder.Append("            .Case<").Append(FormatType(unionCase)).Append(">(static value => new ")
+                        .Append(typeName).AppendLine("(value))");
+                }
+
+                _ = builder.AppendLine("        );");
+            }
+        }
+
+        foreach (ITypeSymbol type in root.NullableConverters)
+        {
+            _ = builder.Append("        _ = converters.RegisterNullable<").Append(FormatType(type)).AppendLine(">();");
+        }
+
+        _ = builder.AppendLine("        _ = command.AddConverters(converters.Build());");
     }
 
     private static void EmitPropertyBinding(
@@ -2340,6 +2597,10 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         public List<PackInclusionInfo> Packs { get; } = [];
 
         public List<DirectiveRegistrationInfo> Directives { get; } = [];
+
+        public List<ITypeSymbol> ConversionTypes { get; } = [];
+
+        public List<ITypeSymbol> NullableConverters { get; } = [];
 
         public IMethodSymbol? Handler { get; set; }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 
 namespace Mauve.Cli.Conversion;
 
@@ -10,6 +11,49 @@ public sealed class ConverterRegistryBuilder
     private readonly Dictionary<Type, IRegisteredConverter> _converters = [];
     private readonly HashSet<Type> _completionSafe = [];
     private readonly Dictionary<Type, string[]> _enumNames = [];
+
+    /// <summary>Registers a statically referenced converter provider.</summary>
+    /// <typeparam name="T">The exact target type.</typeparam>
+    /// <typeparam name="TConverter">The converter provider.</typeparam>
+    /// <param name="completionSafe">Whether completion may execute the provider.</param>
+    /// <returns>This builder.</returns>
+    public ConverterRegistryBuilder Register<T, TConverter>(bool completionSafe = false)
+        where TConverter : ICliValueConverter<T>
+        => completionSafe ? RegisterCompletionSafe(TConverter.Convert) : Register(TConverter.Convert);
+
+    /// <summary>Registers an ordered union converter without inspecting runtime metadata.</summary>
+    /// <typeparam name="TUnion">The union type.</typeparam>
+    /// <param name="configure">Declares the ordered case constructors.</param>
+    /// <returns>This builder.</returns>
+    public ConverterRegistryBuilder RegisterUnion<TUnion>(Action<UnionConverterBuilder<TUnion>> configure)
+        where TUnion : IUnion
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        UnionConverterBuilder<TUnion> builder = new();
+        configure(builder);
+        return _converters.TryAdd(typeof(TUnion), builder.Build())
+            ? this : throw new InvalidOperationException("A converter for this union is already registered.");
+    }
+
+    /// <summary>Registers a statically typed nullable adapter for an existing value converter.</summary>
+    /// <typeparam name="T">The underlying value type.</typeparam>
+    /// <returns>This builder.</returns>
+    public ConverterRegistryBuilder RegisterNullable<T>()
+        where T : struct
+    {
+        return _converters.TryAdd(typeof(T?), new NullableRegisteredConverter<T>())
+            ? this : throw new InvalidOperationException("A converter for this nullable type is already registered.");
+    }
+
+    /// <summary>Adds an immutable registry, rejecting duplicate exact target types.</summary>
+    /// <param name="registry">The registry to include.</param>
+    /// <returns>This builder.</returns>
+    public ConverterRegistryBuilder Add(ConverterRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        registry.CopyTo(_converters, _completionSafe, _enumNames);
+        return this;
+    }
 
     /// <summary>Registers one converter for an exact target type.</summary>
     /// <typeparam name="T">The converter target type.</typeparam>
@@ -100,16 +144,50 @@ public sealed class ConverterRegistry
     /// <returns>An empty registry.</returns>
     public static ConverterRegistry Empty() => new([], [], []);
 
+    internal bool IsEmpty => _converters.Count == 0;
+
+    internal static ConverterRegistry Combine(ConverterRegistry model, ConverterRegistry host)
+        => model.IsEmpty ? host : host.IsEmpty ? model : new ConverterRegistryBuilder().Add(model).Add(host).Build();
+
+    internal void CopyTo(
+        Dictionary<Type, IRegisteredConverter> converters,
+        HashSet<Type> completionSafe,
+        Dictionary<Type, string[]> enumNames)
+    {
+        foreach (Type type in _converters.Keys)
+        {
+            if (converters.ContainsKey(type))
+            {
+                throw new InvalidOperationException("Model and host converter registrations contain a duplicate exact target type.");
+            }
+        }
+
+        foreach (KeyValuePair<Type, IRegisteredConverter> entry in _converters)
+        {
+            converters.Add(entry.Key, entry.Value);
+        }
+
+        completionSafe.UnionWith(_completionSafe);
+        foreach (KeyValuePair<Type, string[]> entry in _enumNames)
+        {
+            enumNames.Add(entry.Key, entry.Value);
+        }
+    }
+
     internal bool IsCompletionSafe(Type targetType)
     {
         Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-        return _completionSafe.Contains(targetType) || _completionSafe.Contains(effectiveType);
+        return _converters.ContainsKey(targetType)
+            ? _completionSafe.Contains(targetType) : _completionSafe.Contains(effectiveType);
     }
 
     internal IReadOnlyList<string> GetEnumNames(Type targetType)
     {
         Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-        return _enumNames.TryGetValue(effectiveType, out string[]? names) ? names : [];
+        return targetType != effectiveType && _converters.TryGetValue(targetType, out IRegisteredConverter? exact)
+            && exact.Dependencies.Count == 0
+            ? []
+            : (IReadOnlyList<string>)(_enumNames.TryGetValue(effectiveType, out string[]? names) ? names : []);
     }
 
     internal bool TryConvert(
@@ -121,7 +199,7 @@ public sealed class ConverterRegistry
     {
         if (_converters.TryGetValue(registeredType, out IRegisteredConverter? converter))
         {
-            RegisteredOutcome result = converter.Convert(value, context);
+            RegisteredOutcome result = converter.Convert(value, context, this);
             converted = result.Value;
             failureCode = result.FailureCode;
             return result.Succeeded;
@@ -144,6 +222,10 @@ public sealed class ConverterRegistry
     }
 
     internal bool ContainsExact(Type targetType) => _converters.ContainsKey(targetType);
+
+    internal IReadOnlyList<Type> GetDependencies(Type targetType)
+        => _converters.TryGetValue(targetType, out IRegisteredConverter? converter)
+            ? converter.Dependencies : [];
 
     internal bool TryCreateReadOnlyCollection(
         Type elementType,
@@ -172,14 +254,18 @@ public sealed class ConverterRegistry
 
 internal interface IRegisteredConverter
 {
-    RegisteredOutcome Convert(string value, ConversionContext context);
+    IReadOnlyList<Type> Dependencies { get; }
+
+    RegisteredOutcome Convert(string value, ConversionContext context, ConverterRegistry registry);
 
     object CreateReadOnlyCollection(IReadOnlyList<object?> values, bool useNullableElement);
 }
 
 internal sealed class RegisteredConverter<T>(ValueConverter<T> converter) : IRegisteredConverter
 {
-    public RegisteredOutcome Convert(string value, ConversionContext context)
+    public IReadOnlyList<Type> Dependencies => [];
+
+    public RegisteredOutcome Convert(string value, ConversionContext context, ConverterRegistry registry)
     {
         ValueConversion<T> result = converter(value, context)
             ?? throw new InvalidOperationException("A converter returned no result.");
@@ -193,7 +279,7 @@ internal sealed class RegisteredConverter<T>(ValueConverter<T> converter) : IReg
     public object CreateReadOnlyCollection(IReadOnlyList<object?> values, bool useNullableElement)
     {
         return useNullableElement
-            ? (object)CreateNullableReadOnlyCollection(values)
+            ? throw new InvalidOperationException("Nullable custom collections require a statically typed RegisterNullable registration.")
             : CreateTypedReadOnlyCollection(values);
     }
 
@@ -208,17 +294,6 @@ internal sealed class RegisteredConverter<T>(ValueConverter<T> converter) : IReg
         return typedValues.AsReadOnly();
     }
 
-    private static ReadOnlyCollection<T?> CreateNullableReadOnlyCollection(IReadOnlyList<object?> values)
-    {
-        List<T?> typedValues = [];
-        foreach (object? value in values)
-        {
-            typedValues.Add(value is null ? default : CastValue(value));
-        }
-
-        return typedValues.AsReadOnly();
-    }
-
     private static T CastValue(object? value)
     {
         return value is T typedValue
@@ -226,6 +301,31 @@ internal sealed class RegisteredConverter<T>(ValueConverter<T> converter) : IReg
                 : value is null && default(T) is null
                     ? default!
                 : throw new InvalidOperationException("A converted collection element has the wrong type.");
+    }
+}
+
+internal sealed class NullableRegisteredConverter<T> : IRegisteredConverter
+    where T : struct
+{
+    public IReadOnlyList<Type> Dependencies => [typeof(T)];
+
+    public RegisteredOutcome Convert(string value, ConversionContext context, ConverterRegistry registry)
+    {
+        bool succeeded = ValueConverterEngine.TryConvert(
+            value, typeof(T), context, registry, out object? result, out string failure);
+        return new RegisteredOutcome(succeeded, result, succeeded ? null : failure);
+    }
+
+    public object CreateReadOnlyCollection(IReadOnlyList<object?> values, bool useNullableElement)
+    {
+        List<T?> items = [];
+        foreach (object? value in values)
+        {
+            items.Add(value is null ? null : value is T typed
+                ? typed : throw new InvalidOperationException("A nullable collection element has the wrong type."));
+        }
+
+        return items.AsReadOnly();
     }
 }
 

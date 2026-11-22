@@ -8,6 +8,21 @@ and the installed [policy](../governance.md).
 
 ## Current baseline
 
+The converter/union work passed the 159-test Release solution run: 121 runtime
+tests, 36 generator tests and two managed AOT tests, without skips. Fresh
+metadata-bearing runtime/generator TRX and imported requirement evidence are
+under `artifacts/test-results/conversion-unions/`. New source links below
+identify the added behavior. The full `bash scripts/verify.sh` gate passed,
+including formatting, tooling probes and Linux x64 trimmed/NativeAOT
+publication and execution. The gate log is
+`artifacts/verification-conversion-unions.log`; fresh native evidence is under
+`artifacts/aot-verification/linux-x64/20261122T170808Z/`. Managed and native
+focused TRX each contain two passing tests with matching Governance metadata.
+The four new conversion examples passed 56 process checks across eight distinct
+trimmed/native publications under that directory's `conversion-examples/`.
+These process checks are environment-gated smoke evidence, not product MSTest
+or Governance test-run acceptance.
+
 The hierarchy and help-tree change passed a 143-test Release MTP run, including
 34 generator tests, 107 runtime tests and 2 managed AOT tests. Per-project
 metadata-bearing reports and imported requirement evidence are under
@@ -77,6 +92,19 @@ is claimed.
 
 | Requirement | Validation method | Evidence or procedure | Owner | Environment / prerequisites | Gap or waiver details |
 | --- | --- | --- | --- | --- | --- |
+| FEAT-04-001 | portable automated | `BuiltInConversionTests.Parse_ConvertsNewScalarTypes`; `BuiltInConversionTests.Parse_PathsAreLexicalAndNeedNotExist`; `BuiltInConversionTests.Parse_CreatesTypedCollectionsAndNullableValues` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-04-002 | portable automated | `BuiltInConversionTests.Parse_HalfUsesSelectedNumericCultureOnly` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-04-003 | portable automated | `ConverterRegistrationTests.Parse_UsesDefinitionModelAndHostConvertersWithoutMutatingSnapshots`; `ConverterRegistrationTests.Run_UsesHostConfigurationAndRejectsConflictingRegistriesBeforeCallbacks`; `ConverterRegistrationTests.Create_RejectsMismatchedConvertersAndChildRegistrations`; `ConverterRegistrationTests.Parse_UnionCasesUseFirstSuccessAndSupportNestedNullableCollections`; `ConverterRegistrationTests.Parse_UnionFaultsPropagateAndInvalidDependenciesAreRejected` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-04-004 | portable automated | `BuiltInConversionTests.Parse_RejectsMalformedNewTypesWithSafeDiagnostics`; `BuiltInConversionTests.Parse_InvalidCollectionElementDoesNotCommitPartialValues`; `ConverterRegistrationTests.Parse_UnionCasesUseFirstSuccessAndSupportNestedNullableCollections` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-10-003 | portable automated | `ConverterRegistrationTests.Complete_UsesOnlyApprovedDefinitionConverters` | Mauve.Cli maintainers | .NET 11 | Passed with definition-local completion-safety precedence in the 121-test runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-10-001 | portable automated | `ConverterRegistrationTests.Complete_DoesNotUseEnumNamesFromAnOverriddenConverter` | Mauve.Cli maintainers | .NET 11 | Passed with local and exact nullable override assertions in the 121-test runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-11-003 | portable automated | `CliModelGeneratorTests.Generate_BindsTypeAndPropertyConvertersEnumsAndOrderedUnions` | Mauve.Cli maintainers | .NET 11; Roslyn 5.12.0 | Generated scalar/union/nullable-collection/directive, nullable-reference and high-level-host assertions passed in the 36-test generator run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-11-004 | portable automated | `CliModelGeneratorTests.Generate_RejectsMismatchedProvidersAndCustomUnionDiscovery` | Mauve.Cli maintainers | .NET 11; Roslyn 5.12.0 | Passed in the 36-test Release generator run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-15-004 | portable automated | `ConverterRegistrationTests.Invoke_UsesDefinitionConvertersForDirectiveValues` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
+| FEAT-04-001 | environment-gated automated | `scripts/verify-conversion-examples.sh` generated and explicit built-in examples | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | Distinct trimmed and NativeAOT publications passed scalar, nullable/collection/union and invalid-input process checks under `artifacts/aot-verification/linux-x64/20261122T170808Z/conversion-examples/`; not MSTest/TRX acceptance. |
+| FEAT-04-003 | environment-gated automated | `scripts/verify-conversion-examples.sh` generated and explicit custom converter examples | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | Distinct trimmed and NativeAOT publications passed type/property/directive conversion, local override and invalid-input process checks under `artifacts/aot-verification/linux-x64/20261122T170808Z/conversion-examples/`; not MSTest/TRX acceptance. |
+| FEAT-13-002 | environment-gated automated | `scripts/verify-aot.sh` and `AotConversionScenario` | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | Generated/explicit model-owned converters, ordered unions and nullable custom collections passed in both managed and native focused tests; metadata-bearing TRX imported under `artifacts/aot-verification/linux-x64/20261122T170808Z/`. The four new examples separately passed trimmed/native process checks. |
+| FEAT-13-003 | environment-gated automated | `scripts/verify-aot.sh` and `AotConversionScenario` | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | Managed/native focused tests passed with exact two-test and requirement metadata parity under `artifacts/aot-verification/linux-x64/20261122T170808Z/`. Eight new conversion-example publications passed 56 process checks; other RIDs remain unverified. |
 | FEAT-08-006 | portable automated | `HelpTreeTests.Render_ProjectsVisibleFullAndSelectedTreesSafely`; `HelpTreeTests.Write_UsesSanitizedProjectionAndPropagatesOutputFaults`; `CommandModelTests.Create_InstallsHelpTreeAndAccountsForItsLimitsAndCollisions`; `CliParserTests.Parse_HelpTreeHonorsHelpPrecedenceAndConflicts`; `CliInvokerTests.Run_HelpTreeUsesHostOutputAndPreservesDirectiveOrder` | Mauve.Cli maintainers | .NET 11 | All five methods passed in the 107-test Release runtime MTP run; metadata-bearing TRX and imported evidence are under `artifacts/test-results/hierarchy-help-tree/`. |
 | FEAT-08-006 | environment-gated automated | `scripts/verify-aot.sh` root and selected help-tree checks for generated and explicit examples | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | All four trimmed and NativeAOT publications executed both tree modes successfully. Logs are under `artifacts/aot-verification/linux-x64/20261122T154453Z/`. |
 | FEAT-11-001 | portable automated | `CliModelGeneratorTests.Generate_CombinesParentAndChildEdgesInGlobalSourceOrder`; `CliModelGeneratorTests.Generate_UpdatesParentOnlyHierarchyWhenAnEdgeChanges` | Mauve.Cli maintainers | .NET 11; Roslyn generator test project | Both methods passed in the 34-test Release generator MTP run; metadata-bearing TRX and imported evidence are under `artifacts/test-results/hierarchy-help-tree/`. |

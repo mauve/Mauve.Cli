@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
@@ -18,6 +20,50 @@ public sealed class CommandBuilder
     private readonly List<OptionPackInclusionBuilder> _packs = [];
     private readonly List<PositionalDefinition> _positionals = [];
     private readonly List<CrossValueValidator> _crossValidators = [];
+    private readonly ConverterRegistryBuilder _converters = new();
+
+    /// <summary>Registers a model-wide converter on the command root.</summary>
+    /// <typeparam name="T">The converter target type.</typeparam>
+    /// <param name="converter">The application callback.</param>
+    /// <param name="completionSafe">Whether completion may invoke this callback.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder RegisterConverter<T>(ValueConverter<T> converter, bool completionSafe = false)
+    {
+        _ = completionSafe ? _converters.RegisterCompletionSafe(converter) : _converters.Register(converter);
+        HasConverters = true;
+        return this;
+    }
+
+    /// <summary>Registers a statically referenced provider on the model root.</summary>
+    /// <typeparam name="T">The converter target type.</typeparam>
+    /// <typeparam name="TConverter">The provider type.</typeparam>
+    /// <param name="completionSafe">Whether completion may invoke this provider.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder RegisterConverter<T, TConverter>(bool completionSafe = false)
+        where TConverter : ICliValueConverter<T>
+        => RegisterConverter(TConverter.Convert, completionSafe);
+
+    /// <summary>Adds an immutable registry to the model root, rejecting duplicates.</summary>
+    /// <param name="converters">The model-wide registry.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder AddConverters(ConverterRegistry converters)
+    {
+        _ = _converters.Add(converters);
+        HasConverters = true;
+        return this;
+    }
+
+    /// <summary>Registers explicit ordered union case constructors on the model root.</summary>
+    /// <typeparam name="TUnion">The union type.</typeparam>
+    /// <param name="configure">Declares the ordered cases.</param>
+    /// <returns>This builder.</returns>
+    public CommandBuilder RegisterUnion<TUnion>(Action<UnionConverterBuilder<TUnion>> configure)
+        where TUnion : IUnion
+    {
+        _ = _converters.RegisterUnion(configure);
+        HasConverters = true;
+        return this;
+    }
 
     /// <summary>Creates a command builder.</summary>
     /// <param name="name">The canonical name or root display label.</param>
@@ -226,6 +272,10 @@ public sealed class CommandBuilder
     }
 
     internal int ChildCount => _children.Count;
+
+    internal bool HasConverters { get; private set; }
+
+    internal ConverterRegistry CopyConverters() => _converters.Build();
 
     internal int DirectiveCount => _directives.Count;
 

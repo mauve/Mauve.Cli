@@ -8,6 +8,10 @@ generator. Both approaches use the same parser.
 
 - Nested commands, aliases, options, and positional arguments.
 - Typed values, defaults, validation, and clear parse errors.
+- Strict built-in numeric, date/time, identifier, address and lexical path
+  conversions; ordinal enum names and ordered C# 15 unions.
+- Statically referenced custom converter providers with model-wide registration
+  and definition-local overrides.
 - Built-in help, Unicode command-tree help, and asynchronous command handlers.
 - Root directives that run before command dispatch.
 - Opt-in debugger-wait and shell-completion directives.
@@ -29,11 +33,19 @@ dotnet run --project examples/01-Hello/Manual
 dotnet run --project examples/02-Commands/Declarative -- greet Ada
 dotnet run --project examples/02-Commands/Declarative -- --help-tree
 dotnet run --project examples/09-Completion/Manual -- '[completion:bash]'
+dotnet run --project examples/12-BuiltInTypes/Declarative -- time --date 2026-11-22 --time 16:30 --timestamp 2026-11-22T16:30:45Z --duration 00:01:00
+dotnet run --project examples/13-CustomConverters/Manual -- --code B-42 --mask 0xFF --count 10 B-9
 ```
 
 Each [example](examples/) has a declarative, generated version and an
 explicit manual-model version. The examples print their results without
 changing files or contacting services.
+
+The [built-in types example](examples/12-BuiltInTypes/) lists every supported
+scalar and its strict input format, plus nullable, collection and union shapes.
+The [custom converters example](examples/13-CustomConverters/) shows automatic
+type annotations, property overrides and their explicit registration
+counterparts, including custom positional and directive values.
 
 ## Define a command directly
 

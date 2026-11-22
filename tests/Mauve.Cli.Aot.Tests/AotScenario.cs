@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Threading.Tasks;
 using Mauve.Cli.Completion;
 using Mauve.Cli.Conversion;
+using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
@@ -17,7 +18,16 @@ internal enum Priority
     Urgent = 7
 }
 
+[CliConverter<BuildCodeConverter>]
 internal readonly record struct BuildCode(int Value);
+
+internal readonly record struct BuildCodeConverter : ICliValueConverter<BuildCode>
+{
+    public static ValueConversion<BuildCode> Convert(string value, ConversionContext context)
+        => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int code)
+            ? ValueConversion.FromValue(new BuildCode(code))
+            : ValueConversion.Failure<BuildCode>("build-code.invalid");
+}
 
 internal sealed record ScenarioHandles(
     CommandDefinition Root,
@@ -41,13 +51,11 @@ internal static class AotScenario
         return new ConverterRegistryBuilder()
             .RegisterEnum(
             [
-                new KeyValuePair<string, Priority>("low", Priority.Low),
-                new KeyValuePair<string, Priority>("urgent", Priority.Urgent)
+                new KeyValuePair<string, Priority>("None", Priority.None),
+                new KeyValuePair<string, Priority>("Low", Priority.Low),
+                new KeyValuePair<string, Priority>("Urgent", Priority.Urgent)
             ])
-            .Register(static (text, _) =>
-                int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int value)
-                    ? ValueConversion.FromValue(new BuildCode(value))
-                    : ValueConversion.Failure<BuildCode>("build-code.invalid"))
+            .Register<BuildCode, BuildCodeConverter>()
             .Build();
     }
 
@@ -121,6 +129,7 @@ internal static class AotScenario
             .AddPack("retry", retry, "Retry");
 
         CommandBuilder root = new CommandBuilder("aot-todo")
+            .AddConverters(CreateConverters())
             .AddPack("global", global, "Global");
         _ = root.AddChild(new CommandBuilder("add")
             .AddAlias("new")
@@ -194,19 +203,18 @@ internal static class AotScenario
         Justification = "The handler count changes through delegate dispatch during invocation.")]
     internal static async Task VerifyAsync(
         CommandModel model,
-        ScenarioHandles? handles,
-        ConverterRegistry converters)
+        ScenarioHandles? handles)
     {
         _handlerInvocations = 0;
-        CliInvoker invoker = new(new CliParser(converters));
+        CliInvoker invoker = new();
         string[] firstArguments =
         [
             "--workspace=north",
             "new",
             "--verbose",
             "--tag=alpha",
-            "--priority=urgent",
-            "--backup-priority=low",
+            "--priority=Urgent",
+            "--backup-priority=Low",
             "--code=42",
             "--limit=20",
             "--retries=2",
@@ -230,8 +238,8 @@ internal static class AotScenario
                 "new",
                 "--workspace=north",
                 "--tag=alpha",
-                "--priority=urgent",
-                "--backup-priority=low",
+                "--priority=Urgent",
+                "--backup-priority=Low",
                 "--code=42",
                 "--limit=20",
                 "--retries=2",
@@ -247,8 +255,8 @@ internal static class AotScenario
                 "new",
                 "--workspace=north",
                 "--tag=alpha",
-                "--priority=urgent",
-                "--backup-priority=low",
+                "--priority=Urgent",
+                "--backup-priority=Low",
                 "--code=42",
                 "--limit=20",
                 "--retries=2",
@@ -260,7 +268,7 @@ internal static class AotScenario
             && _handlerInvocations == calledBeforeInvalid,
             "Unknown option input was dispatched or accepted.");
 
-        ParseResult excess = new CliParser(converters).Parse(model, [.. firstArguments, "extra\nline"]);
+        ParseResult excess = new CliParser().Parse(model, [.. firstArguments, "extra\nline"]);
         Require(excess.Outcome == ParseOutcome.Invalid
             && string.Join(" ", excess.FormatDiagnostics()) == "Argument 12: Unexpected positional argument \"extra\\nline\".",
             "The extra argument was not identified and escaped.");
@@ -270,8 +278,8 @@ internal static class AotScenario
             && _handlerInvocations == calledBeforeInvalid,
             "Help unexpectedly invoked the command handler.");
 
-        string activeToken = "--priority=ur";
-        CompletionResult completion = await new CompletionService(converters).CompleteAsync(
+        string activeToken = "--priority=Ur";
+        CompletionResult completion = await new CompletionService().CompleteAsync(
             new CompletionRequest(
                 model,
                 ["new", activeToken],
@@ -279,7 +287,7 @@ internal static class AotScenario
                 activeToken.Length)).ConfigureAwait(false);
         Require(completion.Outcome == CompletionOutcome.Completed
             && completion.Candidates.Count == 1
-            && completion.Candidates[0].InsertionText == "urgent"
+            && completion.Candidates[0].InsertionText == "Urgent"
             && _handlerInvocations == calledBeforeInvalid,
             "Completion did not suggest the explicit enum name without dispatching.");
 
@@ -289,8 +297,8 @@ internal static class AotScenario
                 "add",
                 "--workspace=west",
                 "--tag=beta",
-                "--priority=low",
-                "--backup-priority=urgent",
+                "--priority=Low",
+                "--backup-priority=Urgent",
                 "--code=43",
                 "--limit=10",
                 "--retries=4",

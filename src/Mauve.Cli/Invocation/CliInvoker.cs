@@ -55,7 +55,7 @@ public sealed class CliInvoker(CliParser? parser = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
-        ValueTask<InvocationResult> invocation = new CliInvoker()
+        ValueTask<InvocationResult> invocation = new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture))
             .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken);
         if (!invocation.IsCompleted)
         {
@@ -108,7 +108,7 @@ public sealed class CliInvoker(CliParser? parser = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
-        InvocationResult result = await new CliInvoker()
+        InvocationResult result = await new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture))
             .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken)
             .ConfigureAwait(false);
         return WriteHostResult(model, result, hostOptions);

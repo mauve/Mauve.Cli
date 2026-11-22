@@ -69,9 +69,11 @@ and generator diagnostics had not previously been selected.
   declared literal values. An invalid root emits no root registration source.
 - Keep unsupported declaration features explicit errors. The API does not
   infer defaults from property initializers or optional-scalar token syntax
-  from nullability, and does not
-  emit arbitrary converter/factory callbacks. Callers can still supply an
-  explicit `ConverterRegistry` to the shared parser.
+  from nullability. Static converter providers, generated enum maps and union
+  factories are now supported under
+  [ADR-015](ADR-015-Converter-Ownership-And-Unions.md); arbitrary
+  reflection-discovered callbacks remain unsupported. Callers can still
+  supply an explicit host `ConverterRegistry`.
 - Preserve ordered immutable runtime definitions and expose the same typed
   values to generated handlers and explicit-model handlers.
 - **Superseded for OptionPack declarations by

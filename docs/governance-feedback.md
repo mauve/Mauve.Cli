@@ -15,6 +15,31 @@ not shipped as parser acceptance coverage. No sibling authored changes were
 required. Findings below distinguish executed observations from inspection
 and unverified environments.
 
+## GF-007: Source traceability parser predates C# 15 union declarations
+
+**State:** observed Tool 0.14.0 compatibility gap. Owner/proposal: Governance
+source parser language-version and conditional-compilation support.
+
+**Observed:** `governance validate --root . --strict-planned` reports
+`TRACE001: C# source syntax error: Identifier expected` on a C# 15 `union`
+declaration, while the pinned .NET 11 compiler compiles it and the behavioral
+tests execute it. The Tool's `generate`/`validate` commands expose no parser
+version or preprocessor-symbol configuration.
+
+**Consumer compatibility:** guard only the non-test nominal union declarations
+with the SDK's `NET11_0_OR_GREATER` symbol. All product/test/example projects
+target `net11.0`, so their compiler always includes the real unions. Test
+methods, feature/requirement attributes, handlers and assertions are never
+guarded or hidden from the source index. The older syntax scanner can then
+index every behavioral method without attempting unsupported declaration
+syntax. This is not evidence that the Tool understands union semantics.
+
+**Proposal:** update Governance's source Roslyn dependency and support explicit
+consumer parse options, including language version and preprocessor symbols.
+Keep actual managed/native test evidence independent of syntax-only scanning.
+No sibling Governance source, managed asset, analyzer severity, or test
+requirement was modified to apply this compatibility guard.
+
 ## GF-001: Repacking changes package hashes without changing contents
 
 **State:** confirmed local packaging/reproducibility issue; consumer workaround

@@ -3,6 +3,15 @@ using Mauve.Cli.Definitions;
 
 namespace Mauve.Cli.Declarations;
 
+/// <summary>Declares a static converter provider for a value type or bound property.</summary>
+/// <typeparam name="TConverter">The provider implementing ICliValueConverter for the target type.</typeparam>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Enum | AttributeTargets.Property, Inherited = false)]
+public sealed class CliConverterAttribute<TConverter> : Attribute
+{
+    /// <summary>Gets or sets whether completion may invoke this provider.</summary>
+    public bool CompletionSafe { get; set; }
+}
+
 /// <summary>Declares a command type used by the source-generated CLI model.</summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class CliCommandAttribute(string? name = null) : Attribute

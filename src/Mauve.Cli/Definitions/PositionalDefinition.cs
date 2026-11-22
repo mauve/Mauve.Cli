@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Definitions;
@@ -25,6 +26,7 @@ public sealed class PositionalDefinition
     /// <param name="defaultValueFactory">The factory used by <see cref="DefaultValuePolicy.Factory"/>.</param>
     /// <param name="validators">Ordered validators for available values.</param>
     /// <param name="defaultDisplay">Explicit non-sensitive text allowed in generated help.</param>
+    /// <param name="converter">An exact scalar or collection-element conversion override.</param>
     public PositionalDefinition(
         string name,
         Type valueType,
@@ -39,7 +41,8 @@ public sealed class PositionalDefinition
         object? defaultValue = null,
         Func<object?>? defaultValueFactory = null,
         IEnumerable<IValueValidator>? validators = null,
-        string? defaultDisplay = null)
+        string? defaultDisplay = null,
+        ValueConverterRegistration? converter = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -57,6 +60,7 @@ public sealed class PositionalDefinition
         DefaultValue = defaultValue;
         DefaultValueFactory = defaultValueFactory;
         DefaultDisplay = defaultDisplay;
+        Converter = converter;
         List<IValueValidator> validatorCopy = validators is null ? [] : [with(validators)];
         if (validatorCopy.Exists(static validator => validator is null))
         {
@@ -107,4 +111,7 @@ public sealed class PositionalDefinition
 
     /// <summary>Gets explicit display text for a declared default, when allowed.</summary>
     public string? DefaultDisplay { get; }
+
+    /// <summary>Gets the definition-local scalar or element converter.</summary>
+    public ValueConverterRegistration? Converter { get; }
 }

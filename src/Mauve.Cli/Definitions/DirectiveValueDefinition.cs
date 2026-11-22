@@ -1,4 +1,5 @@
 using System;
+using Mauve.Cli.Conversion;
 
 namespace Mauve.Cli.Definitions;
 
@@ -12,13 +13,15 @@ public sealed class DirectiveValueDefinition
     /// <param name="description">Optional display description.</param>
     /// <param name="isHidden">Whether help and completion hide this value.</param>
     /// <param name="isSensitive">Whether the value is sensitive.</param>
+    /// <param name="converter">An exact scalar or collection-element conversion override.</param>
     public DirectiveValueDefinition(
         string name,
         Type valueType,
         bool isRequired = true,
         string? description = null,
         bool isHidden = false,
-        bool isSensitive = false)
+        bool isSensitive = false,
+        ValueConverterRegistration? converter = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(valueType);
@@ -32,6 +35,7 @@ public sealed class DirectiveValueDefinition
         Description = description;
         IsHidden = isHidden;
         IsSensitive = isSensitive;
+        Converter = converter;
     }
 
     /// <summary>Gets the canonical value name.</summary>
@@ -54,4 +58,7 @@ public sealed class DirectiveValueDefinition
 
     /// <summary>Gets whether supplied values are sensitive.</summary>
     public bool IsSensitive { get; }
+
+    /// <summary>Gets the definition-local scalar or element converter.</summary>
+    public ValueConverterRegistration? Converter { get; }
 }

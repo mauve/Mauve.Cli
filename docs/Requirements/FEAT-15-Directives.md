@@ -97,6 +97,13 @@ Generated standalone directives and root method directives must lower to
 these same definitions and invocation semantics. Help and completion operate
 on metadata only.
 
+Directive values share FEAT-04 built-ins, model/host converter composition,
+ordered unions and typed definition overrides. A standalone directive property
+may declare `CliConverter<TProvider>`; an explicit `DirectiveValueDefinition`
+accepts `ValueConverterRegistration`. Invalid conversion metadata is rejected
+before any directive converter or handler executes. See
+[ADR-015](../Architecture/ADR-015-Converter-Ownership-And-Unions.md).
+
 `PredefinedDirectives.CreateDebug()` creates an independent registration
 which polls for debugger attachment and cooperates with caller cancellation.
 
@@ -106,6 +113,9 @@ registers shell integration. `[completion:bash]`,
 scripts for the configured command name. The scripts use an internal
 `query-v1` mode; its interface is not a public compatibility contract. See
 FEAT-10 for its grammar, safety and replacement limitations.
+When no completion service is explicitly supplied, the directive uses the
+current `CliHostOptions` converter registry and numeric culture plus the
+model's registrations. An explicit service retains its own host configuration.
 
 The former FEAT-15-007 suggest directive is retired and its ID will not be
 reused. FEAT-15-008 owns the current shell integration.

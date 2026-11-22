@@ -72,9 +72,11 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix plus generated and explicit directive scenarios run through managed MTP and as a NativeAOT MTP executable. Both TRX reports must contain two passing tests covering FEAT-13 and FEAT-15. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs, directives or invocation behavior. |
+| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix, model-owned converters, ordered unions, nullable custom collections and directive scenarios run through managed MTP and as a NativeAOT MTP executable. Both TRX reports must contain two passing tests covering FEAT-13 and FEAT-15. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs, directives or invocation behavior. |
 | Generated `02-Commands/Declarative`, Linux x64 | Managed trimmed and NativeAOT publishes ran the generated Commands model with warnings treated as errors. | Run `bash scripts/verify-aot.sh` when changing the generator or example model. |
 | Explicit `02-Commands/Manual` without a generator reference, Linux x64 | Managed trimmed and NativeAOT publishes ran the explicit Commands model with warnings treated as errors. | Run `bash scripts/verify-aot.sh` when changing the runtime or example model. |
+| Generated and explicit `12-BuiltInTypes`, Linux x64 | Both variants passed distinct managed trimmed and NativeAOT publications, exercising every built-in scalar and representative nullable/collection/union values plus invalid input. | Run `bash scripts/verify-aot.sh` when changing conversions or example models. |
+| Generated and explicit `13-CustomConverters`, Linux x64 | Both variants passed distinct managed trimmed and NativeAOT publications, exercising type/provider registration, property overrides, positional/directive conversion and invalid input without handler dispatch. | Run `bash scripts/verify-aot.sh` when changing converters, generation, directives or example models. |
 | Linux ARM64 and all other RIDs | Unverified. No support claim is made. | Add a native or cross-publish-plus-execution environment and retain its independent evidence before claiming support. |
 
 The host reports Ubuntu 26.04, `linux-x64`, .NET SDK 11.0.100, and Clang
@@ -132,13 +134,23 @@ unverified until their own native artifacts are executed. Applications own
 the trimming/AOT safety of callbacks and custom types they register; the
 library does not promise arbitrary application code is trim-safe.
 
+Converter providers, generated enum maps, source union case constructors,
+definition overrides and model/host registration are additionally governed by
+[ADR-015](../Architecture/ADR-015-Converter-Ownership-And-Unions.md).
+`AotConversionScenario` accesses generated and explicit union values,
+nullable custom collections, a local hexadecimal converter, `Half`, `DateOnly`
+and a lexical `FileInfo`. These additions passed the managed and native focused
+tests under `artifacts/aot-verification/linux-x64/20261122T170808Z/`, separately
+from historical executions above.
+
 ## Metrics Impact
 **Instruments:** none - planned compatibility validation adds no runtime metrics.
 
 ## Verification
 
 `bash scripts/verify-aot.sh` performs locked restore, strict Release builds,
-managed trimmed publish/run and NativeAOT publish/run for both examples. It
+managed trimmed publish/run and NativeAOT publish/run for both Commands
+examples and all four built-in/custom converter examples. It
 also runs the focused AOT tests through managed MTP and as a NativeAOT MTP
 executable, imports both TRX reports, and requires exact two-test parity. The
 focused scenario checks valid nested alias binding, inherited and nested pack
@@ -146,6 +158,16 @@ values, custom and enum conversion, nullable values, help/completion without
 handler dispatch, invalid input without dispatch, and sequential invocation
 isolation. Both published example modes also check that the predefined debug
 and shell completion directives are registered and execute a completion request.
+
+The converter/union implementation passed the full `bash scripts/verify.sh`
+gate with 159 Release tests and fresh Linux x64 evidence under
+`artifacts/aot-verification/linux-x64/20261122T170808Z/`. The managed and native
+focused runs each passed two tests with exact requirement metadata parity.
+The four new examples passed 56 output/exit process checks across eight
+distinct trimmed/native publications, with commands, source/lock hashes and
+published artifact hashes retained under `conversion-examples/`. Those
+process checks are smoke evidence, not MSTest or Governance TRX acceptance.
+The gate log is `artifacts/verification-conversion-unions.log`.
 
 The previous Todo.Cli and FileTool.Cli gate was observed on Ubuntu 26.04,
 .NET SDK 11.0.100, Clang 21.1.8, RID `linux-x64`. The managed and native

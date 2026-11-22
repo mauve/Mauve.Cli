@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
@@ -14,12 +15,14 @@ public sealed class CommandModel
         CommandDefinition root,
         CliLimits limits,
         bool hasStandardHelp,
-        DirectiveDefinition[] directives)
+        DirectiveDefinition[] directives,
+        ConverterRegistry converters)
     {
         Root = root;
         Limits = limits;
         HasStandardHelp = hasStandardHelp;
         Directives = Array.AsReadOnly(directives);
+        Converters = converters;
     }
 
     /// <summary>Gets the root command definition.</summary>
@@ -33,6 +36,9 @@ public sealed class CommandModel
 
     /// <summary>Gets directives registered on the root, in declaration order.</summary>
     public IReadOnlyList<DirectiveDefinition> Directives { get; }
+
+    /// <summary>Gets the immutable model-wide converter registry.</summary>
+    public ConverterRegistry Converters { get; }
 
     /// <summary>Creates and validates an immutable snapshot from a command graph.</summary>
     /// <param name="root">The root command builder.</param>
@@ -103,6 +109,11 @@ public sealed class CommandModel
             if (frame.Depth != 1 && directiveBuilders.Length > 0)
             {
                 throw InvalidModel("Directives can be registered only on the command model root.");
+            }
+
+            if (frame.Depth != 1 && frame.Builder.HasConverters)
+            {
+                throw InvalidModel("Model-wide converters can be registered only on the command root.");
             }
 
             OptionPackSnapshot[] packs = SnapshotPacks(
@@ -188,7 +199,7 @@ public sealed class CommandModel
         ValidateEffectiveOptions(rootDefinition, effectiveLimits);
         DirectiveDefinition[] directives = [.. root.CopyDirectives().Select(static directive => directive.Build())];
         ValidateDirectives(directives);
-        return new CommandModel(rootDefinition, effectiveLimits, includeStandardHelp, directives);
+        return new CommandModel(rootDefinition, effectiveLimits, includeStandardHelp, directives, root.CopyConverters());
     }
 
     private static void ValidateDirectives(DirectiveDefinition[] directives)
@@ -207,6 +218,7 @@ public sealed class CommandModel
             for (int valueIndex = 0; valueIndex < directive.Values.Count; valueIndex++)
             {
                 DirectiveValueDefinition value = directive.Values[valueIndex];
+                ValidateConverter(value.Converter, value.ElementType ?? value.ValueType);
                 if (!IsValidDirectiveName(value.Name) || !valueNames.Add(value.Name))
                 {
                     throw InvalidModel(string.Create(
@@ -581,6 +593,11 @@ with(StringComparer.Ordinal),             command.Name
 
     private static void ValidateOption(OptionDefinition option)
     {
+        ValidateConverter(option.Converter, option.ElementType ?? option.ValueType);
+        if (option.Arity == OptionArity.BooleanFlag && option.Converter is not null)
+        {
+            throw InvalidModel("Boolean flags use intrinsic literal parsing and cannot declare a converter.");
+        }
         ValidateLongOptionName(option.Name);
         if (!Enum.IsDefined(option.Arity))
         {
@@ -729,6 +746,7 @@ with(StringComparer.Ordinal),             option.Name
 
     private static void ValidatePositional(PositionalDefinition positional)
     {
+        ValidateConverter(positional.Converter, positional.ElementType ?? positional.ValueType);
         ValidateCommandName(positional.Name);
         if (positional.AllowsNull && !CanRepresentNull(positional.ValueType))
         {
@@ -783,6 +801,14 @@ with(StringComparer.Ordinal),             option.Name
         return valueType.IsGenericType
             && valueType.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
             && valueType.GetGenericArguments()[0] == elementType;
+    }
+
+    private static void ValidateConverter(ValueConverterRegistration? converter, Type valueType)
+    {
+        if (converter is not null && converter.TargetType != valueType)
+        {
+            throw InvalidModel("A definition-local converter must target the exact scalar or collection element type.");
+        }
     }
 
     private static bool CanRepresentNull(Type valueType) => !valueType.IsValueType || Nullable.GetUnderlyingType(valueType) is not null;

@@ -1789,6 +1789,151 @@ public sealed class CliModelGeneratorTests
         Assert.HasCount(3, result.ParseResult!.Directives);
     }
 
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
+    public async Task Generate_BindsTypeAndPropertyConvertersEnumsAndOrderedUnions()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using System.Globalization;
+            using Mauve.Cli.Conversion;
+            using Mauve.Cli.Declarations;
+            namespace ConversionFixture;
+
+            [CliConverter<CodeConverter>]
+            public readonly record struct Code(int Value);
+            public sealed class CodeConverter : ICliValueConverter<Code>
+            {
+                public static ValueConversion<Code> Convert(string value, ConversionContext context)
+                    => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int number)
+                        ? ValueConversion.FromValue(new Code(number)) : ValueConversion.Failure<Code>("code.invalid");
+            }
+            public sealed class HexConverter : ICliValueConverter<int>
+            {
+                public static ValueConversion<int> Convert(string value, ConversionContext context)
+                    => int.TryParse(value, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out int number)
+                        ? ValueConversion.FromValue(number) : ValueConversion.Failure<int>("hex.invalid");
+            }
+            [CliConverter<TokenConverter>]
+            public sealed record Token(string Value);
+            public sealed class TokenConverter : ICliValueConverter<Token>
+            {
+                public static ValueConversion<Token> Convert(string value, ConversionContext context)
+                    => ValueConversion.FromValue(new Token(value));
+            }
+            public sealed class NullableCodeConverter : ICliValueConverter<Code?>
+            {
+                public static ValueConversion<Code?> Convert(string value, ConversionContext context)
+                    => value == "none" ? ValueConversion.FromValue<Code?>(null)
+                        : ValueConversion.FromValue<Code?>(new Code(7));
+            }
+            public enum Mode { Slow, Fast }
+            public union Choice(int, string);
+            [CliCommand(IsRoot = true)]
+            [CliDirective<CodeDirective>]
+            public partial class Root
+            {
+                [CliOption(IsRequired = true)] public partial Code Code { get; }
+                [CliOption(IsRequired = true)] [CliConverter<HexConverter>] public partial int Hex { get; }
+                [CliOption(IsRequired = true)] public partial Mode? Mode { get; }
+                [CliOption(IsRequired = true)] public partial Choice Choice { get; }
+                [CliOption] public partial Token? Token { get; }
+                [CliOption] [CliConverter<NullableCodeConverter>] public partial IReadOnlyList<Code?> OptionalCodes { get; }
+                [CliArgument] public partial IReadOnlyList<Code?> Codes { get; }
+                [CliHandler]
+                private int Run() => Code.Value + Hex + (int)Mode!.Value + Codes[0]!.Value.Value
+                    + (Choice.Value is int number ? number : -1000)
+                    + (TryGetToken(out Token? token) ? token!.Value.Length : 0);
+            }
+            [CliDirective]
+            public partial class CodeDirective
+            {
+                [CliOption(IsRequired = true)] [CliConverter<CodeConverter>] public partial Code Code { get; }
+                [CliHandler] private int Run() => Code.Value;
+            }
+            public static class Host
+            {
+                public static int Run()
+                    => Mauve.Cli.Invocation.CliInvoker.Run<Root>(
+                        ["--code=12", "--hex=FF", "--mode=Fast", "--choice=42", "23"],
+                        new Mauve.Cli.Invocation.CliHostOptions(converters:
+                            new ConverterRegistryBuilder().Register<int>(static (_, _) => ValueConversion.FromValue(17)).Build()));
+            }
+            """;
+        GeneratorResult generated = Generate(source);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type root = fixture.GetType("ConversionFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            model, ["--code=12", "--hex=FF", "--mode=Fast", "--choice=42", "23"], TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(333, result.ExitCode);
+        Assert.AreEqual(308, fixture.GetType("ConversionFixture.Host", throwOnError: true)!.GetMethod("Run")!.Invoke(null, null));
+        InvocationResult reference = await new CliInvoker().InvokeAsync(
+            model, ["--code=12", "--hex=FF", "--mode=Fast", "--choice=42", "--token=abc", "23"],
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(336, reference.ExitCode);
+        ParseResult nullableElements = new CliParser().Parse(model,
+            ["--code=12", "--hex=FF", "--mode=Fast", "--choice=42", "--optional-codes=none", "--optional-codes=7", "23"]);
+        Assert.AreEqual(ParseOutcome.Validated, nullableElements.Outcome);
+        Assert.IsTrue(nullableElements.TryGetOptionValue(model.Root, model.Root.Options[5], out System.Collections.IEnumerable? nullableCodes));
+        Assert.IsNull(nullableCodes!.Cast<object?>().First());
+        InvocationResult directive = await new CliInvoker().InvokeAsync(
+            model, ["[code:7]"], TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(7, directive.ExitCode);
+        ParseResult invalid = new CliParser().Parse(model, ["--code=bad", "--hex=FF", "--mode=Fast", "--choice=42", "23"]);
+        Assert.AreEqual(ParseOutcome.Invalid, invalid.Outcome);
+        Assert.IsEmpty(invalid.Values);
+
+        GeneratorResult unchanged = Generate(source);
+        Assert.AreSequenceEqual(
+            generated.RunResult.Results.SelectMany(static result => result.GeneratedSources).Select(static result => result.SourceText.ToString()),
+            unchanged.RunResult.Results.SelectMany(static result => result.GeneratedSources).Select(static result => result.SourceText.ToString()));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsMismatchedProvidersAndCustomUnionDiscovery()
+    {
+        const string mismatched = """
+            using Mauve.Cli.Conversion;
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root
+            {
+                [CliOption(IsRequired = true)] [CliConverter<TextConverter>] public partial int Value { get; }
+            }
+            public sealed class TextConverter : ICliValueConverter<string>
+            {
+                public static ValueConversion<string> Convert(string value, ConversionContext context)
+                    => ValueConversion.FromValue(value);
+            }
+            """;
+        const string customUnion = """
+            using Mauve.Cli.Declarations;
+            using System.Runtime.CompilerServices;
+            [Union]
+            public struct Custom : IUnion
+            {
+                public Custom(int value) { Value = value; }
+                public object? Value { get; }
+            }
+            [CliCommand(IsRoot = true)] public partial class Root
+            {
+                [CliOption(IsRequired = true)] public partial Custom Value { get; }
+            }
+            """;
+        foreach (string source in new[] { mismatched, customUnion })
+        {
+            GeneratorResult generated = Generate(source);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
+            Assert.IsEmpty(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
+
     private GeneratorResult Generate(params string[] sources)
     {
         CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.Parse);

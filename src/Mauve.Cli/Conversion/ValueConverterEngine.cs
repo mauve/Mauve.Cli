@@ -1,7 +1,12 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Security;
 
 namespace Mauve.Cli.Conversion;
 
@@ -12,6 +17,7 @@ internal static class ValueConverterEngine
         | NumberStyles.AllowDecimalPoint
         | NumberStyles.AllowExponent;
     private const NumberStyles _decimalStyles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
+    private static readonly SearchValues<char> _addressInvalidCharacters = SearchValues.Create(" \t\r\n[]");
 
     public static CultureInfo CreateNumericCulture(CultureInfo? culture)
     {
@@ -65,6 +71,7 @@ internal static class ValueConverterEngine
             || effectiveType == typeof(uint)
             || effectiveType == typeof(long)
             || effectiveType == typeof(ulong)
+            || effectiveType == typeof(Half)
             || effectiveType == typeof(float)
             || effectiveType == typeof(double)
             || effectiveType == typeof(decimal);
@@ -75,10 +82,17 @@ internal static class ValueConverterEngine
         IReadOnlyList<object?> values,
         ConverterRegistry registry)
     {
-        return registry.TryCreateReadOnlyCollection(elementType, values, out object? registeredCollection)
+        return Nullable.GetUnderlyingType(elementType) is Type underlying
+            && !registry.ContainsExact(elementType)
+            && IsBuiltIn(underlying)
+            ? CreateBuiltInReadOnlyCollection(elementType, values)
+            : registry.TryCreateReadOnlyCollection(elementType, values, out object? registeredCollection)
             ? registeredCollection!
             : CreateBuiltInReadOnlyCollection(elementType, values);
     }
+
+    public static bool CanCreateCollection(Type elementType, ConverterRegistry registry)
+        => registry.ContainsExact(elementType) || IsBuiltIn(Nullable.GetUnderlyingType(elementType) ?? elementType);
 
     private static object CreateBuiltInReadOnlyCollection(Type elementType, IReadOnlyList<object?> values)
     {
@@ -101,6 +115,8 @@ internal static class ValueConverterEngine
             : elementType == typeof(long?) ? CreateTypedReadOnlyCollection<long?>(values)
             : elementType == typeof(ulong) ? CreateTypedReadOnlyCollection<ulong>(values)
             : elementType == typeof(ulong?) ? CreateTypedReadOnlyCollection<ulong?>(values)
+            : elementType == typeof(Half) ? CreateTypedReadOnlyCollection<Half>(values)
+            : elementType == typeof(Half?) ? CreateTypedReadOnlyCollection<Half?>(values)
             : elementType == typeof(float) ? CreateTypedReadOnlyCollection<float>(values)
             : elementType == typeof(float?) ? CreateTypedReadOnlyCollection<float?>(values)
             : elementType == typeof(double) ? CreateTypedReadOnlyCollection<double>(values)
@@ -110,6 +126,20 @@ internal static class ValueConverterEngine
             : elementType == typeof(Guid) ? CreateTypedReadOnlyCollection<Guid>(values)
             : elementType == typeof(Guid?) ? CreateTypedReadOnlyCollection<Guid?>(values)
             : elementType == typeof(Uri) ? CreateTypedReadOnlyCollection<Uri>(values)
+            : elementType == typeof(char) ? CreateTypedReadOnlyCollection<char>(values)
+            : elementType == typeof(char?) ? CreateTypedReadOnlyCollection<char?>(values)
+            : elementType == typeof(DateOnly) ? CreateTypedReadOnlyCollection<DateOnly>(values)
+            : elementType == typeof(DateOnly?) ? CreateTypedReadOnlyCollection<DateOnly?>(values)
+            : elementType == typeof(TimeOnly) ? CreateTypedReadOnlyCollection<TimeOnly>(values)
+            : elementType == typeof(TimeOnly?) ? CreateTypedReadOnlyCollection<TimeOnly?>(values)
+            : elementType == typeof(DateTimeOffset) ? CreateTypedReadOnlyCollection<DateTimeOffset>(values)
+            : elementType == typeof(DateTimeOffset?) ? CreateTypedReadOnlyCollection<DateTimeOffset?>(values)
+            : elementType == typeof(TimeSpan) ? CreateTypedReadOnlyCollection<TimeSpan>(values)
+            : elementType == typeof(TimeSpan?) ? CreateTypedReadOnlyCollection<TimeSpan?>(values)
+            : elementType == typeof(Version) ? CreateTypedReadOnlyCollection<Version>(values)
+            : elementType == typeof(IPAddress) ? CreateTypedReadOnlyCollection<IPAddress>(values)
+            : elementType == typeof(FileInfo) ? CreateTypedReadOnlyCollection<FileInfo>(values)
+            : elementType == typeof(DirectoryInfo) ? CreateTypedReadOnlyCollection<DirectoryInfo>(values)
             : throw new InvalidOperationException("The model contains an unsupported collection element type.");
     }
 
@@ -207,6 +237,15 @@ internal static class ValueConverterEngine
             return true;
         }
 
+        if (targetType == typeof(Half)
+            && IsNumericSyntax(raw, culture.NumberFormat.NumberDecimalSeparator, allowDecimal: true, allowExponent: true)
+            && Half.TryParse(raw, _floatingStyles, culture, out Half half)
+            && Half.IsFinite(half))
+        {
+            value = half;
+            return true;
+        }
+
         if (targetType == typeof(float)
             && IsNumericSyntax(raw, culture.NumberFormat.NumberDecimalSeparator, allowDecimal: true, allowExponent: true)
             && float.TryParse(raw, _floatingStyles, culture, out float single)
@@ -242,6 +281,58 @@ internal static class ValueConverterEngine
         if (targetType == typeof(Uri) && TryAbsoluteUri(raw, out Uri? uri))
         {
             value = uri;
+            return true;
+        }
+
+        if (targetType == typeof(char) && raw.Length == 1 && !char.IsSurrogate(raw[0]))
+        {
+            value = raw[0];
+            return true;
+        }
+
+        if (targetType == typeof(DateOnly)
+            && DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
+        {
+            value = date;
+            return true;
+        }
+
+        if (targetType == typeof(TimeOnly) && TryTime(raw.AsSpan(), out string? timeFormat)
+            && TimeOnly.TryParseExact(raw, timeFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out TimeOnly time))
+        {
+            value = time;
+            return true;
+        }
+
+        if (targetType == typeof(DateTimeOffset) && TryDateTimeOffset(raw, out DateTimeOffset dateTimeOffset))
+        {
+            value = dateTimeOffset;
+            return true;
+        }
+
+        if (targetType == typeof(TimeSpan) && !raw.AsSpan().ContainsAny(" \t\r\n")
+            && TimeSpan.TryParseExact(raw, "c", CultureInfo.InvariantCulture, out TimeSpan duration))
+        {
+            value = duration;
+            return true;
+        }
+
+        if (targetType == typeof(Version) && IsVersionSyntax(raw) && Version.TryParse(raw, out Version? version))
+        {
+            value = version;
+            return true;
+        }
+
+        if (targetType == typeof(IPAddress) && TryAddress(raw, out IPAddress? address))
+        {
+            value = address;
+            return true;
+        }
+
+        if ((targetType == typeof(FileInfo) || targetType == typeof(DirectoryInfo))
+            && TryPath(raw, targetType == typeof(FileInfo), out object? path))
+        {
+            value = path;
             return true;
         }
 
@@ -359,6 +450,153 @@ internal static class ValueConverterEngine
             && Uri.IsWellFormedUriString(value, UriKind.Absolute);
     }
 
+    private static bool TryTime(ReadOnlySpan<char> value, out string? format)
+    {
+        format = null;
+        if (value.Length < 5 || value[2] != ':' || !AreAsciiDigits(value[..2]) || !AreAsciiDigits(value.Slice(3, 2))
+            || value[..2].CompareTo("23", StringComparison.Ordinal) > 0
+            || value.Slice(3, 2).CompareTo("59", StringComparison.Ordinal) > 0)
+        {
+            return false;
+        }
+
+        if (value.Length == 5)
+        {
+            format = "HH:mm";
+            return true;
+        }
+
+        if (value.Length < 8 || value[5] != ':' || !AreAsciiDigits(value.Slice(6, 2))
+            || value.Slice(6, 2).CompareTo("59", StringComparison.Ordinal) > 0)
+        {
+            return false;
+        }
+
+        if (value.Length == 8)
+        {
+            format = "HH:mm:ss";
+            return true;
+        }
+
+        if (value.Length is < 10 or > 16 || value[8] != '.' || !AreAsciiDigits(value[9..]))
+        {
+            return false;
+        }
+
+        format = "HH:mm:ss.FFFFFFF";
+        return true;
+    }
+
+    private static bool TryDateTimeOffset(string raw, out DateTimeOffset result)
+    {
+        result = default;
+        if (raw.Length < 17 || raw[10] != 'T')
+        {
+            return false;
+        }
+
+        bool utc = raw[^1] == 'Z';
+        int offsetStart = utc ? raw.Length - 1 : raw.Length - 6;
+        if (offsetStart <= 11 || (!utc && (raw[offsetStart] is not ('+' or '-')
+            || raw[offsetStart + 3] != ':'
+            || !AreAsciiDigits(raw.AsSpan(offsetStart + 1, 2))
+            || !AreAsciiDigits(raw.AsSpan(offsetStart + 4, 2)))))
+        {
+            return false;
+        }
+
+        if (!TryTime(raw.AsSpan(11, offsetStart - 11), out string? timeFormat))
+        {
+            return false;
+        }
+
+        string format = "yyyy-MM-dd'T'" + timeFormat + (utc ? "'Z'" : "zzz");
+        DateTimeStyles styles = utc ? DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal : DateTimeStyles.None;
+        return DateTimeOffset.TryParseExact(raw, format, CultureInfo.InvariantCulture, styles, out result);
+    }
+
+    private static bool AreAsciiDigits(ReadOnlySpan<char> value)
+    {
+        foreach (char character in value)
+        {
+            if (!char.IsAsciiDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return !value.IsEmpty;
+    }
+
+    private static bool IsVersionSyntax(string value)
+    {
+        int componentCount = 0;
+        foreach (Range range in value.AsSpan().Split('.'))
+        {
+            if (!AreAsciiDigits(value.AsSpan()[range]))
+            {
+                return false;
+            }
+
+            componentCount++;
+        }
+
+        return componentCount is >= 2 and <= 4;
+    }
+
+    private static bool TryAddress(string raw, out IPAddress? address)
+    {
+        address = null;
+        if (raw.AsSpan().ContainsAny(_addressInvalidCharacters))
+        {
+            return false;
+        }
+
+        int colon = raw.LastIndexOf(':', StringComparison.Ordinal);
+        return (!raw.Contains('.', StringComparison.Ordinal) || IsIpv4Syntax(raw.AsSpan((colon + 1)..)))
+            && (colon >= 0 || IsIpv4Syntax(raw.AsSpan()))
+            && IPAddress.TryParse(raw, out address)
+            && (colon >= 0 ? address.AddressFamily == AddressFamily.InterNetworkV6 : address.AddressFamily == AddressFamily.InterNetwork);
+    }
+
+    private static bool IsIpv4Syntax(ReadOnlySpan<char> value)
+    {
+        int count = 0;
+        foreach (Range range in value.Split('.'))
+        {
+            ReadOnlySpan<char> component = value[range];
+            if (component.Length is < 1 or > 3 || (component.Length > 1 && component[0] == '0')
+                || !AreAsciiDigits(component)
+                || !byte.TryParse(component, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            {
+                return false;
+            }
+
+            count++;
+        }
+
+        return count == 4;
+    }
+
+    private static bool TryPath(string raw, bool file, out object? result)
+    {
+        result = null;
+        if (raw.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            result = file ? new FileInfo(raw) : new DirectoryInfo(raw);
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException or SecurityException)
+        {
+            return false;
+        }
+    }
+
     private static bool HasScheme(string value)
     {
         int separator = value.IndexOf(':', StringComparison.Ordinal);
@@ -391,11 +629,21 @@ internal static class ValueConverterEngine
             || type == typeof(uint)
             || type == typeof(long)
             || type == typeof(ulong)
+            || type == typeof(Half)
             || type == typeof(float)
             || type == typeof(double)
             || type == typeof(decimal)
             || type == typeof(Guid)
-            || type == typeof(Uri);
+            || type == typeof(Uri)
+            || type == typeof(char)
+            || type == typeof(DateOnly)
+            || type == typeof(TimeOnly)
+            || type == typeof(DateTimeOffset)
+            || type == typeof(TimeSpan)
+            || type == typeof(Version)
+            || type == typeof(IPAddress)
+            || type == typeof(FileInfo)
+            || type == typeof(DirectoryInfo);
     }
 
     private static ReadOnlyCollection<T> CreateTypedReadOnlyCollection<T>(IReadOnlyList<object?> values)

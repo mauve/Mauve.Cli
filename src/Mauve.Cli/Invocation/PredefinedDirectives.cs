@@ -25,7 +25,6 @@ public static class PredefinedDirectives
     {
         ShellCompletion.ValidateCommand(commandName);
         DirectiveValueDefinition mode = new("mode", typeof(string));
-        CompletionService completion = service ?? new CompletionService();
         return new DirectiveBuilder("completion")
         {
             Description = "Generate shell completion or handle a completion request."
@@ -72,6 +71,7 @@ public static class PredefinedDirectives
                 return DirectiveResult.StopProcessing(2);
             }
 
+            CompletionService completion = service ?? new CompletionService(context.HostOptions.Converters, context.HostOptions.NumericCulture);
             CompletionResult result = await completion.CompleteAsync(request, providers, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (result.Outcome != CompletionOutcome.Completed || !result.IsComplete)

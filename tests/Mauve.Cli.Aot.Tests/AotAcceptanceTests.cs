@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
@@ -26,16 +25,16 @@ public sealed class AotAcceptanceTests
     [TestProperty(Metadata.Requirement, "FEAT-13-004")]
     public async Task VerifyGeneratedAndExplicitScenarios()
     {
-        ConverterRegistry converters = AotScenario.CreateConverters();
         CommandModel generated = AotRootCommand.CreateModel(includeStandardHelp: true);
         HelpDocument help = HelpDocument.Create(generated, generated.Root.Children[0], "native-todo");
         Assert.AreEqual("Add an AOT scenario item.", help.Description);
         Assert.AreEqual("The item text.", help.Positionals[0].Description);
         Assert.AreSequenceEqual(["aot-todo add --count 2 AAA", "native-todo add --count 2 AAA"], [.. help.Examples]);
-        await AotScenario.VerifyAsync(generated, null, converters).ConfigureAwait(false);
+        await AotScenario.VerifyAsync(generated, null).ConfigureAwait(false);
 
         CommandModel explicitModel = AotScenario.CreateExplicitModel(out ScenarioHandles explicitHandles);
-        await AotScenario.VerifyAsync(explicitModel, explicitHandles, converters).ConfigureAwait(false);
+        await AotScenario.VerifyAsync(explicitModel, explicitHandles).ConfigureAwait(false);
+        await AotConversionScenario.VerifyAsync().ConfigureAwait(false);
     }
 
     [TestMethod]

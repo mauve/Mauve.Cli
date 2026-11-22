@@ -15,6 +15,8 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-09](FEAT-09-Invocation-Lifecycle.md), and
 [FEAT-15](FEAT-15-Directives.md). The API and diagnostic decisions
 are recorded in [ADR-010](../Architecture/ADR-010-Declarative-Generation.md).
+Converter/enum/union generation extends that decision under
+[ADR-015](../Architecture/ADR-015-Converter-Ownership-And-Unions.md).
 
 ## Requirements
 ### FEAT-11-001 - Declarative registration
@@ -118,10 +120,18 @@ execute before command input is valid. Standalone directive declarations do
 not impose that restriction on the root.
 
 Handlers may accept no parameter, a `CancellationToken`, or a
-`CommandInvocationContext`. Defaults inferred from source initializers,
-generated converter registration and completion providers are not part of this
-surface; they remain owned by their respective feature work. Applications may
-use the explicit converter registry with either model path. This approved
+`CommandInvocationContext`. Defaults inferred from source initializers and
+completion providers are not part of this surface. `CliConverter<TProvider>`
+on a custom value type automatically registers its static
+`ICliValueConverter<T>` provider in reachable roots. On an option, positional
+or standalone directive property it is an exact scalar/element override.
+`CompletionSafe = true` explicitly permits completion callback execution.
+Provider accessibility and exact target agreement are checked with MCLI002.
+Roots emit ordinal enum maps, source-union case factories in declaration order,
+and typed nullable adapters. Unsupported automatic custom-union discovery and
+recursive union metadata suppress the affected root with MCLI002.
+Applications may still compose explicit host registries with either model
+path, rejecting exact-key conflicts. This approved
 OptionPack declaration replacement is a breaking API change; verification of
 the previous declaration shape is not evidence for the replacement. Observed
 verification for the replacement is recorded in the validation ledger.
@@ -143,6 +153,12 @@ and hierarchy diagnostics. Observed results belong in the validation ledger.
 `Generate_RejectsInvalidShellExamplesButIgnoresOtherLanguages`, and
 `Generate_UpdatesXmlOnlyEditsWithStableUnchangedOutput` verify FEAT-11-006.
 Observed results belong in the validation ledger.
+
+`Generate_BindsTypeAndPropertyConvertersEnumsAndOrderedUnions` executes
+generated custom scalar/collection/nullable binding, definition overrides,
+enum maps, union selection, and directive conversion.
+`Generate_RejectsMismatchedProvidersAndCustomUnionDiscovery` verifies corrective
+MCLI002 diagnostics and suppressed root output.
 
 Generator-driver tests compile and execute nested generated consumers,
 compare an invocation outcome with an explicit model, and verify all
