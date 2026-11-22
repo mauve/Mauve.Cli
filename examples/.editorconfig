@@ -67,3 +67,5 @@ dotnet_diagnostic.CA1303.severity = none
 [**/Declarative/*.cs]
 # Generated code instantiates command and pack declarations.
 dotnet_diagnostic.CA1812.severity = none
+# The generated command handler must be an instance method.
+dotnet_diagnostic.CA1822.severity = none

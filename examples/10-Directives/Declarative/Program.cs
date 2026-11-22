@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
@@ -11,14 +10,6 @@ namespace Directives.Declarative;
 [CliChild<RunCommand>]
 internal sealed partial class DirectivesCommand
 {
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Generated method directives are instance methods.")]
-    [SuppressMessage(
-        "Style",
-        "IDE0051:Remove unused private members",
-        Justification = "The generated directive descriptor references this method.")]
     [CliDirective("notice", Description = "Print a notice before command execution.")]
     private int Notice(CancellationToken cancellationToken)
     {
@@ -33,10 +24,6 @@ internal sealed partial class DirectivesCommand
 internal sealed partial class RunCommand
 {
     [CliHandler]
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Generated command handlers are instance methods.")]
     private int Run()
     {
         Console.WriteLine("Command ran.");
