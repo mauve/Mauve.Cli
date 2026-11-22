@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using Mauve.Cli.Conversion;
+using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 
 namespace Mauve.Cli.Invocation;
@@ -21,6 +22,7 @@ public sealed class CliHostOptions
     /// <param name="helpTreeRenderer">An optional custom renderer for sanitized help trees.</param>
     /// <param name="converters">Additional host converters; exact model/host conflicts are rejected.</param>
     /// <param name="numericCulture">The optional explicit numeric decimal-separator culture.</param>
+    /// <param name="syntax">The option prefixes.</param>
     public CliHostOptions(
         TextWriter? standardOutput = null,
         TextWriter? standardError = null,
@@ -32,7 +34,8 @@ public sealed class CliHostOptions
         string? executableName = null,
         Func<HelpTreeDocument, string>? helpTreeRenderer = null,
         ConverterRegistry? converters = null,
-        CultureInfo? numericCulture = null)
+        CultureInfo? numericCulture = null,
+        CliSyntaxOptions? syntax = null)
     {
         HelpTextRenderer.ValidateWidth(helpWidth);
         if (executableName is not null)
@@ -51,6 +54,7 @@ public sealed class CliHostOptions
         CancelledExitCode = cancelledExitCode;
         Converters = converters ?? ConverterRegistry.Empty();
         NumericCulture = ValueConverterEngine.CreateNumericCulture(numericCulture);
+        Syntax = syntax ?? CliSyntaxOptions.Default;
     }
 
     /// <summary>Gets the sink for rendered help.</summary>
@@ -85,4 +89,7 @@ public sealed class CliHostOptions
 
     /// <summary>Gets the frozen numeric culture used by high-level entry points.</summary>
     public CultureInfo NumericCulture { get; }
+
+    /// <summary>Gets the option prefixes.</summary>
+    public CliSyntaxOptions Syntax { get; }
 }

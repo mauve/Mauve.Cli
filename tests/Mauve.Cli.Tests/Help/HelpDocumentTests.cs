@@ -132,6 +132,25 @@ public sealed class HelpDocumentTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-001")]
+    public void Create_FormatsOptionSpellingsWithConfiguredPrefixes()
+    {
+        OptionDefinition output = new(
+            "output",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            aliases: [new OptionAlias("out")],
+            shortName: 'o',
+            shortAliases: ['p']);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(output));
+
+        HelpDocument help = HelpDocument.Create(model, syntax: new CliSyntaxOptions("++", "+"));
+
+        Assert.AreEqual("++output, +o, ++out, +p <value>", help.OptionGroups.Single().Options.Single().Syntax);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-12")]
     [TestProperty(Metadata.Requirement, "FEAT-12-004")]
     public void Create_ProjectsInheritedOptionsWithTheirDeclaringOwner()

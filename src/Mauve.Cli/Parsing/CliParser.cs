@@ -13,10 +13,15 @@ namespace Mauve.Cli.Parsing;
 /// <summary>Parses an already-tokenized argument vector against a validated command model.</summary>
 /// <param name="converters">Explicit type converters.</param>
 /// <param name="numericCulture">The optional culture whose decimal separator is used for numeric conversion.</param>
-public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo? numericCulture = null)
+/// <param name="syntax">Option prefixes.</param>
+public sealed class CliParser(
+    ConverterRegistry? converters = null,
+    CultureInfo? numericCulture = null,
+    CliSyntaxOptions? syntax = null)
 {
     private readonly ConverterRegistry _converters = converters ?? ConverterRegistry.Empty();
     private readonly CultureInfo _numericCulture = ValueConverterEngine.CreateNumericCulture(numericCulture);
+    private readonly CliSyntaxOptions _syntax = syntax ?? CliSyntaxOptions.Default;
 
     /// <summary>Parses an argument vector without shell tokenization or execution.</summary>
     /// <param name="model">The validated command model.</param>
@@ -41,7 +46,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         ArgumentNullException.ThrowIfNull(arguments);
         if (includeModelConverters && !model.Converters.IsEmpty)
         {
-            CliParser configured = new(ConverterRegistry.Combine(model.Converters, _converters), _numericCulture);
+            CliParser configured = new(ConverterRegistry.Combine(model.Converters, _converters), _numericCulture, _syntax);
             return configured.ParseCore(model, arguments, cancellationToken, includeModelConverters: false);
         }
         cancellationToken.ThrowIfCancellationRequested();
@@ -635,24 +640,39 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         string token = tokens[index];
         int equalsIndex = token.IndexOf('=', StringComparison.Ordinal);
         bool hasInlineValue = equalsIndex >= 0;
-        string name = hasInlineValue ? token[..equalsIndex] : token;
+        string optionToken = hasInlineValue ? token[..equalsIndex] : token;
         string? inlineValue = hasInlineValue ? token[(equalsIndex + 1)..] : null;
         int optionIndex = index;
-        CommandOption? match = FindVisibleOption(visibleOptions, name);
+        bool longForm = optionToken.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal);
+        bool shortForm = optionToken.StartsWith(_syntax.ShortOptionPrefix, StringComparison.Ordinal);
+        string name = longForm
+            ? optionToken[_syntax.LongOptionPrefix.Length..]
+            : shortForm ? optionToken[_syntax.ShortOptionPrefix.Length..] : optionToken;
+        CommandOption? match = longForm
+            ? FindVisibleLongOption(visibleOptions, name)
+            : shortForm && name.Length == 1
+                ? FindVisibleShortOption(visibleOptions, name[0])
+                : null;
+        if (match is null && shortForm && name.Length > 1)
+        {
+            ScanShortCluster(optionToken, hasInlineValue, optionIndex, name, visibleOptions, occurrences, diagnostics, unmatched);
+            return;
+        }
+
         if (match is null)
         {
             AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.UnknownOption,
                 "Unknown option.",
                 optionIndex,
-                suggestions: SuggestOptions(visibleOptions, name)));
+                suggestions: SuggestOptions(visibleOptions, optionToken)));
             unmatched.Add(new UnmatchedToken(optionIndex, token));
             return;
         }
 
         CommandDefinition owner = match.Value.Owner;
         OptionDefinition option = match.Value.Definition;
-        OptionAliasKind aliasKind = FindAliasKind(option, name);
+        OptionAliasKind aliasKind = longForm ? FindAliasKind(option, name) : OptionAliasKind.Normal;
         OptionOccurrence occurrence = new(owner, option, optionIndex, aliasKind);
         if (aliasKind == OptionAliasKind.Negating && hasInlineValue)
         {
@@ -661,6 +681,18 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 option,
                 owner,
                 optionIndex));
+            occurrences.Add(occurrence);
+            return;
+        }
+
+        if (option.Arity == OptionArity.Counting)
+        {
+            if (hasInlineValue)
+            {
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(ParseDiagnosticCode.UnexpectedValue, option, owner, optionIndex));
+            }
+
+            occurrence.Presence = ValuePresence.Bare;
             occurrences.Add(occurrence);
             return;
         }
@@ -715,6 +747,64 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         }
 
         occurrences.Add(occurrence);
+    }
+
+    private void ScanShortCluster(
+        string optionToken,
+        bool hasInlineValue,
+        int optionIndex,
+        string characters,
+        IReadOnlyList<CommandOption> visibleOptions,
+        List<OptionOccurrence> occurrences,
+        DiagnosticBuffer diagnostics,
+        List<UnmatchedToken> unmatched)
+    {
+        List<CommandOption> resolved = [];
+        bool valid = !hasInlineValue;
+        foreach (char character in characters)
+        {
+            CommandOption? match = FindVisibleShortOption(visibleOptions, character);
+            if (match is null)
+            {
+                valid = false;
+                break;
+            }
+
+            OptionDefinition option = match.Value.Definition;
+            bool zeroValue = option.Arity is OptionArity.BooleanFlag or OptionArity.Counting or OptionArity.OptionalScalar;
+            if (!zeroValue)
+            {
+                valid = false;
+                break;
+            }
+
+            resolved.Add(match.Value);
+        }
+
+        if (!valid)
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
+                ParseDiagnosticCode.UnknownOption,
+                "Unknown option.",
+                optionIndex,
+                suggestions: SuggestOptions(visibleOptions, optionToken)));
+            unmatched.Add(new UnmatchedToken(optionIndex, optionToken));
+            return;
+        }
+
+        foreach (CommandOption item in resolved)
+        {
+            OptionOccurrence occurrence = new(item.Owner, item.Definition, optionIndex, OptionAliasKind.Normal)
+            {
+                Presence = ValuePresence.Bare
+            };
+            if (item.Definition.Arity == OptionArity.BooleanFlag)
+            {
+                occurrence.BooleanValue = true;
+            }
+
+            occurrences.Add(occurrence);
+        }
     }
 
     private static void ScanBoolean(
@@ -780,7 +870,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
             OptionDefinition option = ownedOption.Definition;
             _ = groups.TryGetValue((ownedOption.Owner, option), out List<OptionOccurrence>? occurrencesForOption);
             if (occurrencesForOption is not null
-                && option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection))
+                && option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection or OptionArity.Counting))
             {
                 for (int index = 1; index < occurrencesForOption.Count; index++)
                 {
@@ -932,6 +1022,19 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                         ValueOrigin.Default,
                         []));
                 }
+                else if (option.Arity == OptionArity.Counting)
+                {
+                    bool nullableCount = Nullable.GetUnderlyingType(option.ValueType) == typeof(int);
+                    values.Add(new ParsedValue(
+                        ownedOption.Owner,
+                        option,
+                        null,
+                        nullableCount ? null : 0,
+                        true,
+                        ValuePresence.Absent,
+                        ValueOrigin.Default,
+                        []));
+                }
                 else
                 {
                     values.Add(new ParsedValue(
@@ -960,6 +1063,20 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                     flag.Presence,
                     ValueOrigin.Explicit,
                     flag.GetTokenIndices()));
+                continue;
+            }
+
+            if (option.Arity == OptionArity.Counting)
+            {
+                values.Add(new ParsedValue(
+                    ownedOption.Owner,
+                    option,
+                    null,
+                    optionOccurrences.Count,
+                    true,
+                    ValuePresence.Bare,
+                    ValueOrigin.Explicit,
+                    [.. optionOccurrences.SelectMany(static occurrence => occurrence.GetTokenIndices())]));
                 continue;
             }
 
@@ -1444,7 +1561,13 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 || (ConversionResolver.IsNumericType(valueType, _converters) && IsNegativeNumericCandidate(token)));
     }
 
-    private static bool IsOptionCandidate(string token) => token.Length > 1 && token[0] == '-';
+    private bool IsOptionCandidate(string token)
+    {
+        return (token.Length > _syntax.LongOptionPrefix.Length
+                && token.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal)
+            ) || (token.Length > _syntax.ShortOptionPrefix.Length
+                && token.StartsWith(_syntax.ShortOptionPrefix, StringComparison.Ordinal));
+    }
 
     private static bool IsNegativeNumericCandidate(string token)
     {
@@ -1530,7 +1653,7 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return FindSuggestions(candidates, input);
     }
 
-    private static string[] SuggestOptions(IReadOnlyList<CommandOption> options, string input)
+    private string[] SuggestOptions(IReadOnlyList<CommandOption> options, string input)
     {
         if (input.Length > 128)
         {
@@ -1546,14 +1669,30 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
                 continue;
             }
 
-            if (!TryAddCandidate(candidates, option.Name, option.Name))
+            if (option.LongName is string longName
+                && !TryAddCandidate(candidates, _syntax.FormatLong(longName), _syntax.FormatLong(longName)))
             {
                 break;
             }
 
             foreach (OptionAlias alias in option.Aliases)
             {
-                if (!TryAddCandidate(candidates, alias.Name, option.Name))
+                string spelling = _syntax.FormatLong(alias.Name);
+                if (!TryAddCandidate(candidates, spelling, option.Name))
+                {
+                    return FindSuggestions(candidates, input);
+                }
+            }
+
+            if (option.ShortName is char shortName
+                && !TryAddCandidate(candidates, _syntax.FormatShort(shortName), option.Name))
+            {
+                return FindSuggestions(candidates, input);
+            }
+
+            foreach (char shortAlias in option.ShortAliases)
+            {
+                if (!TryAddCandidate(candidates, _syntax.FormatShort(shortAlias), option.Name))
                 {
                     return FindSuggestions(candidates, input);
                 }
@@ -1563,15 +1702,29 @@ public sealed class CliParser(ConverterRegistry? converters = null, CultureInfo?
         return FindSuggestions(candidates, input);
     }
 
-    private static CommandOption? FindVisibleOption(
+    private static CommandOption? FindVisibleLongOption(
         IReadOnlyList<CommandOption> options,
         string name)
     {
         foreach (CommandOption ownedOption in options)
         {
             OptionDefinition option = ownedOption.Definition;
-            if (string.Equals(option.Name, name, StringComparison.Ordinal)
+            if (string.Equals(option.LongName, name, StringComparison.Ordinal)
                 || option.Aliases.Any(alias => string.Equals(alias.Name, name, StringComparison.Ordinal)))
+            {
+                return ownedOption;
+            }
+        }
+
+        return null;
+    }
+
+    private static CommandOption? FindVisibleShortOption(IReadOnlyList<CommandOption> options, char name)
+    {
+        foreach (CommandOption ownedOption in options)
+        {
+            OptionDefinition option = ownedOption.Definition;
+            if (option.ShortName == name || option.ShortAliases.Contains(name))
             {
                 return ownedOption;
             }

@@ -21,7 +21,7 @@ Converter/enum/union generation extends that decision under
 ## Requirements
 ### FEAT-11-001 - Declarative registration
 Attributes declare a root, generic child or parent relationships, options, positional arguments and an optional handler. Names, order and ordinary cardinality are inferred from symbols, source position and property types unless explicitly overridden. The generator emits a `CreateModel` factory and typed binding accessors.
-**Acceptance:** A nested declaration with an alias, inferred kebab-case names, typed option and positional argument compiles and invokes its handler; `--arg 1 2 3 --arg 4` binds one ordered collection.
+**Acceptance:** A nested declaration with prefix-free long names, `ShortName`/`ShortAliases`, short-only options, inferred kebab-case names, typed option and positional argument compiles and invokes its handler; `--arg 1 2 3 --arg 4` binds one ordered collection.
 **Security:** Generation uses direct type and method references; it does not scan assemblies or evaluate declaration text.
 
 ### FEAT-11-002 - Incremental generation
@@ -82,7 +82,11 @@ FEAT-09.
 
 `bool` properties infer BooleanFlag, `IReadOnlyList<T>` options infer the
 existing greedy collection mode (which also appends repeated occurrences),
-and other option properties infer RequiredScalar. Collection positionals
+and other option properties infer RequiredScalar. `OptionArity.Counting` is
+explicitly selected for `int` and `int?` and requires host syntax configuration
+to enable it. Long names and aliases are prefix-free; `ShortName` and
+`ShortAliases` declare one-character spellings. A short-name-only declaration
+does not infer a long name. Collection positionals
 infer `1..N`; scalar positionals infer `1..1`. Explicit option arity and
 positional bounds are supported named overrides. Nullable types do not imply
 OptionalScalar token syntax.

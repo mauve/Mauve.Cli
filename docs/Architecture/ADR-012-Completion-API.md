@@ -19,6 +19,9 @@ belong to host adapters and must not be inferred by the core.
 - Resolve completed command and option context using the validated model and
   visible scope. Do not construct command instances or run default factories,
   validators or handlers.
+- Use the same `CliSyntaxOptions` as the parser for configured prefixes,
+  short aliases, zero-value short clusters and explicitly declared counting
+  options.
 - Register asynchronous providers by definition handle, with explicit option
   or positional dependencies. Providers receive only typed values that are
   available, non-sensitive and explicitly listed.

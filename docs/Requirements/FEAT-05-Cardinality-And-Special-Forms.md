@@ -32,10 +32,10 @@ Define scalar repetition, collection accumulation and per-occurrence value bound
 **Acceptance:** Repeated `--tag=a --tag=b` accumulates in order; repeated scalar `--count=1 --count=2` is an error; zero values on a required collection occurrence fails.
 **Security:** Bound resource consumption and reject malformed repeated input rather than silently overriding security-sensitive options.
 
-### FEAT-05-004 - Rest positionals and short forms
-A rest positional consumes the remaining positional values in order and must be last; short-alias grouping is rejected.
-**Acceptance:** `a -- -b c` binds `a`, `-b`, `c` to a sole rest positional; a rest followed by another positional is rejected; `-ab` is not split into `-a -b`.
-**Security:** Reject unknown clusters rather than executing an unintended combination of flags.
+### FEAT-05-004 - Rest positionals and short clusters
+A rest positional consumes the remaining positional values in order and must be last; combined short forms are expanded atomically only when every member consumes no value.
+**Acceptance:** `a -- -b c` binds `a`, `-b`, `c` to a sole rest positional; a rest followed by another positional is rejected; valid zero-value `-vaf` expands to the same occurrences as `-v -a -f`; a value-taking or unknown member rejects the whole cluster.
+**Security:** Reject unknown or value-taking clusters rather than partially executing an unintended combination of options.
 
 ## Design
 #### Arity modes
@@ -50,10 +50,13 @@ A rest positional consumes the remaining positional values in order and must be 
 | Multi-value collection | Inline equals supplies one value only; space syntax greedily consumes one or more values. | Stop before any option-like token or `--`, except numeric negative candidates per FEAT-03; repeated occurrences append atomically in argv order. |
 
 Every definition selects one compatible mode. Boolean flag/negating aliases
-and optional-value mode are scalar; no nullable inference or stackable-count
-mode is implied. Negating aliases target the same boolean identity, so a
+and optional-value mode are scalar; nullable inference does not imply counting.
+Counting is an explicit mode selected with `Arity = Counting`. It supports only
+`int` (absent value 0) and `int?` (absent value null). Each exact long/short
+occurrence and each matching character in a cluster increments the count.
+Negating aliases target the same boolean identity, so a
 positive plus negated occurrence counts as repetition of one scalar.
-Reject all repeated scalars, even repeated equal values. This
+Reject all repeated non-counting scalars, even repeated equal values. This
 avoids declaration-order/last-wins surprises. Boolean collections use explicit
 true/false element values, not bare flag semantics.
 Flag literals are intrinsically true/false, never application-converted.
@@ -63,10 +66,12 @@ FEAT-08 bypass. An ordinary invalid flag literal blocks normal validation
 but is bypassed by an otherwise valid true help request, just like other
 ordinary value failures.
 
-The initial grammar has no short clusters or count stacking:
-`-ab`, `-vv` and `-v3` are unknown options. Applications wanting verbosity
-counts can use `--verbosity=3` or a future separately designed counting mode.
-Neither long nor short aliases get repetition semantics from their spelling.
+Short clusters contain only zero-token forms (`BooleanFlag`, `Counting`, and
+bare `OptionalScalar` with an explicit bare policy). Preflight the entire
+cluster before recording any occurrence. A value-taking member, unknown
+character, or negating alias invalidates the entire original token. Repeated
+boolean/optional definitions still produce duplicate-scalar errors. No
+short spelling implies counting semantics.
 Generated declarations infer BooleanFlag for nonnullable `bool`,
 GreedyCollection for supported `IReadOnlyList<T>` option properties, and
 RequiredScalar for other option properties. A named arity override may select
@@ -126,8 +131,8 @@ multi-value string `--tag` and numeric `--number`; child `copy` has rest paths.
 | `["--tag","--verbose"]` | Missing tag value; verbose is still processed separately. |
 | `["--number","-1","-2","--"]` | Numeric collection `[-1,-2]`; marker remains a boundary. |
 | `["copy","a","--verbose","--","-b"]` | Paths `[a,-b]` plus verbose; no option parsing after marker. |
-| `["-vv"]` | Unknown option, not count 2. |
-| `["--count=1","--count=2"]` | Duplicate scalar error. |
+| `["-vv"]` with a counting `v` option | Count 2. |
+| `["--count=1","--count=2"]` for an ordinary integer scalar | Duplicate scalar error. |
 | `["--tag","a","b","--tag","c"]` | Ordered collection `[a,b,c]`. |
 | `["--tag","-1"]` | Missing tag value plus UnknownOption; string elements have no numeric dash exception. |
 | `["copy"]` with zero-min rest | Available empty sequence from its normalized factory. |
@@ -139,7 +144,7 @@ Maz supports automatic `--no-X`, optional following values, mutable list
 accumulation and repeated identical short characters as an integer count.
 Those are useful inventory, not hidden requirements here. Explicit negation,
 equals-only optional values, duplicate-scalar rejection, atomic collection
-conversion and no stacking are accepted choices recorded in this contract.
+conversion and opt-in count stacking are accepted choices recorded here.
 This table is the full initial grammar; maz need not be inspected.
 
 ## Metrics Impact
@@ -149,8 +154,9 @@ This table is the full initial grammar; maz need not be inspected.
 Portable behavior tests are declared in
 [`CliParserTests`](../../tests/Mauve.Cli.Tests/Parsing/CliParserTests.cs)
 for boolean forms, optional values, repeated and greedy collections, rest
-positionals and rejected short clusters. No product test-run evidence has
-been recorded yet; see the [validation ledger](../validation-gaps.md).
+positionals, atomic short clusters and counting options. No product test-run evidence has
+been imported as Governance evidence; local suite results are recorded in the
+[validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

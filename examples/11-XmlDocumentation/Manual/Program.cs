@@ -42,7 +42,7 @@ internal static class Program
             Description = "Work with todo items."
         }.AddChild(add);
         OptionPackBuilder output = new OptionPackBuilder()
-            .AddOption(new OptionDefinition("--verbose", typeof(bool), OptionArity.BooleanFlag,
+            .AddOption(new OptionDefinition("verbose", typeof(bool), OptionArity.BooleanFlag,
                 description: "Enable verbose output.", scope: OptionScope.Inherited));
         CommandBuilder root = new CommandBuilder("todo")
         {

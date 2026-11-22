@@ -106,7 +106,7 @@ public sealed class ParseDiagnostic
         {
             ParseDiagnosticCode.InvalidModel => $"Option '{name}' has an unsupported value type or converter.",
             ParseDiagnosticCode.MissingValue => $"Option '{name}' requires a value.",
-            ParseDiagnosticCode.UnexpectedValue => $"The negating form of option '{name}' does not accept a value.",
+            ParseDiagnosticCode.UnexpectedValue => $"Option '{name}' does not accept a value in this form.",
             ParseDiagnosticCode.DuplicateOption => $"Option '{name}' cannot be repeated.",
             ParseDiagnosticCode.InvalidValue => $"The value for option '{name}' is invalid.",
             ParseDiagnosticCode.ValidationFailed => $"The value for option '{name}' failed validation.",

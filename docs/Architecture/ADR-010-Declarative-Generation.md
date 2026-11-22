@@ -39,13 +39,18 @@ and generator diagnostics had not previously been selected.
   identifiers, stripping a trailing `Command` suffix from command types.
   Explicit names override inference. Generated pack inclusion keys are
   internal and type-derived, not user-authored; pack option names are inferred
-  from their `[CliOption]` property names. Explicit builder keys and runtime
+  as prefix-free long names from their `[CliOption]` property names unless the
+  declaration supplies a short-only `ShortName`. `Aliases` contains
+  prefix-free long aliases; `ShortName` and `ShortAliases` contain ASCII short
+  characters. Explicit builder keys and runtime
   context keys remain unchanged, as specified by ADR-011.
 - Infer `bool` options as flags, `IReadOnlyList<T>` options as greedy
   repeatable collections, other options as required-value scalars, scalar
   positionals as `1..1`, and collection positionals as `1..N`. Named arity
   and positional-bound overrides remain available and must validate against
-  the declared type.
+  the declared type. `OptionArity.Counting` is an explicit `int`/`int?`
+  override whose use is enabled by parser/host syntax configuration; it is
+  never inferred from an integer property.
 - Preserve omitted optional display metadata as `null`; explicit empty text is
   not rewritten to omission.
   Require handlers to be instance methods with no parameters, one

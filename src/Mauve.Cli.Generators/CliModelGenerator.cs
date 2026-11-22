@@ -767,14 +767,27 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         AttributeData attribute)
     {
         bool isOption = IsAttribute(attribute, _optionAttributeName);
-        string declaredName = GetConstructorString(attribute, 0)
-            ?? (isOption ? DeriveOptionName(property.Name) : DeriveMemberName(property.Name));
+        string? declaredOptionName = isOption ? GetOptionLongName(attribute, property.Name) : null;
+        string declaredName = isOption ? declaredOptionName ?? string.Empty
+            : GetConstructorString(attribute, 0) ?? DeriveMemberName(property.Name);
         if (isOption)
         {
-            string[] spellings = [declaredName, .. GetNamedStrings(attribute, "Aliases")];
-            if (!IsValidLongOptionName(declaredName)
+            List<string> spellings = [];
+            if (declaredOptionName is not null)
+            {
+                spellings.Add(declaredOptionName);
+            }
+            spellings.AddRange(GetNamedStrings(attribute, "Aliases"));
+            char shortName = GetNamedChar(attribute, "ShortName");
+            char[] shortAliases = GetNamedChars(attribute, "ShortAliases");
+            if ((declaredOptionName is not null && !IsValidLongOptionName(declaredOptionName))
+                || (declaredOptionName is null && shortName == '\0' && shortAliases.Length == 0)
                 || GetNamedStrings(attribute, "Aliases").Any(static alias => !IsValidOptionAlias(alias))
-                || spellings.Distinct(StringComparer.Ordinal).Count() != spellings.Length)
+                || spellings.Distinct(StringComparer.Ordinal).Count() != spellings.Count
+                || (shortName != '\0' && !IsAsciiLetter(shortName))
+                || shortAliases.Any(static alias => !IsAsciiLetter(alias))
+                || shortAliases.Distinct().Count() != shortAliases.Length
+                || (shortName != '\0' && shortAliases.Contains(shortName)))
             {
                 Report(context, _invalidMember, GetLocation(attribute, property), "Option names and aliases must be valid and unique.");
                 return false;
@@ -828,15 +841,20 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             int arity = GetOptionArity(attribute, property.Type);
             int bareValuePolicy = GetNamedInt(attribute, "BareValuePolicy");
             bool collection = arity is 3 or 4;
+            bool counting = arity == 5;
             if ((collection && !TryGetCollectionElementType(property.Type, out _))
                 || (!collection && arity is 0 or 1 && TryGetCollectionElementType(property.Type, out _))
-                || (arity == 2 && property.Type.SpecialType != SpecialType.System_Boolean))
+                || (arity == 2 && property.Type.SpecialType != SpecialType.System_Boolean)
+                || (counting && property.Type.SpecialType != SpecialType.System_Int32
+                    && !(property.Type is INamedTypeSymbol nullableType
+                        && nullableType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+                        && nullableType.TypeArguments[0].SpecialType == SpecialType.System_Int32)))
             {
                 Report(context, _invalidMember, GetLocation(attribute, property), "Collection options require an IReadOnlyList<T> property, and boolean flags require a bool property.");
                 return false;
             }
 
-            if (arity is < 0 or > 4
+            if (arity is < 0 or > 5
                 || GetNamedInt(attribute, "Scope") is < 0 or > 1
                 || (arity == 1 && bareValuePolicy != 1)
                 || (arity != 1 && bareValuePolicy != 0)
@@ -1061,20 +1079,23 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         HashSet<string> inheritedForChildren = new(inheritedNames, StringComparer.Ordinal);
         foreach (OptionInfo option in command.Options)
         {
-            string optionName = GetConstructorString(option.Attribute, 0)
-                ?? DeriveOptionName(option.Property.Name);
+            string optionName = GetOptionLongName(option.Attribute, option.Property.Name) ?? string.Empty;
             valid &= AddVisibleOption(
                 context,
                 option.Attribute,
                 option.Property,
                 optionName,
                 GetNamedStrings(option.Attribute, "Aliases"),
+                GetNamedChar(option.Attribute, "ShortName"),
+                GetNamedChars(option.Attribute, "ShortAliases"),
                 effective);
             if (GetNamedInt(option.Attribute, "Scope") == 1)
             {
                 AddOptionSpellings(
                     optionName,
                     GetNamedStrings(option.Attribute, "Aliases"),
+                    GetNamedChar(option.Attribute, "ShortName"),
+                    GetNamedChars(option.Attribute, "ShortAliases"),
                     inheritedForChildren);
             }
         }
@@ -1137,12 +1158,14 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         bool valid = true;
         foreach (OptionInfo option in options)
         {
-            string name = GetConstructorString(option.Attribute, 0) ?? DeriveOptionName(option.Property.Name);
+            string name = GetOptionLongName(option.Attribute, option.Property.Name) ?? string.Empty;
             string[] aliases = GetNamedStrings(option.Attribute, "Aliases");
-            valid &= AddVisibleOption(context, option.Attribute, owner, name, aliases, visibleNames);
+            char shortName = GetNamedChar(option.Attribute, "ShortName");
+            char[] shortAliases = GetNamedChars(option.Attribute, "ShortAliases");
+            valid &= AddVisibleOption(context, option.Attribute, owner, name, aliases, shortName, shortAliases, visibleNames);
             if (GetNamedInt(option.Attribute, "Scope") == 1)
             {
-                AddOptionSpellings(name, aliases, inheritedNames);
+                AddOptionSpellings(name, aliases, shortName, shortAliases, inheritedNames);
             }
         }
 
@@ -1155,10 +1178,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         ISymbol owner,
         string name,
         string[] aliases,
+        char shortName,
+        char[] shortAliases,
         HashSet<string> visibleNames)
     {
         bool valid = true;
-        if (!visibleNames.Add(name))
+        if (name.Length > 0 && !visibleNames.Add(OptionNameKey(name)))
         {
             Report(context, _invalidHierarchy, GetLocation(attribute, owner), "Visible option names and aliases must be unique.");
             valid = false;
@@ -1166,7 +1191,22 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         foreach (string alias in aliases)
         {
-            if (!visibleNames.Add(alias))
+            if (!visibleNames.Add(OptionNameKey(alias)))
+            {
+                Report(context, _invalidHierarchy, GetLocation(attribute, owner), "Visible option names and aliases must be unique.");
+                valid = false;
+            }
+        }
+
+        if (shortName != '\0' && !visibleNames.Add(ShortNameKey(shortName)))
+        {
+            Report(context, _invalidHierarchy, GetLocation(attribute, owner), "Visible option names and aliases must be unique.");
+            valid = false;
+        }
+
+        foreach (char alias in shortAliases)
+        {
+            if (!visibleNames.Add(ShortNameKey(alias)))
             {
                 Report(context, _invalidHierarchy, GetLocation(attribute, owner), "Visible option names and aliases must be unique.");
                 valid = false;
@@ -1176,14 +1216,35 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return valid;
     }
 
-    private static void AddOptionSpellings(string name, string[] aliases, HashSet<string> names)
+    private static void AddOptionSpellings(string name, string[] aliases, char shortName, char[] shortAliases, HashSet<string> names)
     {
-        _ = names.Add(name);
+        if (name.Length > 0)
+        {
+            _ = names.Add(OptionNameKey(name));
+        }
+
         foreach (string alias in aliases)
         {
-            _ = names.Add(alias);
+            _ = names.Add(OptionNameKey(alias));
+        }
+
+        if (shortName != '\0')
+        {
+            _ = names.Add(ShortNameKey(shortName));
+        }
+
+        foreach (char shortAlias in shortAliases)
+        {
+            _ = names.Add(ShortNameKey(shortAlias));
         }
     }
+
+    private static string OptionNameKey(string name) =>
+        name.Length == 2 && name[0] == '-' && IsAsciiLetter(name[1])
+            ? ShortNameKey(name[1])
+            : string.Concat("L:", name.StartsWith("--", StringComparison.Ordinal) ? name.Substring(2) : name);
+
+    private static string ShortNameKey(char name) => string.Concat("S:", name);
 
     private static bool IsValidPackKey(string key)
     {
@@ -1810,8 +1871,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         string? description = null,
         string converter = "")
     {
-        string name = GetConstructorString(attribute, 0)
-            ?? (inferredMemberName is null ? string.Empty : DeriveOptionName(inferredMemberName));
+        string? name = GetOptionLongName(attribute, inferredMemberName);
         int arityValue = GetOptionArity(attribute, valueType);
         string arity = EnumName("OptionArity", arityValue);
         string typeForTypeof = FormatTypeForTypeof(valueType);
@@ -1826,12 +1886,17 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", ",
             GetNamedStrings(attribute, "Aliases")
                 .Select(alias => $"new global::Mauve.Cli.Definitions.OptionAlias({Literal(alias)})"));
+        string shortAliases = string.Join(", ", GetNamedChars(attribute, "ShortAliases").Select(static alias => $"'{alias}'"));
+        char declaredShort = GetNamedChar(attribute, "ShortName");
+        string shortName = declaredShort != '\0'
+            ? $", shortName: '{declaredShort}'"
+            : string.Empty;
         string barePolicy = GetNamedInt(attribute, "BareValuePolicy") == 1
             ? ", bareValuePolicy: global::Mauve.Cli.Definitions.BareValuePolicy.Null"
             : string.Empty;
         return string.Concat(
             "new global::Mauve.Cli.Definitions.OptionDefinition(",
-            Literal(name),
+            name is null ? "null" : Literal(name),
             ", typeof(",
             typeForTypeof,
             "), global::Mauve.Cli.Definitions.OptionArity.",
@@ -1853,7 +1918,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             GetNamedBoolean(attribute, "IsSensitive") ? "true" : "false",
             ", scope: global::Mauve.Cli.Definitions.OptionScope.",
             EnumName("OptionScope", GetNamedInt(attribute, "Scope")),
+            ", shortAliases: new char[] { ",
+            shortAliases,
+            " }",
             barePolicy,
+            shortName,
             converter,
             ")");
     }
@@ -2263,15 +2332,15 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static bool IsValidLongOptionName(string name)
     {
-        return name.Length is >= 3 and <= 128
-            && name.StartsWith("--", StringComparison.Ordinal)
-            && IsAsciiLetter(name[2])
-            && name.Skip(3).All(static character => IsAsciiAlphaNumeric(character) || character == '-');
+        string normalized = name.StartsWith("--", StringComparison.Ordinal) ? name.Substring(2) : name;
+        return normalized.Length is >= 1 and <= 126
+            && IsAsciiLetter(normalized[0])
+            && normalized.Skip(1).All(static character => IsAsciiAlphaNumeric(character) || character == '-');
     }
 
     private static bool IsValidOptionAlias(string name)
     {
-        return (name.Length == 2 && name[0] == '-' && IsAsciiLetter(name[1]))
+        return (name.Length == 2 && name[0] == '-' && name[1] != '-' && IsAsciiLetter(name[1]))
             || IsValidLongOptionName(name);
     }
 
@@ -2325,7 +2394,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     {
         string[] names = enumName switch
         {
-            "OptionArity" => ["RequiredScalar", "OptionalScalar", "BooleanFlag", "RepeatedSingleCollection", "GreedyCollection"],
+            "OptionArity" => ["RequiredScalar", "OptionalScalar", "BooleanFlag", "RepeatedSingleCollection", "GreedyCollection", "Counting"],
             "OptionScope" => ["Local", "Inherited"],
             _ => []
         };
@@ -2456,6 +2525,20 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             : Convert.ToInt32(value.Value.Value, CultureInfo.InvariantCulture);
     }
 
+    private static char GetNamedChar(AttributeData attribute, string name)
+    {
+        TypedConstant constant = attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value;
+        return constant.Value is char value ? value : '\0';
+    }
+
+    private static char[] GetNamedChars(AttributeData attribute, string name)
+    {
+        TypedConstant constant = attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value;
+        return constant.IsNull || constant.Values.IsDefault
+            ? []
+            : [.. constant.Values.Where(static value => value.Value is char).Select(static value => (char)value.Value!)];
+    }
+
     private static bool HasNamedArgument(AttributeData attribute, string name) => attribute.NamedArguments.Any(argument => argument.Key == name);
 
     private static int GetOptionArity(AttributeData attribute, ITypeSymbol valueType)
@@ -2495,7 +2578,17 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         return DeriveMemberName(name);
     }
 
-    private static string DeriveOptionName(string memberName) => string.Concat("--", DeriveMemberName(memberName));
+    private static string DeriveOptionName(string memberName) => DeriveMemberName(memberName);
+
+    private static string? GetOptionLongName(AttributeData attribute, string? inferredMemberName)
+    {
+        string? explicitName = GetConstructorString(attribute, 0);
+        return explicitName is not null
+            ? explicitName.StartsWith("--", StringComparison.Ordinal) ? explicitName.Substring(2) : explicitName
+            : GetNamedChar(attribute, "ShortName") != '\0' || inferredMemberName is null
+                ? null
+                : DeriveOptionName(inferredMemberName);
+    }
 
     private static string DeriveMemberName(string identifier)
     {

@@ -433,23 +433,37 @@ public sealed class CommandModel
         {
             (CommandDefinition command, CommandDefinition[] path) = pending.Pop();
             IReadOnlyList<CommandOption> effective = GetEffectiveOptions(path);
-            HashSet<string> names = [with(StringComparer.Ordinal)];
+            HashSet<string> longNames = [with(StringComparer.Ordinal)];
+            HashSet<char> shortNames = [];
             foreach (CommandOption option in effective)
             {
-                if (!names.Add(option.Definition.Name))
+                if (option.Definition.LongName is string longName && !longNames.Add(longName))
                 {
                     throw InvalidModel(string.Create(
                         CultureInfo.InvariantCulture,
-                        $"The effective command path contains a duplicate option spelling '{option.Definition.Name}'."));
+                        $"The effective command path contains a duplicate option spelling '{longName}'."));
                 }
 
                 foreach (OptionAlias alias in option.Definition.Aliases)
                 {
-                    if (!names.Add(alias.Name))
+                    if (!longNames.Add(alias.Name))
                     {
                         throw InvalidModel(string.Create(
                             CultureInfo.InvariantCulture,
                             $"The effective command path contains a duplicate option spelling '{alias.Name}'."));
+                    }
+                }
+
+                if (option.Definition.ShortName is char shortName && !shortNames.Add(shortName))
+                {
+                    throw InvalidModel("The effective command path contains a duplicate short option character.");
+                }
+
+                foreach (char shortAlias in option.Definition.ShortAliases)
+                {
+                    if (!shortNames.Add(shortAlias))
+                    {
+                        throw InvalidModel("The effective command path contains a duplicate short option character.");
                     }
                 }
             }
@@ -503,13 +517,14 @@ with(StringComparer.Ordinal),             command.Name
         }
 
         HashSet<string> optionNames = [with(StringComparer.Ordinal)];
+        HashSet<char> shortOptionNames = [];
         Dictionary<string, (string? Title, string? Description)> displayGroups = [with(StringComparer.Ordinal)];
         foreach (OptionDefinition option in options)
         {
             ValidateOption(option);
-            if (!optionNames.Add(option.Name))
+            if (option.LongName is string longName && !optionNames.Add(longName))
             {
-                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Command '{command.Name}' has a duplicate option spelling '{option.Name}'."));
+                throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Command '{command.Name}' has a duplicate option spelling '{longName}'."));
             }
 
             foreach (OptionAlias alias in option.Aliases)
@@ -517,6 +532,19 @@ with(StringComparer.Ordinal),             command.Name
                 if (!optionNames.Add(alias.Name))
                 {
                     throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Command '{command.Name}' has a duplicate option spelling '{alias.Name}'."));
+                }
+
+                if (option.ShortName is char shortName && !shortOptionNames.Add(shortName))
+                {
+                    throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Command '{command.Name}' has a duplicate short option character."));
+                }
+
+                foreach (char shortAlias in option.ShortAliases)
+                {
+                    if (!shortOptionNames.Add(shortAlias))
+                    {
+                        throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Command '{command.Name}' has a duplicate short option character."));
+                    }
                 }
             }
 
@@ -594,11 +622,49 @@ with(StringComparer.Ordinal),             command.Name
     private static void ValidateOption(OptionDefinition option)
     {
         ValidateConverter(option.Converter, option.ElementType ?? option.ValueType);
+        if (option.Arity == OptionArity.Counting
+            && ((option.ValueType != typeof(int)
+                && option.ValueType != typeof(int?))
+                || option.Converter is not null
+                || option.DefaultValuePolicy != DefaultValuePolicy.None
+                || option.BareValuePolicy != BareValuePolicy.Unspecified))
+        {
+            throw InvalidModel($"Counting option '{option.Name}' must be an int or nullable int without converters or explicit defaults.");
+        }
+
         if (option.Arity == OptionArity.BooleanFlag && option.Converter is not null)
         {
             throw InvalidModel("Boolean flags use intrinsic literal parsing and cannot declare a converter.");
         }
-        ValidateLongOptionName(option.Name);
+        if (option.LongName is string longName)
+        {
+            ValidateLongOptionName(longName);
+        }
+
+        if (option.LongName is null && option.ShortName is null && option.ShortAliases.Count == 0)
+        {
+            throw InvalidModel("An option must declare at least one long or short spelling.");
+        }
+
+        if (option.ShortName is char primaryShort && !IsAsciiLetter(primaryShort))
+        {
+            throw InvalidModel($"Option '{option.Name}' has an invalid short name.");
+        }
+
+        HashSet<char> shortCharacters = [];
+        if (option.ShortName is char declaredShort)
+        {
+            _ = shortCharacters.Add(declaredShort);
+        }
+
+        foreach (char shortAlias in option.ShortAliases)
+        {
+            if (!IsAsciiLetter(shortAlias) || !shortCharacters.Add(shortAlias))
+            {
+                throw InvalidModel($"Option '{option.Name}' has an invalid or duplicate short alias.");
+            }
+        }
+
         if (!Enum.IsDefined(option.Arity))
         {
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Option '{option.Name}' has an unsupported arity."));
@@ -629,10 +695,11 @@ with(StringComparer.Ordinal),             command.Name
             }
         }
 
-        HashSet<string> names =
-        [
-with(StringComparer.Ordinal),             option.Name
-        ];
+        HashSet<string> names = [with(StringComparer.Ordinal)];
+        if (option.LongName is string canonicalLongName)
+        {
+            _ = names.Add(canonicalLongName);
+        }
         bool hasNegatingAlias = false;
         foreach (OptionAlias alias in option.Aliases)
         {
@@ -894,12 +961,12 @@ with(StringComparer.Ordinal),             option.Name
 
     private static void ValidateLongOptionName(string name)
     {
-        if (name.Length is < 3 or > 128 || !name.StartsWith("--", StringComparison.Ordinal) || !IsAsciiLetter(name[2]))
+        if (name.Length is < 1 or > 126 || !IsAsciiLetter(name[0]))
         {
             throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Canonical option name '{name}' is invalid."));
         }
 
-        for (int index = 3; index < name.Length; index++)
+        for (int index = 1; index < name.Length; index++)
         {
             char character = name[index];
             if (!IsAsciiAlphaNumeric(character) && character != '-')
@@ -909,15 +976,7 @@ with(StringComparer.Ordinal),             option.Name
         }
     }
 
-    private static void ValidateOptionAlias(string name)
-    {
-        if (name.Length == 2 && name[0] == '-' && IsAsciiLetter(name[1]))
-        {
-            return;
-        }
-
-        ValidateLongOptionName(name);
-    }
+    private static void ValidateOptionAlias(string name) => ValidateLongOptionName(name);
 
     private static bool IsAsciiAlphaNumeric(char character) => IsAsciiLetter(character) || character is >= '0' and <= '9';
 

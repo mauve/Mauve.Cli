@@ -9,10 +9,10 @@ internal static class Program
     private static int Main(string[] args)
     {
         OptionDefinition count = new(
-            "--count",
+            "count",
             typeof(int),
             OptionArity.RequiredScalar,
-            aliases: [new OptionAlias("-c")],
+            shortName: 'c',
             isRequired: true,
             description: "A whole-number count.");
         OptionDefinition enabled = new(

@@ -16,5 +16,8 @@ public enum OptionArity
     RepeatedSingleCollection,
 
     /// <summary>An occurrence consumes one or more adjacent values.</summary>
-    GreedyCollection
+    GreedyCollection,
+
+    /// <summary>Each zero-value occurrence increments an integer count.</summary>
+    Counting
 }

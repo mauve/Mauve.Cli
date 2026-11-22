@@ -20,7 +20,7 @@ Reference: `../maz/Console/Cli/CommandDef.cs` and
 
 ## Requirements
 ### FEAT-08-001 - Usage metadata
-Render root and selected leaf usage from the model, including names, aliases, arguments and requiredness.
+Render root and selected leaf usage from the model, including names, aliases, arguments and requiredness. Format option spellings from prefix-free long/short metadata using the active syntax configuration.
 **Acceptance:** Root help lists visible children; leaf help identifies positional order and option aliases; an empty command still has valid usage.
 **Security:** Render metadata as inert text and never invoke handlers to produce help.
 

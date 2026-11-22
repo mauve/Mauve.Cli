@@ -64,11 +64,13 @@ public sealed class HelpDocument
     /// <param name="model">The validated command model.</param>
     /// <param name="command">The command to describe, or the root when omitted.</param>
     /// <param name="executableName">The executable display name for <c>$0</c>, or the root display label when omitted.</param>
+    /// <param name="syntax">The option prefixes used to display option spellings.</param>
     /// <returns>A read-only help document.</returns>
     public static HelpDocument Create(
         CommandModel model,
         CommandDefinition? command = null,
-        string? executableName = null)
+        string? executableName = null,
+        CliSyntaxOptions? syntax = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         if (executableName is not null)
@@ -76,6 +78,7 @@ public sealed class HelpDocument
             ArgumentException.ThrowIfNullOrWhiteSpace(executableName);
         }
         CommandDefinition selected = command ?? model.Root;
+        syntax ??= CliSyntaxOptions.Default;
         if (!Contains(model.Root, selected))
         {
             throw new ArgumentException("The command does not belong to this model.", nameof(command));
@@ -128,7 +131,7 @@ public sealed class HelpDocument
                 groups.Add(group);
             }
 
-            group.Options.Add(CreateOptionItem(option));
+            group.Options.Add(CreateOptionItem(option, syntax));
         }
 
         string[] visiblePositionals = [.. positionals.Select(static positional => positional.Syntax)];
@@ -207,13 +210,23 @@ public sealed class HelpDocument
         return new HelpPositionalItem(syntax, description, positional.MinimumValues > 0, defaultDisplay);
     }
 
-    private static HelpOptionItem CreateOptionItem(OptionDefinition option)
+    private static HelpOptionItem CreateOptionItem(OptionDefinition option, CliSyntaxOptions syntax)
     {
-        string[] spellings =
-        [
-            HelpTextSanitizer.SingleLine(option.Name),
-            .. option.Aliases.Select(static alias => HelpTextSanitizer.SingleLine(alias.Name))
-        ];
+        List<string> spellings = [];
+        if (option.LongName is string longName)
+        {
+            spellings.Add(HelpTextSanitizer.SingleLine(syntax.FormatLong(longName)));
+        }
+
+        if (option.ShortName is char shortName)
+        {
+            spellings.Add(HelpTextSanitizer.SingleLine(syntax.FormatShort(shortName)));
+        }
+
+        spellings.AddRange(option.Aliases.Select(alias =>
+            HelpTextSanitizer.SingleLine(syntax.FormatLong(alias.Name))));
+        spellings.AddRange(option.ShortAliases.Select(shortAlias =>
+            HelpTextSanitizer.SingleLine(syntax.FormatShort(shortAlias))));
         string valueLabel = HelpTextSanitizer.SingleLine(
             string.IsNullOrEmpty(option.ValueLabel) ? "value" : option.ValueLabel);
         string suffix = option.Arity switch
@@ -222,19 +235,20 @@ public sealed class HelpDocument
             OptionArity.OptionalScalar => $"[={valueLabel}]",
             OptionArity.RequiredScalar or OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection
                 => $"<{valueLabel}>",
+            OptionArity.Counting => string.Empty,
             _ => throw new InvalidOperationException("The option arity is invalid.")
         };
-        string syntax = string.Join(", ", spellings);
+        string optionSyntax = string.Join(", ", spellings);
         if (suffix.Length > 0)
         {
-            syntax = string.Concat(syntax, " ", suffix);
+            optionSyntax = string.Concat(optionSyntax, " ", suffix);
         }
 
         string? defaultDisplay = CanDisplayDefault(option)
             ? HelpTextSanitizer.SingleLine(option.DefaultDisplay!)
             : null;
         return new HelpOptionItem(
-            syntax,
+            optionSyntax,
             HelpTextSanitizer.Description(option.Description),
             option.IsRequired,
             defaultDisplay,

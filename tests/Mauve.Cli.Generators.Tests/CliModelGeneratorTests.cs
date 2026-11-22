@@ -956,6 +956,52 @@ public sealed class CliModelGeneratorTests
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
+    public void Generate_SupportsShortOnlyCountingOptions()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Definitions;
+
+            namespace ShortOnlyFixture;
+
+            [CliCommand(IsRoot = true)]
+            public partial class RootCommand
+            {
+                [CliOption(ShortName = 'v', Arity = OptionArity.Counting)]
+                public partial int Verbosity { get; }
+
+                [CliOption(ShortName = 'c', Arity = OptionArity.Counting)]
+                public partial int? NullableCount { get; }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assembly fixture = EmitAndLoad(generated.OutputCompilation);
+        Type rootType = fixture.GetType("ShortOnlyFixture.RootCommand", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        CliParser parser = new();
+
+        ParseResult repeated = parser.Parse(model, ["-vv", "-c"]);
+        ParseResult absent = parser.Parse(model, []);
+
+        Assert.AreEqual(ParseOutcome.Validated, repeated.Outcome, string.Join(" | ", repeated.Diagnostics.Select(static diagnostic => diagnostic.ToString())));
+        Assert.IsNull(model.Root.Options[0].LongName);
+        Assert.AreEqual('v', model.Root.Options[0].ShortName);
+        Assert.IsTrue(repeated.TryGetOptionValue(model.Root, model.Root.Options[0], out int verbosity));
+        Assert.AreEqual(2, verbosity);
+        Assert.IsTrue(repeated.TryGetOptionValue(model.Root, model.Root.Options[1], out int? nullableCount));
+        Assert.AreEqual(1, nullableCount);
+        Assert.IsTrue(absent.TryGetOptionValue(model.Root, model.Root.Options[0], out int absentVerbosity));
+        Assert.AreEqual(0, absentVerbosity);
+        Assert.IsTrue(absent.TryGetOptionValue(model.Root, model.Root.Options[1], out int? absentNullableCount));
+        Assert.IsNull(absentNullableCount);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
     public void Generate_OrdersPartialMembersByCompilationSyntaxTreeThenSpan()
     {

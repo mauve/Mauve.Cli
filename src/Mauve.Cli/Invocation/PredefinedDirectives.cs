@@ -71,7 +71,10 @@ public static class PredefinedDirectives
                 return DirectiveResult.StopProcessing(2);
             }
 
-            CompletionService completion = service ?? new CompletionService(context.HostOptions.Converters, context.HostOptions.NumericCulture);
+            CompletionService completion = service ?? new CompletionService(
+                context.HostOptions.Converters,
+                context.HostOptions.NumericCulture,
+                context.HostOptions.Syntax);
             CompletionResult result = await completion.CompleteAsync(request, providers, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (result.Outcome != CompletionOutcome.Completed || !result.IsComplete)

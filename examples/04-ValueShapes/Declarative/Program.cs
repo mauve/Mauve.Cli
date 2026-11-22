@@ -15,10 +15,10 @@ internal sealed partial class ShapesCommand
 [CliCommand(Description = "Print a flag, repeated values, and remaining paths.")]
 internal sealed partial class InspectCommand
 {
-    [CliOption("--tag", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true, Description = "A repeatable tag.")]
+    [CliOption("tag", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true, Description = "A repeatable tag.")]
     public partial IReadOnlyList<string> Tags { get; }
 
-    [CliOption("--verbose", Description = "Show the verbose mode.")]
+    [CliOption("verbose", Description = "Show the verbose mode.")]
     public partial bool Verbose { get; }
 
     [CliOption(

@@ -13,7 +13,7 @@ internal sealed partial class DeployCommand(GlobalOptions global)
 {
     public GlobalOptions Global { get; } = global;
 
-    [CliOption("--root-only", Arity = OptionArity.BooleanFlag, Description = "Available only on the root.")]
+    [CliOption("root-only", Arity = OptionArity.BooleanFlag, Description = "Available only on the root.")]
     public partial bool RootOnly { get; }
 }
 
@@ -31,7 +31,7 @@ internal sealed partial class GlobalOptions
 [CliCommand("show", Description = "Show the selected environment.")]
 internal sealed partial class ShowCommand
 {
-    [CliOption("--brief", Arity = OptionArity.BooleanFlag, Description = "Use brief output.")]
+    [CliOption("brief", Arity = OptionArity.BooleanFlag, Description = "Use brief output.")]
     public partial bool Brief { get; }
 
     [CliHandler]

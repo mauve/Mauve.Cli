@@ -13,10 +13,10 @@ internal sealed partial class ValuesCommand
 [CliCommand(Description = "Print a positional name, count, and optional flag.")]
 internal sealed partial class ShowCommand
 {
-    [CliOption("--count", Aliases = ["-c"], IsRequired = true, Description = "A whole-number count.")]
+    [CliOption("count", ShortName = 'c', IsRequired = true, Description = "A whole-number count.")]
     public partial int Count { get; }
 
-    [CliOption("--enabled", Description = "Mark the value as enabled.")]
+    [CliOption("enabled", Description = "Mark the value as enabled.")]
     public partial bool Enabled { get; }
 
     [CliArgument(Description = "Name to display.")]

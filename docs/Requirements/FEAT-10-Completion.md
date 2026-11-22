@@ -100,17 +100,20 @@ invocation. The active incomplete token is not itself an unknown-option error.
 
 | Prior syntax state | Active-token completion |
 | --- | --- |
-| RequiredScalar or RepeatedSingleCollection awaiting its one value | Bare prefixes and valid numeric-negative prefixes target that definition's values. Another dash prefix offers option names instead and records the pending MissingValue, never invents a consumed value. |
-| BooleanFlag, no inline value | Offer true/false plus normal command/positional routing for other bare prefixes. Exact true/false route only as boolean values, never a competing child candidate. A dash prefix offers options. |
+| RequiredScalar or RepeatedSingleCollection awaiting its one value | Bare prefixes and valid numeric-negative prefixes target that definition's values. A configured option prefix offers option names instead and records the pending MissingValue, never invents a consumed value. |
+| BooleanFlag, no inline value | Offer true/false plus normal command/positional routing for other bare prefixes. Exact true/false route only as boolean values, never a competing child candidate. A configured option prefix offers options. |
 | BooleanFlag after equals | Only true/false values; no application converter/provider. |
 | Negating alias | No value state; next token resumes normal routing, and equals provides no value candidates. |
 | OptionalScalar without equals | Immediately resume normal routing; values complete only inside its equals segment. |
-| GreedyCollection after space | Value state persists across bare elements until a dash/marker boundary; numeric negatives remain values only for FEAT-03 numeric targets. Other dash prefixes offer options. |
+| GreedyCollection after space | Value state persists across bare elements until a configured option-prefix/marker boundary; numeric negatives remain values only for FEAT-03 numeric targets. Other option prefixes offer options. |
 | Any ordinary valued mode after equals | Complete exactly its inline value segment; greedy inline equals supplies just one value and does not swallow the following word. |
 
 - While command selection remains open, suggest visible child names/aliases
-  matching the prefix. Option-like prefixes suggest currently visible option
-  names. After the first positional, do not offer child-command routing.
+  matching the prefix. Configured option prefixes suggest currently visible
+  prefix-free long names, aliases and short characters. Completed short
+  clusters are scanned atomically; counting options are recognized whenever
+  their definitions declare counting arity. After the first positional, do
+  not offer child-command routing.
 - After `--`, never offer commands/options; offer only the active positional's
   values. A rest positional continues to own subsequent positional slots.
 - Static value lists and enum names come from declared conversion metadata,

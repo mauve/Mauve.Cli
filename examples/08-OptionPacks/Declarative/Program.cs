@@ -41,14 +41,14 @@ internal sealed partial class NetworkPack(RetryPack retry)
 {
     public RetryPack Retry { get; } = retry;
 
-    [CliOption("--endpoint", IsRequired = true, Description = "Resource address.")]
+    [CliOption("endpoint", IsRequired = true, Description = "Resource address.")]
     public partial string Endpoint { get; }
 }
 
 [CliOptionPack(Title = "Retry", Description = "Retry options.")]
 internal sealed partial class RetryPack
 {
-    [CliOption("--retries", IsRequired = true, Description = "Maximum retry count.")]
+    [CliOption("retries", IsRequired = true, Description = "Maximum retry count.")]
     public partial int Retries { get; }
 }
 

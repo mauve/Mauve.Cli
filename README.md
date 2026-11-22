@@ -35,6 +35,7 @@ dotnet run --project examples/02-Commands/Declarative -- --help-tree
 dotnet run --project examples/09-Completion/Manual -- '[completion:bash]'
 dotnet run --project examples/12-BuiltInTypes/Declarative -- time --date 2026-11-22 --time 16:30 --timestamp 2026-11-22T16:30:45Z --duration 00:01:00
 dotnet run --project examples/13-CustomConverters/Manual -- --code B-42 --mask 0xFF --count 10 B-9
+dotnet run --project examples/14-ShortOptions/Declarative -- -vvaf
 ```
 
 Each [example](examples/) has a declarative, generated version and an

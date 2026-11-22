@@ -55,7 +55,7 @@ public sealed class CliInvoker(CliParser? parser = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
-        ValueTask<InvocationResult> invocation = new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture))
+        ValueTask<InvocationResult> invocation = new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
             .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken);
         if (!invocation.IsCompleted)
         {
@@ -108,7 +108,7 @@ public sealed class CliInvoker(CliParser? parser = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
-        InvocationResult result = await new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture))
+        InvocationResult result = await new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
             .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken)
             .ConfigureAwait(false);
         return WriteHostResult(model, result, hostOptions);
@@ -267,7 +267,7 @@ public sealed class CliInvoker(CliParser? parser = null)
                 CommandDefinition selectedCommand = result.SelectedCommand
                     ?? throw new InvalidOperationException("A help request has no selected command.");
                 HelpOutput.Write(
-                    HelpDocument.Create(model, selectedCommand, options.ExecutableName),
+                    HelpDocument.Create(model, selectedCommand, options.ExecutableName, options.Syntax),
                     options.StandardOutput.WriteLine,
                     options.HelpWidth,
                     options.HelpRenderer);

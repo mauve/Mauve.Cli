@@ -80,14 +80,20 @@ public sealed class CliParentAttribute<TCommand> : Attribute
 [AttributeUsage(AttributeTargets.Property, Inherited = false)]
 public sealed class CliOptionAttribute(string? name = null) : Attribute
 {
-    /// <summary>Gets the explicit option spelling, or <see langword="null"/> to infer it.</summary>
+    /// <summary>Gets the prefix-free long option name, or <see langword="null"/> to infer it.</summary>
     public string? Name { get; } = name;
 
     /// <summary>Gets or sets an explicit option arity override.</summary>
     public OptionArity Arity { get; set; }
 
-    /// <summary>Gets or sets option aliases.</summary>
+    /// <summary>Gets or sets prefix-free long option aliases.</summary>
     public string[] Aliases { get; set; } = [];
+
+    /// <summary>Gets or sets the primary short option character; the default null character means none.</summary>
+    public char ShortName { get; set; }
+
+    /// <summary>Gets or sets additional short option characters.</summary>
+    public char[] ShortAliases { get; set; } = [];
 
     /// <summary>Gets or sets whether the option is required.</summary>
     public bool IsRequired { get; set; }

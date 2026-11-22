@@ -51,9 +51,25 @@ public sealed class CommandDefinition
         foreach (OptionDefinition option in options)
         {
             _optionsByName.Add(option.Name, option);
+            if (option.LongName is string longName)
+            {
+                _ = _optionsByName.TryAdd(string.Concat("--", longName), option);
+            }
+
             foreach (OptionAlias alias in option.Aliases)
             {
                 _optionsByName.Add(alias.Name, option);
+                _ = _optionsByName.TryAdd(string.Concat("--", alias.Name), option);
+            }
+
+            if (option.ShortName is char shortName)
+            {
+                _ = _optionsByName.TryAdd(string.Concat("-", shortName), option);
+            }
+
+            foreach (char shortAlias in option.ShortAliases)
+            {
+                _ = _optionsByName.TryAdd(string.Concat("-", shortAlias), option);
             }
         }
     }

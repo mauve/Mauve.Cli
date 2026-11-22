@@ -280,7 +280,7 @@ public sealed class CliParserTests
         Assert.AreEqual("Argument 2: Option '--verbose' cannot be repeated.", repeated.Diagnostics[0].ToString());
         Assert.AreEqual(ParseDiagnosticCode.UnexpectedValue, unexpectedValue.Diagnostics[0].Code);
         Assert.AreEqual(
-            "Argument 1: The negating form of option '--verbose' does not accept a value.",
+            "Argument 1: Option '--verbose' does not accept a value in this form.",
             unexpectedValue.Diagnostics[0].ToString());
 
         CommandBuilder collidingNames = new CommandBuilder("tool")
@@ -383,7 +383,7 @@ public sealed class CliParserTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-05")]
     [TestProperty(Metadata.Requirement, "FEAT-05-004")]
-    public void Parse_BindsRestValuesAndRejectsShortClusters()
+    public void Parse_BindsRestValuesAndRejectsUnknownShortClusters()
     {
         CommandModel model = CreateLeafModel();
 
@@ -396,6 +396,99 @@ public sealed class CliParserTests
             out IReadOnlyList<string>? paths));
         Assert.AreSequenceEqual(["a", "-b", "c"], [.. paths!]);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, cluster.Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-004")]
+    public void Parse_ExpandsZeroValueShortClustersAndCountsExplicitCountingOptions()
+    {
+        OptionDefinition verbose = new(
+            "verbose",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            shortName: 'v');
+        OptionDefinition verbosity = new(
+            "verbosity",
+            typeof(int),
+            OptionArity.Counting,
+            shortName: 'a');
+        OptionDefinition filter = new(
+            "filter",
+            typeof(string),
+            OptionArity.OptionalScalar,
+            allowsNull: true,
+            bareValuePolicy: BareValuePolicy.Constant,
+            bareValue: "bare",
+            shortName: 'f');
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(verbose)
+            .AddOption(verbosity)
+            .AddOption(filter));
+        CliParser parser = new();
+
+        ParseResult cluster = parser.Parse(model, ["-vaf"]);
+        ParseResult repeats = parser.Parse(model, ["--verbosity", "--verbosity", "-v"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, cluster.Outcome);
+        Assert.IsTrue(cluster.TryGetOptionValue(model.Root, verbose, out bool enabled));
+        Assert.IsTrue(enabled);
+        Assert.IsTrue(cluster.TryGetOptionValue(model.Root, verbosity, out int clusterCount));
+        Assert.AreEqual(1, clusterCount);
+        Assert.IsTrue(cluster.TryGetOptionValue(model.Root, filter, out string? bareFilter));
+        Assert.AreEqual("bare", bareFilter);
+        Assert.IsTrue(repeats.TryGetOptionValue(model.Root, verbosity, out int repeatCount));
+        Assert.AreEqual(2, repeatCount);
+        Assert.AreEqual(ParseOutcome.Validated, new CliParser().Parse(model, []).Outcome);
+        Assert.AreEqual(
+            ParseDiagnosticCode.UnexpectedValue,
+            parser.Parse(model, ["--verbosity=2"]).Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-05")]
+    [TestProperty(Metadata.Requirement, "FEAT-05-004")]
+    public void Parse_RejectsInvalidClustersWithoutApplyingTheirValidPrefix()
+    {
+        OptionDefinition verbose = new("verbose", typeof(bool), OptionArity.BooleanFlag, shortName: 'v');
+        OptionDefinition count = new("count", typeof(int), OptionArity.Counting, shortName: 'a');
+        OptionDefinition output = new("output", typeof(string), OptionArity.RequiredScalar, shortName: 'o');
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(verbose)
+            .AddOption(count)
+            .AddOption(output));
+        CliParser parser = new();
+
+        ParseResult valueTaking = parser.Parse(model, ["-vo"]);
+        ParseResult unknownCharacter = parser.Parse(model, ["-vz"]);
+        ParseResult wrongCase = parser.Parse(model, ["-VV"]);
+
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, valueTaking.Diagnostics[0].Code);
+        Assert.AreEqual("-vo", valueTaking.UnmatchedTokens[0].Value);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknownCharacter.Diagnostics[0].Code);
+        Assert.AreEqual("-vz", unknownCharacter.UnmatchedTokens[0].Value);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, wrongCase.Diagnostics[0].Code);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-03")]
+    [TestProperty(Metadata.Requirement, "FEAT-03-002")]
+    public void Parse_UsesConfiguredPrefixesAndKeepsTheEndMarkerFixed()
+    {
+        OptionDefinition output = new("output", typeof(string), OptionArity.RequiredScalar, shortName: 'o');
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(output));
+        CliParser parser = new(syntax: new CliSyntaxOptions("++", "+"));
+
+        ParseResult configured = parser.Parse(model, ["++output", "file"]);
+        ParseResult shortOption = parser.Parse(model, ["+o", "short-file"]);
+        ParseResult afterMarker = parser.Parse(model, ["--", "++output"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, configured.Outcome);
+        Assert.IsTrue(configured.TryGetOptionValue(model.Root, output, out string? configuredValue));
+        Assert.AreEqual("file", configuredValue);
+        Assert.IsTrue(shortOption.TryGetOptionValue(model.Root, output, out string? shortValue));
+        Assert.AreEqual("short-file", shortValue);
+        Assert.AreEqual(ParseDiagnosticCode.UnexpectedArgument, afterMarker.Diagnostics[0].Code);
     }
 
     [TestMethod]

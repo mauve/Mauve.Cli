@@ -19,6 +19,7 @@ commands to run both versions.
 | [XML documentation](11-XmlDocumentation/) | XML-derived help metadata, attribute overrides and invocation examples |
 | [Built-in types](12-BuiltInTypes/) | Every built-in scalar, exact enum names, nullable values, collections and C# 15 unions |
 | [Custom converters](13-CustomConverters/) | Type-level providers, definition-local overrides, custom positionals and directive values |
+| [Short options](14-ShortOptions/) | Combined short options and explicitly counting options |
 
 These applications print results without changing files or contacting
 services. The Commands pair also serves as a representative trimmed and

@@ -25,6 +25,8 @@ irrelevant to displaying the selected command's usage.
 - Project a validated model and optional command into an immutable
   `HelpDocument` before rendering. Reject command definitions outside the
   model and commands marked hidden.
+- Format prefix-free long and short option identities from the same
+  `CliSyntaxOptions` supplied to parsing and high-level invocation.
 - Remove controls, Unicode line/paragraph separators and bidi controls from
   display metadata before exposing it. Keep titles and labels single-line;
   normalize description CRLF/CR to LF and preserve LF as plain paragraph

@@ -50,6 +50,24 @@ public sealed class CompletionServiceTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-001")]
+    public async Task CompleteAsync_UsesConfiguredPrefixesAndShortNames()
+    {
+        OptionDefinition output = new("output", typeof(string), OptionArity.RequiredScalar, shortName: 'o');
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(output));
+        CompletionService service = new(syntax: new CliSyntaxOptions("++", "+"));
+
+        CompletionResult longOptions = await service.CompleteAsync(
+            new CompletionRequest(model, ["++ou"], 0, 4), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult shortOptions = await service.CompleteAsync(
+            new CompletionRequest(model, ["+o"], 0, 2), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("++output", longOptions.Candidates.Single().InsertionText);
+        Assert.AreEqual("+o", shortOptions.Candidates.Single().InsertionText);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-001")]
     public async Task CompleteAsync_PreservesOmittedAndExplicitEmptyDescriptions()
     {
         CommandModel model = CommandModel.Create(

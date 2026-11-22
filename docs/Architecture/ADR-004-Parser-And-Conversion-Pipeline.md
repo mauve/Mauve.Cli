@@ -16,9 +16,12 @@ ambient culture or runtime type discovery.
 - Parse the caller-provided argument vector from left to right. Preserve
   original token indices and recognize `--` as the permanent end of option
   and command selection.
-- Match only declared option names and aliases. Split inline values at the
-  first `=`; do not infer short clusters or consume an option-like token as a
-  value, except for the documented negative-numeric candidate.
+- Match only declared prefix-free long names/aliases and short characters
+  using parser syntax configuration. Split inline values at the first `=`;
+  expand a short cluster only after every character is verified to select a
+  zero-value option. Do not consume an option-like token as a value, except
+  for the documented negative-numeric candidate. The exact `--` token remains
+  the end marker for every prefix configuration.
 - Resolve child commands only from unconsumed bare tokens while command
   selection is open. Repeated text in a value or positional remains data.
 - Recheck option ownership after selecting the final command. Reject

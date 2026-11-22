@@ -219,15 +219,17 @@ public sealed class CommandModelTests
 
         Assert.AreEqual("--output", definition.Options[0].Name);
         Assert.AreEqual(typeof(string), definition.Options[0].ValueType);
-        Assert.AreEqual("-o", definition.Options[0].Aliases[0].Name);
+        Assert.AreEqual('o', definition.Options[0].ShortAliases[0]);
         Assert.IsTrue(definition.Options[0].IsHidden);
         Assert.AreEqual("Output path", definition.Options[0].Description);
         Assert.IsTrue(definition.TryGetOption("--output", out OptionDefinition? canonical));
         Assert.IsTrue(definition.TryGetOption("-o", out OptionDefinition? alias));
         Assert.AreSame(canonical, alias);
         Assert.IsFalse(definition.TryGetOption("--missing", out _));
-        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
-            new CommandBuilder("tool").AddOption(new OptionDefinition("-o", typeof(string), OptionArity.RequiredScalar))));
+        OptionDefinition shortOnly = new(null, typeof(string), OptionArity.RequiredScalar, shortName: 'o');
+        CommandDefinition shortModel = CommandModel.Create(new CommandBuilder("tool").AddOption(shortOnly)).Root;
+        Assert.IsTrue(shortModel.TryGetOption("-o", out OptionDefinition? shortOption));
+        Assert.AreSame(shortOnly, shortOption);
     }
 
     [TestMethod]

@@ -6,7 +6,7 @@ namespace Mauve.Cli.Definitions;
 public sealed class OptionAlias
 {
     /// <summary>Creates an alias with the supplied spelling and meaning.</summary>
-    /// <param name="name">The full alias spelling, such as <c>-o</c>.</param>
+    /// <param name="name">The prefix-free long alias name.</param>
     /// <param name="kind">The meaning of the alias.</param>
     public OptionAlias(string name, OptionAliasKind kind = OptionAliasKind.Normal)
     {
@@ -15,7 +15,7 @@ public sealed class OptionAlias
         Kind = kind;
     }
 
-    /// <summary>Gets the full alias spelling.</summary>
+    /// <summary>Gets the prefix-free long alias name.</summary>
     public string Name { get; }
 
     /// <summary>Gets the meaning of the alias.</summary>

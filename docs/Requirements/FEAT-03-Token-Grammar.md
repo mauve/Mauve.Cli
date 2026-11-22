@@ -21,8 +21,8 @@ The parser consumes caller-provided tokens without reinterpreting shell quoting 
 **Security:** The parser never executes tokens or invokes a shell; quoting and escaping before argv construction are the caller's responsibility.
 
 ### FEAT-03-002 - Option forms and values
-The parser recognizes declared aliases in space-separated and equals forms, and reports a missing required value without consuming the end marker.
-**Acceptance:** `--count=2`, `--count 2` and `-c 2` bind alike; `--count --` reports a missing value; unknown options are not silently accepted.
+The parser recognizes declared long and short names in space-separated and equals forms using configured prefixes, and reports a missing required value without consuming the fixed `--` end marker.
+**Acceptance:** With default syntax `--count=2`, `--count 2` and `-c 2` bind alike; custom prefixes are honored; `--count --` reports a missing value; unknown options are not silently accepted.
 **Security:** Preserve token boundaries and reject malformed input instead of guessing a value for an unrelated option.
 
 ### FEAT-03-003 - Command and option ordering
@@ -61,7 +61,11 @@ may consume a negative candidate beginning with `-` and an ASCII digit, or
 `-.` followed by a digit; conversion then decides whether it is valid.
 Optional scalar values require an inline `=` value or use the declared bare
 policy. Boolean flags consume a following `true` or `false` token before
-command or positional matching. Short clusters are not inferred.
+command or positional matching. Prefixes are configured independently of
+option names; the exact token `--` always ends option and command recognition.
+Short clusters are expanded only when every character selects a declared
+zero-token option; unknown or value-taking cluster members reject the whole
+cluster without partially applying it.
 
 ## Metrics Impact
 **Instruments:** none - token parsing adds no runtime instrumentation.
@@ -72,8 +76,8 @@ Portable behavior tests are declared in
 argument-boundary, missing-value, command-text, consumed-token ordering and
 end-marker scenarios, including
 `Parse_TracksConsumedCommandAndValueTokenPositions`.
-No product test-run evidence has been recorded yet; see the
-[validation ledger](../validation-gaps.md).
+No product test-run evidence has been imported as Governance evidence; local
+suite results are recorded in the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

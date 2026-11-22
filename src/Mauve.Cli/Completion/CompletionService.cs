@@ -15,13 +15,15 @@ namespace Mauve.Cli.Completion;
 /// <summary>Completes already-tokenized arguments without invoking application handlers.</summary>
 public sealed class CompletionService(
     ConverterRegistry? converters = null,
-    CultureInfo? numericCulture = null)
+    CultureInfo? numericCulture = null,
+    CliSyntaxOptions? syntax = null)
 {
     private const int _maximumRawCandidates = 512;
     private const int _maximumEmittedCandidates = 128;
     private const int _maximumCandidateCodeUnits = 1024;
     private readonly ConverterRegistry _converters = converters ?? ConverterRegistry.Empty();
     private readonly CultureInfo _numericCulture = ValueConverterEngine.CreateNumericCulture(numericCulture);
+    private readonly CliSyntaxOptions _syntax = syntax ?? CliSyntaxOptions.Default;
 
     /// <summary>Completes the active token using logical argv tokens and a UTF-16 cursor offset.</summary>
     /// <param name="request">The completion request.</param>
@@ -35,7 +37,7 @@ public sealed class CompletionService(
     {
         ArgumentNullException.ThrowIfNull(request);
         CompletionService configured = request.Model.Converters.IsEmpty
-            ? this : new CompletionService(ConverterRegistry.Combine(request.Model.Converters, _converters), _numericCulture);
+            ? this : new CompletionService(ConverterRegistry.Combine(request.Model.Converters, _converters), _numericCulture, _syntax);
         return await configured.CompleteCoreAsync(request, providers, cancellationToken).ConfigureAwait(false);
     }
 
@@ -95,7 +97,7 @@ public sealed class CompletionService(
 
         if (!scan.EndOfOptions
             && segment.IsOptionName
-            && input.ActiveToken.StartsWith('-', StringComparison.Ordinal))
+            && IsOptionPrefix(input.ActiveToken))
         {
             bool negativeNumericValue = scan.Pending is PendingValue activePending
                 && ConversionResolver.IsNumericType(activePending.ValueType, _converters)
@@ -131,22 +133,24 @@ public sealed class CompletionService(
                 return LimitOrCompleted(candidates, candidateTooLong);
             }
 
-            return await CompleteDefinitionAsync(
-                option.Value.Definition,
-                null,
-                prefix,
-                segment,
-                input.ActiveToken,
-                scan,
-                providers,
-                candidates,
-                unique,
-                cancellationToken).ConfigureAwait(false);
+            return option.Value.Definition.Arity == OptionArity.Counting
+                ? new CompletionResult(CompletionOutcome.Completed, [], true)
+                : await CompleteDefinitionAsync(
+                    option.Value.Definition,
+                    null,
+                    prefix,
+                    segment,
+                    input.ActiveToken,
+                    scan,
+                    providers,
+                    candidates,
+                    unique,
+                    cancellationToken).ConfigureAwait(false);
         }
 
         if (scan.Pending is PendingValue pending)
         {
-            if (input.ActiveToken.StartsWith('-', StringComparison.Ordinal)
+            if (IsOptionPrefix(input.ActiveToken)
                 && !(ConversionResolver.IsNumericType(pending.ValueType, _converters)
                     && IsNegativeNumericCandidate(input.ActiveToken)))
             {
@@ -502,7 +506,7 @@ public sealed class CompletionService(
         return true;
     }
 
-    private static void AddRouteCandidates(
+    private void AddRouteCandidates(
         CompletionScan scan,
         string prefix,
         Segment segment,
@@ -512,7 +516,7 @@ public sealed class CompletionService(
         ref bool candidateTooLong,
         bool allowCommands)
     {
-        if (allowCommands && scan.CommandSelectionOpen && !prefix.StartsWith('-', StringComparison.Ordinal))
+        if (allowCommands && scan.CommandSelectionOpen && !IsOptionPrefix(prefix))
         {
             foreach (CommandDefinition child in scan.Command.Children)
             {
@@ -539,7 +543,7 @@ public sealed class CompletionService(
             }
         }
 
-        if (prefix.StartsWith('-', StringComparison.Ordinal))
+        if (IsOptionPrefix(prefix))
         {
             AddOptionCandidates(scan, prefix, segment, activeToken, candidates, unique, ref candidateTooLong);
             return;
@@ -556,7 +560,7 @@ public sealed class CompletionService(
         }
     }
 
-    private static void AddOptionCandidates(
+    private void AddOptionCandidates(
         CompletionScan scan,
         string prefix,
         Segment segment,
@@ -568,27 +572,55 @@ public sealed class CompletionService(
         foreach (CommandOption commandOption in CommandModel.GetEffectiveOptions(scan.Path))
         {
             OptionDefinition option = commandOption.Definition;
-            if (option.IsHidden || option.IsSensitive || !option.Name.StartsWith(prefix, StringComparison.Ordinal))
+            if (option.IsHidden || option.IsSensitive)
             {
-                if (option.IsHidden || option.IsSensitive)
-                {
-                    continue;
-                }
+                continue;
             }
-            else
+
+            if (option.LongName is string longName)
             {
-                candidateTooLong |= AddCandidate(option.Name, HelpTextSanitizer.SingleLine(option.Name),
-                    HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
-                    segment, activeToken, null, option, null, candidates, unique);
+                string longSpelling = _syntax.FormatLong(longName);
+                if (longSpelling.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    candidateTooLong |= AddCandidate(longSpelling, HelpTextSanitizer.SingleLine(longSpelling),
+                        HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
+                        segment, activeToken, null, option, null, candidates, unique);
+                }
             }
             foreach (OptionAlias alias in option.Aliases)
             {
+                string aliasSpelling = _syntax.FormatLong(alias.Name);
                 if (!option.IsHidden && !option.IsSensitive
-                    && alias.Name.StartsWith(prefix, StringComparison.Ordinal))
+                    && aliasSpelling.StartsWith(prefix, StringComparison.Ordinal))
                 {
-                    candidateTooLong |= AddCandidate(alias.Name, HelpTextSanitizer.SingleLine(alias.Name),
+                    candidateTooLong |= AddCandidate(aliasSpelling, HelpTextSanitizer.SingleLine(aliasSpelling),
                         HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
                         segment, activeToken, null, option, null, candidates, unique);
+                }
+            }
+
+            if (!option.IsHidden && !option.IsSensitive)
+            {
+                if (option.ShortName is char primaryShort)
+                {
+                    string shortSpelling = _syntax.FormatShort(primaryShort);
+                    if (shortSpelling.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        candidateTooLong |= AddCandidate(shortSpelling, HelpTextSanitizer.SingleLine(shortSpelling),
+                            HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
+                            segment, activeToken, null, option, null, candidates, unique);
+                    }
+                }
+
+                foreach (char aliasShort in option.ShortAliases)
+                {
+                    string shortSpelling = _syntax.FormatShort(aliasShort);
+                    if (shortSpelling.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        candidateTooLong |= AddCandidate(shortSpelling, HelpTextSanitizer.SingleLine(shortSpelling),
+                            HelpTextSanitizer.DescriptionOrNull(option.Description), CompletionCandidateKind.Option,
+                            segment, activeToken, null, option, null, candidates, unique);
+                    }
                 }
             }
         }
@@ -751,6 +783,19 @@ public sealed class CompletionService(
             {
                 int equals = token.IndexOf('=', StringComparison.Ordinal);
                 string name = equals < 0 ? token : token[..equals];
+                if (name.StartsWith(_syntax.ShortOptionPrefix, StringComparison.Ordinal)
+                    && name.Length > _syntax.ShortOptionPrefix.Length + 1
+                    && !name.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal))
+                {
+                    if (!ScanShortCluster(equals, name, occurrences, scan))
+                    {
+                        scan.FailureTokenIndex = index;
+                        return scan;
+                    }
+
+                    continue;
+                }
+
                 CommandOption? match = FindVisibleOption(CommandModel.GetEffectiveOptions(scan.Path), name);
                 if (match is null)
                 {
@@ -766,11 +811,11 @@ public sealed class CompletionService(
                 }
 
                 if (!occurrences.Exists(occurrence => ReferenceEquals(occurrence.Definition, option))
-                    && option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection))
+                    && option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection or OptionArity.Counting))
                 {
                     occurrences.Add(match.Value);
                 }
-                else if (option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection))
+                else if (option.Arity is not (OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection or OptionArity.Counting))
                 {
                     scan.FailureTokenIndex = index;
                     return scan;
@@ -779,6 +824,21 @@ public sealed class CompletionService(
                 if (IsNegatingAlias(option, name))
                 {
                     StoreSafeValue(scan, option, false);
+                    continue;
+                }
+
+                if (option.Arity == OptionArity.Counting)
+                {
+                    if (equals >= 0)
+                    {
+                        scan.FailureTokenIndex = index;
+                        return scan;
+                    }
+
+                    int count = scan.Values.TryGetValue(option, out object? existingCount) && existingCount is int currentCount
+                        ? currentCount
+                        : 0;
+                    StoreSafeValue(scan, option, checked(count + 1));
                     continue;
                 }
 
@@ -1140,6 +1200,69 @@ public sealed class CompletionService(
         return true;
     }
 
+    private bool ScanShortCluster(
+        int equalsIndex,
+        string optionName,
+        List<CommandOption> occurrences,
+        CompletionScan scan)
+    {
+        if (equalsIndex >= 0)
+        {
+            return false;
+        }
+
+        string characters = optionName[_syntax.ShortOptionPrefix.Length..];
+        List<CommandOption> resolved = [];
+        HashSet<OptionDefinition> withinCluster = [];
+        IReadOnlyList<CommandOption> visible = CommandModel.GetEffectiveOptions(scan.Path);
+        foreach (char character in characters)
+        {
+            CommandOption? match = FindVisibleOption(visible, string.Concat(_syntax.ShortOptionPrefix, character));
+            if (match is null)
+            {
+                return false;
+            }
+
+            OptionDefinition option = match.Value.Definition;
+            if (option.Arity is not (OptionArity.BooleanFlag or OptionArity.Counting or OptionArity.OptionalScalar)
+                || (option.Arity != OptionArity.Counting
+                    && (occurrences.Exists(occurrence => ReferenceEquals(occurrence.Definition, option))
+                        || !withinCluster.Add(option))))
+            {
+                return false;
+            }
+
+            resolved.Add(match.Value);
+        }
+
+        foreach (CommandOption item in resolved)
+        {
+            OptionDefinition option = item.Definition;
+            if (option.Arity != OptionArity.Counting)
+            {
+                occurrences.Add(item);
+            }
+
+            if (option.Arity == OptionArity.BooleanFlag)
+            {
+                StoreSafeValue(scan, option, true);
+            }
+            else if (option.Arity == OptionArity.Counting)
+            {
+                int count = scan.Values.TryGetValue(option, out object? existingCount) && existingCount is int currentCount
+                    ? currentCount
+                    : 0;
+                StoreSafeValue(scan, option, checked(count + 1));
+            }
+            else if (!option.IsHidden && !option.IsSensitive
+                && option.BareValuePolicy == BareValuePolicy.Constant)
+            {
+                scan.Values[option] = option.BareValue;
+            }
+        }
+        return true;
+    }
+
     private static void StoreSafeValue(CompletionScan scan, OptionDefinition option, object value)
     {
         if (!option.IsHidden && !option.IsSensitive)
@@ -1240,23 +1363,31 @@ public sealed class CompletionService(
         return new CompletionInput(completedTokens, activeToken);
     }
 
-    private static Segment GetSegment(string token, int cursor)
+    private Segment GetSegment(string token, int cursor)
     {
         int equalsIndex = token.IndexOf('=', StringComparison.Ordinal);
         return equalsIndex >= 0
-            && token[..equalsIndex].StartsWith('-', StringComparison.Ordinal)
+            && IsOptionCandidate(token[..equalsIndex])
             ? cursor <= equalsIndex
                 ? new Segment(0, equalsIndex, true, false, equalsIndex)
                 : new Segment(equalsIndex + 1, token.Length - equalsIndex - 1, false, true, equalsIndex)
-            : new Segment(0, token.Length, token.StartsWith('-', StringComparison.Ordinal), false, -1);
+            : new Segment(0, token.Length, IsOptionPrefix(token), false, -1);
     }
 
-    private static CommandOption? FindVisibleOption(IReadOnlyList<CommandOption> options, string name)
+    private CommandOption? FindVisibleOption(IReadOnlyList<CommandOption> options, string name)
     {
+        string longName = name.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal)
+            ? name[_syntax.LongOptionPrefix.Length..]
+            : name;
+        bool shortForm = name.StartsWith(_syntax.ShortOptionPrefix, StringComparison.Ordinal)
+            && name.Length == _syntax.ShortOptionPrefix.Length + 1;
+        char shortName = shortForm ? name[^1] : '\0';
         foreach (CommandOption commandOption in options)
         {
-            if (string.Equals(commandOption.Definition.Name, name, StringComparison.Ordinal)
-                || commandOption.Definition.Aliases.Any(alias => string.Equals(alias.Name, name, StringComparison.Ordinal)))
+            if ((!shortForm && (string.Equals(commandOption.Definition.LongName, longName, StringComparison.Ordinal)
+                || commandOption.Definition.Aliases.Any(alias => string.Equals(alias.Name, longName, StringComparison.Ordinal))))
+                || (shortForm && (commandOption.Definition.ShortName == shortName
+                    || commandOption.Definition.ShortAliases.Contains(shortName))))
             {
                 return commandOption;
             }
@@ -1265,11 +1396,14 @@ public sealed class CompletionService(
         return null;
     }
 
-    private static bool IsNegatingAlias(OptionDefinition option, string name)
+    private bool IsNegatingAlias(OptionDefinition option, string name)
     {
+        string longName = name.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal)
+            ? name[_syntax.LongOptionPrefix.Length..]
+            : name;
         return option.Aliases.Any(alias =>
             alias.Kind == OptionAliasKind.Negating
-            && string.Equals(alias.Name, name, StringComparison.Ordinal));
+            && string.Equals(alias.Name, longName, StringComparison.Ordinal));
     }
 
     private static CommandDefinition? FindChild(CommandDefinition command, string name)
@@ -1303,7 +1437,19 @@ public sealed class CompletionService(
                 || (ConversionResolver.IsNumericType(valueType, _converters) && IsNegativeNumericCandidate(token)));
     }
 
-    private static bool IsOptionCandidate(string token) => token.Length > 1 && token[0] == '-';
+    private bool IsOptionCandidate(string token)
+    {
+        return (token.Length > _syntax.LongOptionPrefix.Length
+                && token.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal))
+            || (token.Length > _syntax.ShortOptionPrefix.Length
+                && token.StartsWith(_syntax.ShortOptionPrefix, StringComparison.Ordinal));
+    }
+
+    private bool IsOptionPrefix(string token)
+    {
+        return token.StartsWith(_syntax.LongOptionPrefix, StringComparison.Ordinal)
+            || token.StartsWith(_syntax.ShortOptionPrefix, StringComparison.Ordinal);
+    }
 
     private static bool IsNegativeNumericCandidate(string token)
     {

@@ -40,7 +40,7 @@ internal sealed partial class SearchCommand(ColorPack filters)
 [CliOptionPack(Title = "Filters", Description = "Search filters.")]
 internal sealed partial class ColorPack
 {
-    [CliOption("--color", IsRequired = true, Description = "Search result color.")]
+    [CliOption("color", IsRequired = true, Description = "Search result color.")]
     public partial string Color { get; }
 }
 

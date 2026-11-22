@@ -23,7 +23,9 @@ registration and source generation.
   builder object under two parents is invalid; separately constructed
   definitions with equal names on disjoint branches are valid.
 - Command and option lookup uses ordinal, case-sensitive ASCII spellings.
-  Hidden definitions participate in all collisions and validation.
+  Option definitions store prefix-free long names and short characters in
+  separate namespaces; configured syntax adds token prefixes. Hidden
+  definitions participate in all collisions and validation.
 - The snapshot preserves declaration order and exposes immutable path
   components rather than joined strings as identity.
 - Option and positional definitions carry explicit value type, arity,

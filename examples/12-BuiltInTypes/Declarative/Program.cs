@@ -161,13 +161,13 @@ internal sealed partial class ShapesCommand
         BareValuePolicy = BareValuePolicy.Null)]
     public partial DateOnly? MaybeDate { get; }
 
-    [CliOption("--sample", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
+    [CliOption("sample", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
     public partial IReadOnlyList<Half> Samples { get; }
 
     [CliOption(IsRequired = true)]
     public partial PortOrName Target { get; }
 
-    [CliOption("--route", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
+    [CliOption("route", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
     public partial IReadOnlyList<PortOrName> Routes { get; }
 
     [CliHandler]

@@ -8,7 +8,7 @@ namespace HelpAndErrors.Declarative;
 [CliCommand("inspect", IsRoot = true, Description = "Inspect a numbered item.")]
 internal sealed partial class InspectCommand
 {
-    [CliOption("--count", IsRequired = true, Description = "Item number.")]
+    [CliOption("count", IsRequired = true, Description = "Item number.")]
     public partial int Count { get; }
 
     [CliHandler]

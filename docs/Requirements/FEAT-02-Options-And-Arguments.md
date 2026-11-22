@@ -16,8 +16,8 @@ schema and validation boundary are recorded in
 
 ## Requirements
 ### FEAT-02-001 - Option definitions
-Options must define a canonical name, zero or more aliases, a value type and descriptive/visibility metadata.
-**Acceptance:** A `--output` option with `-o` alias and hidden metadata is discoverable in the model through either name; omitted and explicitly empty descriptive metadata remain distinguishable; empty or malformed names are rejected.
+Options must define at least one prefix-free long name or short character, zero or more aliases in either namespace, a value type and descriptive/visibility metadata.
+**Acceptance:** `Name = "output"` with `ShortName = 'o'` is discoverable through `--output` and `-o` using default syntax; a short-only `ShortName = 'o'` declaration is valid; omitted and explicitly empty descriptive metadata remain distinguishable; malformed names are rejected.
 **Security:** Hidden metadata is a presentation choice, not access control; untrusted descriptions are never executed.
 
 ### FEAT-02-002 - Positional definitions
@@ -26,8 +26,8 @@ Commands must define named, typed positionals in a stable declaration order, wit
 **Security:** Invalid definitions fail before input is bound rather than assigning a value to an unintended argument.
 
 ### FEAT-02-003 - Local alias integrity
-All option names and aliases visible on one command must be unique under the selected comparison rule, including names within a single definition.
-**Acceptance:** Two local options using `-o`, or one repeating its own alias, are rejected independent of declaration order.
+All long names/aliases and short names/aliases visible on one command must be unique within their namespace, including names within a single definition.
+**Acceptance:** Two local options using short name `o`, or one repeating its own long or short alias, are rejected independent of declaration order.
 **Security:** Duplicate aliases cannot redirect an input to an arbitrary option.
 
 ### FEAT-02-004 - Declaration consistency
@@ -42,19 +42,19 @@ The semantic schema is independent of builder/attribute names:
 
 | Definition | Required information |
 | --- | --- |
-| Option | Stable owner/definition identity; canonical long name; ordered alias records `(spelling, Normal or Negating)`; value/element type and explicit AllowsNull flag; syntax mode; required-presence flag; converter reference; defaults/bare behavior; validators; visibility; sensitivity; description/value label; local/inherited scope. |
+| Option | Stable owner/definition identity; optional prefix-free long name; optional primary short character; ordered long alias records `(name, Normal or Negating)` and short aliases; value/element type and explicit AllowsNull flag; syntax mode; required-presence flag; converter reference; defaults/bare behavior; validators; visibility; sensitivity; description/value label; local/inherited scope. |
 | Positional | Owner identity; unique display name; declaration index; value/element type; minimum/maximum token count; converter; default/validators; visibility/sensitivity; description; optional static/provider completion metadata. |
 | Display-only metadata | Safe default text and allowed-value labels; these do not supply a default, enforce validation, or read an environment variable. |
 
-Use a canonical long option name matching
-`--[A-Za-z][A-Za-z0-9-]*`. Aliases use that grammar or one ASCII letter
-after a single dash, such as `-o`; names are at most 128 characters including
-dashes. Reject `--`, `-`, embedded whitespace/`=`, repeated aliases,
-multi-character short aliases and numeric short aliases. FEAT-01 owns the
+Long names and aliases are prefix-free and match
+`[A-Za-z][A-Za-z0-9-]*`. Short names and aliases are one ASCII letter;
+prefixes are supplied by syntax configuration. Reject empty names, embedded
+whitespace/`=`, repeated aliases, and numeric or multi-character short names.
+FEAT-01 owns the
 ordinal case-sensitive comparison. Neither declaration order nor a hidden
 flag permits duplicate visible names.
-Canonical names must be long-form; short-only options are not in this
-baseline. Repeated/trailing hyphens inside an otherwise valid long name
+At least one long or short spelling is required; short-only options are
+supported. Repeated/trailing hyphens inside an otherwise valid long name
 are allowed literal characters (`--a--b`, `--a-`); they imply no new grammar.
 Helper-installed options, including FEAT-08 help, use this same collision
 checker. They are reserved only when explicitly installed.
@@ -111,7 +111,7 @@ integration points using the same invariant checker, not last-wins dictionaries.
 
 | Metadata | Validity / meaning |
 | --- | --- |
-| `--output`, alias `-o`, scalar string | Either spelling addresses one definition; a value token is required unless OptionalScalar mode with explicit bare behavior is declared. |
+| `Name = "output"`, `ShortName = 'o'`, scalar string | `--output` and `-o` address one definition under default syntax; a value token is required unless OptionalScalar mode with explicit bare behavior is declared. |
 | Nullable integer with ordinary scalar arity | `--count` still needs a value; nullability alone changes no token rule. |
 | `--verbose`, boolean flag, alias `--no-verbose` marked negating | Explicitly declared opposite-valued alias; not name-prefix inference. |
 | Required `source`, optional `destination` | Bind zero/one destination after source; missing source is invalid input, not an invalid definition. |
