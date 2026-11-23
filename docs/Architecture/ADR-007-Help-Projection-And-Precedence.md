@@ -20,7 +20,9 @@ irrelevant to displaying the selected command's usage.
   shell syntax. `$0` represents the executable only, distinct from the
   model's root display label. Inject the executable into help projection;
   high-level host settings default to process argv zero, while direct
-  projection remains deterministic with a root-label fallback.
+  projection remains deterministic with a root-label fallback. Usage starts
+  with that executable; examples abbreviate names longer than 30 characters
+  to `.../` and the final path component without changing command routing.
 
 - Project a validated model and optional command into an immutable
   `HelpDocument` before rendering. Reject command definitions outside the
@@ -38,6 +40,10 @@ irrelevant to displaying the selected command's usage.
   width, explicit width of at least 20 columns, and explicit wrapping.
   Custom renderers receive only the sanitized projection; output sink faults
   propagate to the caller.
+- Separate sections with blank lines, indent command descriptions, identify
+  repeatable options, render pack headings as `<title> options`, group standard
+  help separately and render directives last. Preserve group identities and
+  option ordering.
 - Identify option groups by the selected command's canonical path and stable
   group key. Keep path components separate from the key. Ungrouped options
   remain in a group scoped to their owner and use the reserved `@ungrouped`

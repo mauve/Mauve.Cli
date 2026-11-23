@@ -26,9 +26,12 @@ nonempty line, optionally surrounded by documentation indentation.
 The nested add command's help contains:
 
 ```text
-Usage: todo item add [OPTIONS] [category]
-Add a todo item.
-Attribute metadata overrides XML text when both are present.
+Usage: <actual-executable> item add [OPTIONS] [category]
+
+  Add a todo item.
+
+  Attribute metadata overrides XML text when both are present.
+
 Examples:
   todo item add --text AAA
   <actual-executable> item add --text "Buy milk" work
@@ -38,7 +41,9 @@ The `add` prefix acquires the missing canonical ancestors automatically.
 Standalone `$0` is only the binary name from process argv zero, not a declared
 application command. The second example is authored as
 `$0 add --text "Buy milk" work`; expansion inserts `item` between the binary
-and `add`. The actual executable value depends on the launch method.
+and `add`. The actual executable value depends on the launch method. In
+examples, an executable longer than 30 characters is displayed as `.../`
+followed by its final path component.
 `CliHostOptions(executableName: "todo-cli")` provides an explicit display name;
 direct `HelpDocument.Create` uses the root label as its fallback.
 

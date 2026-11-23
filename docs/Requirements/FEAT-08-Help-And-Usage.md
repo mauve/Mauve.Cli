@@ -21,7 +21,7 @@ Reference: `../maz/Console/Cli/CommandDef.cs` and
 ## Requirements
 ### FEAT-08-001 - Usage metadata
 Render root and selected leaf usage from the model, including names, aliases, arguments and requiredness. Format option spellings from prefix-free long/short metadata using the active syntax configuration.
-**Acceptance:** Root help lists visible children; leaf help identifies positional order and option aliases; an empty command still has valid usage.
+**Acceptance:** Root help lists visible children; leaf help identifies positional order and option aliases; usage starts with the supplied executable name, and repeatable options are identified. An empty command still has valid usage.
 **Security:** Render metadata as inert text and never invoke handlers to produce help.
 
 ### FEAT-08-002 - Visibility and defaults
@@ -31,7 +31,7 @@ Honor hidden metadata and display declared default information only when safe an
 
 ### FEAT-08-003 - Grouping and customization
 Support application-supplied output customization and pack group metadata without changing parse semantics.
-**Acceptance:** Two pack groups render separately in stable order; a custom output sink receives the same model-derived information.
+**Acceptance:** Two pack groups render separately in stable order with their title followed by `options`; standard help options form their own section, and directives are last. A custom output sink receives the same model-derived information.
 **Security:** No terminal control sequences from untrusted metadata may be emitted unsafely by default.
 
 ### FEAT-08-004 - Help precedence
@@ -92,21 +92,23 @@ The direct projection defaults the executable value to the root display label;
 `CliHostOptions.ExecutableName` defaults to `Environment.GetCommandLineArgs()[0]`
 and is supplied by both high-level entry points. Parser and `Main(string[] args)`
 tokens still exclude the executable. Substitution is display-only and does
-not perform platform-dependent shell quoting or change the Usage path.
+not perform platform-dependent shell quoting. In examples only, executable
+names longer than 30 characters are displayed as `.../` plus the final path
+component, recognizing both slash styles.
 
 #### Help model and rendering
 
 Separate a pure `HelpDocument` data projection from text rendering. Input is
 a validated immutable model and an optional command definition from that
 model.
-Data includes canonical usage path, descriptions, visible child summaries,
+Data includes executable-based usage and the canonical selected child path, descriptions, visible child summaries,
 ordered positionals, visible local/inherited options with aliases and
 value labels, safe declared default/allowed-value text, and stable pack
 group identities/titles/descriptions. Do not construct command/pack instances
 or invoke handlers, converters, default factories, validators or providers.
 
-Plain-text ordering: usage; short/long description; visible children
-in declaration order; positionals; flat option groups ordered by their first
+Plain-text ordering: usage; short/long description; examples; visible children
+in declaration order; positionals; option groups ordered by their first
 member's appearance in FEAT-12's effective definition order. Ungrouped options
 belong to an owner-specific ungrouped group, not one global group moved before
 all packs. Preserve effective order within each group. Grouping may move
@@ -116,7 +118,14 @@ strict global rendered sequence. A scalar required positional is `<source>`, opt
 Options display aliases together, with `<value>` for required arity and
 `[=<value>]` for optional-value syntax. State that optional values require
 equals; do not imply a space form the parser rejects. Required-presence
-options are marked explicitly, regardless of default display.
+options are marked explicitly, regardless of default display. Repeatable
+collection and counting options are marked as repeatable. Built-in help
+options form a separate group; directives render after all option groups.
+Sections are separated by a blank line. Short and long descriptions are each
+indented two spaces and separated by a blank line; option pack titles end in
+`options` and align with other section headings, and all option entries use
+two spaces. A pack description is separated from its options by a blank line;
+a pack with no visible options has no rendered section.
 
 Group identity is its declaring owner/inclusion path and stable group key,
 not title text. FEAT-14 owns
@@ -219,6 +228,7 @@ recorded in the validation ledger.
 
 `HelpDocumentTests.Create_ExpandsCanonicalExamplesWithoutReplacingDeclaredCommandNames`,
 `Create_SnapshotsExamplesAndRejectsInvalidExampleInputs`, and
+`Create_AbbreviatesLongExecutableOnlyInExampleSubstitutions`, and
 `CliInvokerTests.Run_PassesExecutableExamplesToDefaultHelpRenderer`, and
 `RunAsync_PassesExecutableExamplesToCustomHelpRenderer`
 verify FEAT-08-005. Observed results belong in the validation ledger.
@@ -226,6 +236,7 @@ verify FEAT-08-005. Observed results belong in the validation ledger.
 `HelpDocumentTests.Create_ProjectsVisibleCommandsPositionalsAndOptionAliases`,
 `HelpDocumentTests.Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults`,
 `HelpDocumentTests.Write_PreservesGroupOrderAndUsesCustomRendererAndSink`,
+`HelpDocumentTests.Render_SeparatesAndIndentsOptionsAndPlacesDirectivesLast`,
 `CliParserTests.Parse_HelpBypassesConversionAndRequirednessButNotStructuralErrors`
 and `CommandModelTests.Create_RejectsStandardHelpOptionCollisions` cover the
 projection, output and precedence contracts. The package-free harness invoked

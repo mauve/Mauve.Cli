@@ -24,6 +24,7 @@ public static class HelpTextRenderer
 
         if (document.Examples.Count > 0)
         {
+            AppendLine(output, string.Empty);
             AppendLine(output, "Examples:");
             foreach (string example in document.Examples)
             {
@@ -54,13 +55,6 @@ public static class HelpTextRenderer
             AppendSection(output, "Arguments", string.Empty, positionals, width);
         }
 
-        if (document.Directives.Count > 0)
-        {
-            List<HelpDisplayItem> directives = [.. document.Directives.Select(static directive =>
-                new HelpDisplayItem(directive.Syntax, directive.Description))];
-            AppendSection(output, "Directives", string.Empty, directives, width);
-        }
-
         foreach (HelpOptionGroup group in document.OptionGroups)
         {
             List<HelpDisplayItem> options = [.. group.Options.Select(static option =>
@@ -70,7 +64,8 @@ public static class HelpTextRenderer
                         option.Description,
                         option.IsRequired,
                         option.DefaultDisplay,
-                        option.EnvironmentVariableName)))];
+                        option.EnvironmentVariableName,
+                        option.IsRepeatable)))];
             string groupDescription = group.Description;
             if (group.Options.Any(static option => option.RequiresEqualsForOptionalValue))
             {
@@ -79,7 +74,17 @@ public static class HelpTextRenderer
                     : string.Concat(groupDescription, "\nOptional values must use '='.");
             }
 
-            AppendSection(output, group.Title, groupDescription, options, width);
+            string title = group.IsPack
+                ? group.Title.Length == 0 ? "Options" : string.Concat(group.Title, " options")
+                : group.Title;
+            AppendSection(output, title, groupDescription, options, width, group.IsPack);
+        }
+
+        if (document.Directives.Count > 0)
+        {
+            List<HelpDisplayItem> directives = [.. document.Directives.Select(static directive =>
+                new HelpDisplayItem(directive.Syntax, directive.Description))];
+            AppendSection(output, "Directives", string.Empty, directives, width);
         }
 
         return output.ToString();
@@ -97,7 +102,8 @@ public static class HelpTextRenderer
         string description,
         bool isRequired,
         string? defaultDisplay,
-        string? environmentVariableName = null)
+        string? environmentVariableName = null,
+        bool isRepeatable = false)
     {
         List<string> metadata = [];
         if (isRequired)
@@ -113,6 +119,11 @@ public static class HelpTextRenderer
         if (environmentVariableName is not null)
         {
             metadata.Add(string.Concat("env: ", environmentVariableName));
+        }
+
+        if (isRepeatable)
+        {
+            metadata.Add("repeatable");
         }
 
         if (metadata.Count == 0)
@@ -131,9 +142,10 @@ public static class HelpTextRenderer
             return;
         }
 
-        foreach (string line in Wrap(description, width))
+        AppendLine(output, string.Empty);
+        foreach (string line in Wrap(description, width - 2))
         {
-            AppendLine(output, line);
+            AppendLine(output, string.Concat("  ", line));
         }
     }
 
@@ -142,28 +154,37 @@ public static class HelpTextRenderer
         string title,
         string description,
         IReadOnlyList<HelpDisplayItem> items,
-        int width)
+        int width,
+        bool separateDescription = false)
     {
         if (items.Count == 0)
         {
             return;
         }
 
+        AppendLine(output, string.Empty);
+        const int itemIndent = 2;
+        string itemPrefix = new(' ', itemIndent);
         foreach (string line in Wrap(string.Concat(title, ":"), width))
         {
             AppendLine(output, line);
         }
         if (description.Length > 0)
         {
-            foreach (string line in Wrap(description, Math.Max(1, width - 2)))
+            foreach (string line in Wrap(description, width - itemIndent))
             {
-                AppendLine(output, string.Concat("  ", line));
+                AppendLine(output, string.Concat(itemPrefix, line));
+            }
+
+            if (separateDescription)
+            {
+                AppendLine(output, string.Empty);
             }
         }
 
         int labelWidth = items.Max(static item => item.Label.Length);
-        bool alignDescriptions = labelWidth + 6 < width;
-        int descriptionColumn = alignDescriptions ? labelWidth + 4 : 4;
+        bool alignDescriptions = labelWidth + itemIndent + 4 < width;
+        int descriptionColumn = alignDescriptions ? labelWidth + itemIndent + 2 : itemIndent + 2;
         int descriptionWidth = Math.Max(1, width - descriptionColumn);
 
         foreach (HelpDisplayItem item in items)
@@ -172,13 +193,13 @@ public static class HelpTextRenderer
             string descriptionPrefix;
             if (alignDescriptions)
             {
-                prefix = string.Concat("  ", item.Label.PadRight(labelWidth), "  ");
+                prefix = string.Concat(itemPrefix, item.Label.PadRight(labelWidth), "  ");
                 descriptionPrefix = new string(' ', descriptionColumn);
             }
             else
             {
-                prefix = string.Concat("  ", item.Label);
-                descriptionPrefix = "    ";
+                prefix = string.Concat(itemPrefix, item.Label);
+                descriptionPrefix = new string(' ', itemIndent + 2);
             }
 
             if (item.Description.Length == 0)
@@ -189,9 +210,9 @@ public static class HelpTextRenderer
                 }
                 else
                 {
-                    foreach (string labelLine in Wrap(item.Label, Math.Max(1, width - 2)))
+                    foreach (string labelLine in Wrap(item.Label, width - itemIndent))
                     {
-                        AppendLine(output, string.Concat("  ", labelLine));
+                        AppendLine(output, string.Concat(itemPrefix, labelLine));
                     }
                 }
 
@@ -205,9 +226,9 @@ public static class HelpTextRenderer
             }
             else
             {
-                foreach (string labelLine in Wrap(item.Label, Math.Max(1, width - 2)))
+                foreach (string labelLine in Wrap(item.Label, width - itemIndent))
                 {
-                    AppendLine(output, string.Concat("  ", labelLine));
+                    AppendLine(output, string.Concat(itemPrefix, labelLine));
                 }
 
                 AppendLine(output, string.Concat(descriptionPrefix, wrapped[0]));

@@ -18,6 +18,63 @@ public sealed class HelpDocumentTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-003")]
+    public void Render_SeparatesAndIndentsOptionsAndPlacesDirectivesLast()
+    {
+        OptionDefinition tag = new("tag", typeof(System.Collections.Generic.IReadOnlyList<string>),
+            OptionArity.RepeatedSingleCollection, elementType: typeof(string), description: "Tags.");
+        OptionDefinition mode = new("mode", typeof(string), OptionArity.RequiredScalar, description: "Mode.");
+        DirectiveBuilder notice = new("notice") { Description = "Notice." };
+        _ = notice.SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        CommandBuilder root = new("tool") { Description = "Summary.", LongDescription = "Details." };
+        _ = root.AddOption(tag)
+            .AddPack("settings", new OptionPackBuilder().AddOption(mode), "Settings", "Settings description.")
+            .AddPack("hidden", new OptionPackBuilder().AddOption(
+                new OptionDefinition("secret", typeof(bool), OptionArity.BooleanFlag, isHidden: true)),
+                "Hidden pack", "Hidden pack description.")
+            .AddDirective(notice)
+            .AddChild(new CommandBuilder("show") { Description = "Show." });
+        HelpDocument help = HelpDocument.Create(CommandModel.Create(root, includeStandardHelp: true), executableName: "runner");
+
+        string rendered = HelpTextRenderer.Render(help);
+
+        StringAssert.StartsWith(rendered, "Usage: runner [DIRECTIVES] [OPTIONS]\n\n  Summary.\n\n  Details.\n", StringComparison.Ordinal);
+        StringAssert.Contains(rendered, "\n\nCommands:\n  show", StringComparison.Ordinal);
+        StringAssert.Contains(rendered, "\n\nOptions:\n  --tag <value>  Tags. (repeatable)\n", StringComparison.Ordinal);
+        StringAssert.Contains(rendered, "\n\nSettings options:\n  Settings description.\n\n  --mode <value>", StringComparison.Ordinal);
+        Assert.DoesNotContain("Hidden pack", rendered);
+        StringAssert.Contains(rendered, "\n\nHelp options:\n  --help", StringComparison.Ordinal);
+        Assert.IsGreaterThan(rendered.IndexOf("Help options:", StringComparison.Ordinal),
+            rendered.IndexOf("Directives:", StringComparison.Ordinal));
+        Assert.IsTrue(rendered.Split('\n').All(static line => line.Length <= 80));
+        Assert.IsTrue(HelpTextRenderer.Render(help, 20).Split('\n').All(static line => line.Length <= 20));
+        Assert.IsTrue(help.OptionGroups.Single(static group => group.Title == "Settings").IsPack);
+        Assert.IsTrue(help.OptionGroups.SelectMany(static group => group.Options).Single(static option => option.Syntax.StartsWith("--tag", StringComparison.Ordinal)).IsRepeatable);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-005")]
+    public void Create_AbbreviatesLongExecutableOnlyInExampleSubstitutions()
+    {
+        CommandBuilder child = new CommandBuilder("show").AddExample("$0 show --help");
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddChild(child));
+        string executable = "/a/very/long/application/path/to/runner";
+
+        HelpDocument help = HelpDocument.Create(model, model.Root.Children[0], executable);
+
+        Assert.AreEqual(executable + " show", help.Usage);
+        Assert.AreEqual(".../runner show --help", help.Examples.Single());
+        Assert.AreEqual(".../runner.exe show --help",
+            HelpDocument.Create(model, model.Root.Children[0], @"C:\a\very\long\application\path\runner.exe").Examples.Single());
+        Assert.AreEqual(new string('x', 30) + " show --help",
+            HelpDocument.Create(model, model.Root.Children[0], new string('x', 30)).Examples.Single());
+        Assert.AreEqual(".../" + new string('x', 31) + " show --help",
+            HelpDocument.Create(model, model.Root.Children[0], new string('x', 31)).Examples.Single());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-001")]
     public void Create_DisplaysSanitizedAllowedValuesExceptForSensitiveOptions()
     {

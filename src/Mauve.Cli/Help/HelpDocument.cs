@@ -64,7 +64,7 @@ public sealed class HelpDocument
     /// <summary>Creates a sanitized help projection for the root or a command in the model.</summary>
     /// <param name="model">The validated command model.</param>
     /// <param name="command">The command to describe, or the root when omitted.</param>
-    /// <param name="executableName">The executable display name for <c>$0</c>, or the root display label when omitted.</param>
+    /// <param name="executableName">The executable display name for usage and <c>$0</c>, or the root display label when omitted.</param>
     /// <param name="syntax">The option prefixes used to display option spellings.</param>
     /// <param name="hostOptions">The host settings used to determine environment-variable names and enablement.</param>
     /// <returns>A read-only help document.</returns>
@@ -143,7 +143,8 @@ public sealed class HelpDocument
 
             OptionDisplayGroup? displayGroup = option.DisplayGroup;
             bool hasPackGroup = ownedOption.Owner.TryGetPackGroup(option, out OptionPackGroupMetadata packGroup);
-            string key = displayGroup is not null
+            bool isStandardHelp = option.IsHelpOption || option.IsHelpTreeOption;
+            string key = isStandardHelp ? "@standard-help" : displayGroup is not null
                 ? hasPackGroup ? string.Concat("@pack/", packGroup.InclusionPathKey, "#", displayGroup.Key) : displayGroup.Key
                 : hasPackGroup ? packGroup.GroupKey ?? "@ungrouped" : "@ungrouped";
             (CommandDefinition Owner, string Key) groupIdentity = (ownedOption.Owner, key);
@@ -152,8 +153,9 @@ public sealed class HelpDocument
                 group = new HelpOptionGroupBuilder(
                     [.. ownedOption.Owner.Path.Select(HelpTextSanitizer.SingleLine)],
                     key,
-                    HelpTextSanitizer.SingleLine(displayGroup?.Title ?? packGroup.Title ?? "Options"),
-                    HelpTextSanitizer.Description(displayGroup?.Description ?? packGroup.Description));
+                    HelpTextSanitizer.SingleLine(isStandardHelp ? "Help options" : displayGroup?.Title ?? packGroup.Title ?? "Options"),
+                    HelpTextSanitizer.Description(displayGroup?.Description ?? packGroup.Description),
+                    hasPackGroup && (packGroup.GroupKey is not null || displayGroup is not null));
                 groupsByKey.Add(groupIdentity, group);
                 groups.Add(group);
             }
@@ -167,7 +169,7 @@ public sealed class HelpDocument
         string[] optionUsage = hasVisibleOptions ? ["[OPTIONS]"] : [];
         string[] usageParts =
         [
-            .. selected.Path.Take(1).Select(HelpTextSanitizer.SingleLine),
+            HelpTextSanitizer.SingleLine(executableName ?? model.Root.Name),
             .. directiveUsage,
             .. selected.Path.Skip(1).Select(HelpTextSanitizer.SingleLine),
             .. optionUsage,
@@ -287,7 +289,8 @@ public sealed class HelpDocument
             option.IsRequired,
             defaultDisplay,
             option.Arity == OptionArity.OptionalScalar,
-            environmentVariableName);
+            environmentVariableName,
+            option.Arity is OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection or OptionArity.Counting);
     }
 
     private static string AppendAllowedValues(string description, bool sensitive, IReadOnlyList<string> values)
@@ -319,11 +322,11 @@ public sealed class HelpDocument
             && !positional.IsSensitive;
     }
 
-    private sealed class HelpOptionGroupBuilder(string[] ownerPath, string key, string title, string description)
+    private sealed class HelpOptionGroupBuilder(string[] ownerPath, string key, string title, string description, bool isPack)
     {
         public List<HelpOptionItem> Options { get; } = [];
 
-        public HelpOptionGroup Build() => new(ownerPath, key, title, description, [.. Options]);
+        public HelpOptionGroup Build() => new(ownerPath, key, title, description, isPack, [.. Options]);
     }
 }
 
@@ -398,7 +401,8 @@ public sealed class HelpOptionItem
         bool isRequired,
         string? defaultDisplay,
         bool requiresEqualsForOptionalValue,
-        string? environmentVariableName)
+        string? environmentVariableName,
+        bool isRepeatable)
     {
         Syntax = syntax;
         Description = description;
@@ -406,6 +410,7 @@ public sealed class HelpOptionItem
         DefaultDisplay = defaultDisplay;
         RequiresEqualsForOptionalValue = requiresEqualsForOptionalValue;
         EnvironmentVariableName = environmentVariableName;
+        IsRepeatable = isRepeatable;
     }
 
     /// <summary>Gets the canonical option syntax and aliases.</summary>
@@ -425,6 +430,9 @@ public sealed class HelpOptionItem
 
     /// <summary>Gets the eligible environment-variable name, when host processing is enabled.</summary>
     public string? EnvironmentVariableName { get; }
+
+    /// <summary>Gets whether the option can occur multiple times.</summary>
+    public bool IsRepeatable { get; }
 }
 
 /// <summary>A stable help group with ordered visible options.</summary>
@@ -438,12 +446,14 @@ public sealed class HelpOptionGroup
         string key,
         string title,
         string description,
+        bool isPack,
         HelpOptionItem[] options)
     {
         _ownerPath = Array.AsReadOnly(ownerPath);
         Key = key;
         Title = title;
         Description = description;
+        IsPack = isPack;
         _options = Array.AsReadOnly(options);
     }
 
@@ -458,6 +468,9 @@ public sealed class HelpOptionGroup
 
     /// <summary>Gets the sanitized description.</summary>
     public string Description { get; }
+
+    /// <summary>Gets whether this group represents a titled option pack.</summary>
+    public bool IsPack { get; }
 
     /// <summary>Gets visible options in definition order.</summary>
     public IReadOnlyList<HelpOptionItem> Options => _options;

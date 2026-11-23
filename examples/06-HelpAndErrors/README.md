@@ -5,16 +5,38 @@ suggestions for a misspelled visible option:
 
 ```sh
 dotnet run --project examples/06-HelpAndErrors/Declarative -- --help
+dotnet run --project examples/06-HelpAndErrors/Manual -- show --help
 dotnet run --project examples/06-HelpAndErrors/Manual -- --count=4
+dotnet run --project examples/06-HelpAndErrors/Declarative -- --count=4 --tag=red --tag=blue
+dotnet run --project examples/06-HelpAndErrors/Manual -- summary --verbose
 dotnet run --project examples/06-HelpAndErrors/Declarative -- --cont=4
 dotnet run --project examples/06-HelpAndErrors/Manual -- --count=bad
 dotnet run --project examples/06-HelpAndErrors/Declarative -- --count=-1
 dotnet run --project examples/06-HelpAndErrors/Manual -- --count=0
+dotnet run --project examples/06-HelpAndErrors/Declarative -- '[notice]' --count=4 --mode=fast
+dotnet run --project examples/06-HelpAndErrors/Manual -- '[notice]' --count=4 --mode=fast
 ```
 
 The generated and explicit models both enable standard help and send malformed
 input through the library's normal diagnostic path. Neither project adds a
 custom help renderer or changes parser error handling.
+
+The declarative command derives its short description from XML `<summary>`,
+its long description from XML `<remarks>`, and shell examples from
+`<example><code>...</code></example>` tags. The manual command mirrors those
+fields with `Description`, `LongDescription`, and `AddExample(...)`. Two
+showcases are included: one successful invocation and one invocation preceded
+by the custom `[notice]` directive. The first example uses default shell
+inference; the second explicitly declares `language="shell"`.
+
+The `--mode` option uses `[CliAllowedValues("safe", "fast")]` in the
+declarative variant and `CliValidators.AllowedValues(...)` in the manual
+variant. Both place it in an Inspection option pack. The help projection
+displays `safe, fast` as allowed values without invoking validators.
+The repeatable `--tag` option accumulates values in order. The declarative
+binding uses the supported `IReadOnlyList<string>` collection type for `Tags`.
+The `show` and `summary` subcommands both accept the root's inherited
+`--verbose` option.
 
 Negative item numbers throw `CliExitCodeException` with exit code 65 and an
 explicitly safe public message. Item zero throws a simulated

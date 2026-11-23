@@ -26,6 +26,14 @@ internal static class HelpExampleExpander
 
         text = hasExecutable ? string.Concat("$0", commandText.Length > 0 ? " " : string.Empty, commandText) : commandText;
         string executable = HelpTextSanitizer.SingleLine(executableName);
+        if (executable.Length > 30)
+        {
+            int separator = executable.LastIndexOfAny(['/', '\\']);
+            if (separator < executable.Length - 1)
+            {
+                executable = string.Concat(".../", executable.AsSpan(separator + 1));
+            }
+        }
         StringBuilder result = new();
         for (int index = 0; index < text.Length; index++)
         {
