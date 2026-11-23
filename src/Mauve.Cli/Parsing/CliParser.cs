@@ -3,9 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Parsing;
@@ -34,20 +36,22 @@ public sealed class CliParser(
     internal ParseResult ParseForInvocation(
         CommandModel model,
         IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken) => ParseCore(model, arguments, cancellationToken);
+        CancellationToken cancellationToken,
+        CliHostOptions? hostOptions = null) => ParseCore(model, arguments, cancellationToken, hostOptions: hostOptions);
 
     private ParseResult ParseCore(
         CommandModel model,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken,
-        bool includeModelConverters = true)
+        bool includeModelConverters = true,
+        CliHostOptions? hostOptions = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
         if (includeModelConverters && !model.Converters.IsEmpty)
         {
             CliParser configured = new(ConverterRegistry.Combine(model.Converters, _converters), _numericCulture, _syntax);
-            return configured.ParseCore(model, arguments, cancellationToken, includeModelConverters: false);
+            return configured.ParseCore(model, arguments, cancellationToken, includeModelConverters: false, hostOptions);
         }
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -212,10 +216,17 @@ public sealed class CliParser(
                 directivesValid);
         }
 
+        Dictionary<OptionDefinition, string> environmentValues = ResolveEnvironmentValues(
+            model,
+            effectiveOptions,
+            inScopeOccurrences,
+            hostOptions,
+            cancellationToken);
         ValidateRequiredInputs(
             selectedCommand,
             effectiveOptions,
             inScopeOccurrences,
+            environmentValues,
             positionalAssignments,
             diagnostics);
         if (diagnostics.Exists(static diagnostic => diagnostic.Code != ParseDiagnosticCode.MissingRequired))
@@ -229,6 +240,10 @@ public sealed class CliParser(
             selectedCommand,
             effectiveOptions,
             inScopeOccurrences,
+            environmentValues,
+            hostOptions?.EnvironmentVariableDelimiter ?? ',',
+            model.Limits.MaximumTokenLength,
+            model.Limits.MaximumArgumentCount,
             positionalAssignments,
             diagnostics,
             cancellationToken);
@@ -909,10 +924,87 @@ public sealed class CliParser(
         }
     }
 
+    private static Dictionary<OptionDefinition, string> ResolveEnvironmentValues(
+        CommandModel model,
+        IReadOnlyList<CommandOption> effectiveOptions,
+        List<OptionOccurrence> optionOccurrences,
+        CliHostOptions? hostOptions,
+        CancellationToken cancellationToken)
+    {
+        if (hostOptions is not { EnableEnvironmentVariables: true })
+        {
+            return [];
+        }
+
+        List<(OptionDefinition Option, CommandDefinition Owner, string Name)> bindings = [];
+        string prefix = NormalizeEnvironmentName(
+            hostOptions.EnvironmentVariablePrefix ?? model.Root.Name);
+        HashSet<string> names = [with(StringComparer.Ordinal)];
+        foreach (CommandOption ownedOption in effectiveOptions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            OptionDefinition option = ownedOption.Definition;
+            bool enabled = option.EnvironmentVariableBinding switch
+            {
+                EnvironmentVariableBinding.Inherit => hostOptions.EnvironmentVariablesEnabledByDefault,
+                EnvironmentVariableBinding.Enabled => true,
+                EnvironmentVariableBinding.Disabled => false,
+                _ => throw new InvalidOperationException("The option has an unsupported environment-variable binding policy.")
+            };
+            if (!enabled)
+            {
+                continue;
+            }
+
+            string? name = option.EnvironmentVariableName;
+            if (name is null && option.LongName is string longName)
+            {
+                name = string.Concat(prefix, "_", NormalizeEnvironmentName(longName));
+            }
+
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!names.Add(name))
+            {
+                throw new InvalidOperationException("Multiple selected options resolve to the same environment-variable name.");
+            }
+
+            bindings.Add((option, ownedOption.Owner, name));
+        }
+
+        Dictionary<OptionDefinition, string> values = [];
+        foreach ((OptionDefinition option, CommandDefinition owner, string name) in bindings)
+        {
+            if (optionOccurrences.Exists(occurrence =>
+                    ReferenceEquals(occurrence.Owner, owner)
+                    && ReferenceEquals(occurrence.Option, option)))
+            {
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            string? value = hostOptions.EnvironmentVariableLookup(name);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (value is not null)
+            {
+                values.Add(option, value);
+            }
+        }
+
+        return values;
+    }
+
+    private static string NormalizeEnvironmentName(string value)
+        => value.Replace('-', '_').ToUpperInvariant();
+
     private static void ValidateRequiredInputs(
         CommandDefinition selectedCommand,
         IReadOnlyList<CommandOption> effectiveOptions,
         List<OptionOccurrence> optionOccurrences,
+        Dictionary<OptionDefinition, string> environmentValues,
         List<PositionalAssignment> positionalAssignments,
         DiagnosticBuffer diagnostics)
     {
@@ -922,7 +1014,8 @@ public sealed class CliParser(
             if (option.IsRequired
                 && !optionOccurrences.Exists(occurrence =>
                     ReferenceEquals(occurrence.Owner, ownedOption.Owner)
-                    && ReferenceEquals(occurrence.Option, option)))
+                    && ReferenceEquals(occurrence.Option, option))
+                && !environmentValues.ContainsKey(option))
             {
                 AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
                     ParseDiagnosticCode.MissingRequired,
@@ -944,6 +1037,279 @@ public sealed class CliParser(
                     null));
             }
         }
+    }
+
+    private bool TryConvertEnvironmentValue(
+        OptionDefinition option,
+        CommandDefinition owner,
+        string raw,
+        char environmentVariableDelimiter,
+        int maximumEnvironmentValueLength,
+        int maximumEnvironmentCollectionFields,
+        DiagnosticBuffer diagnostics,
+        CancellationToken cancellationToken,
+        out object? value)
+    {
+        value = null;
+        if (raw.Length > maximumEnvironmentValueLength)
+        {
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+                ParseDiagnosticCode.InvalidValue,
+                option,
+                owner,
+                null,
+                failureCode: "environment.length.limit"));
+            return false;
+        }
+
+        if (option.Arity == OptionArity.BooleanFlag)
+        {
+            if (raw.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                value = true;
+                return true;
+            }
+
+            if (raw.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                value = false;
+                return true;
+            }
+
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+                ParseDiagnosticCode.InvalidValue,
+                option,
+                owner,
+                null,
+                failureCode: "conversion.invalid"));
+            return false;
+        }
+
+        if (option.Arity == OptionArity.Counting)
+        {
+            return TryConvertEnvironmentScalar(
+                option,
+                raw,
+                option.ValueType,
+                cancellationToken,
+                out value,
+                out string countingFailure)
+                || AddEnvironmentConversionFailure(option, owner, countingFailure, diagnostics);
+        }
+
+        if (option.Arity is OptionArity.RepeatedSingleCollection or OptionArity.GreedyCollection)
+        {
+            if (!TryParseCsv(
+                    raw,
+                    environmentVariableDelimiter,
+                    maximumEnvironmentCollectionFields,
+                    out List<string> fields,
+                    out bool exceedsFieldLimit))
+            {
+                AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+                    ParseDiagnosticCode.InvalidValue,
+                    option,
+                    owner,
+                    null,
+                    failureCode: exceedsFieldLimit ? "environment.csv.limit" : "environment.csv.invalid"));
+                return false;
+            }
+
+            List<object?> elements = [];
+            bool succeeded = true;
+            foreach (string field in fields)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!TryConvertEnvironmentScalar(
+                    option,
+                    field,
+                    option.ElementType!,
+                    cancellationToken,
+                    out object? element,
+                    out string failureCode))
+                {
+                    AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+                        ParseDiagnosticCode.InvalidValue,
+                        option,
+                        owner,
+                        null,
+                        failureCode: failureCode));
+                    succeeded = false;
+                }
+                else
+                {
+                    elements.Add(element);
+                }
+            }
+
+            if (!succeeded)
+            {
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            value = CreateCollection(option.ElementType!, elements, option.Converter);
+            cancellationToken.ThrowIfCancellationRequested();
+            return true;
+        }
+
+        return TryConvertEnvironmentScalar(
+            option,
+            raw,
+            option.ValueType,
+            cancellationToken,
+            out value,
+            out string scalarFailure)
+            || AddEnvironmentConversionFailure(option, owner, scalarFailure, diagnostics);
+    }
+
+    private bool TryConvertEnvironmentScalar(
+        OptionDefinition option,
+        string raw,
+        Type targetType,
+        CancellationToken cancellationToken,
+        out object? value,
+        out string failureCode)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ConversionContext context = new(
+            targetType,
+            option.Name,
+            null,
+            _numericCulture,
+            option.IsSensitive);
+        bool converted = ConversionResolver.TryConvert(
+            raw,
+            targetType,
+            context,
+            _converters,
+            option.Converter,
+            out value,
+            out failureCode);
+        cancellationToken.ThrowIfCancellationRequested();
+        bool compatible = converted && IsValueCompatible(targetType, value, option.AllowsNull);
+        if (converted && !compatible)
+        {
+            failureCode = "conversion.invalid";
+        }
+
+        return compatible;
+    }
+
+    private static bool AddEnvironmentConversionFailure(
+        OptionDefinition option,
+        CommandDefinition owner,
+        string failureCode,
+        DiagnosticBuffer diagnostics)
+    {
+        AddDiagnostic(diagnostics, ParseDiagnostic.ForOption(
+            ParseDiagnosticCode.InvalidValue,
+            option,
+            owner,
+            null,
+            failureCode: failureCode));
+        return false;
+    }
+
+    private static bool TryParseCsv(
+        string raw,
+        char delimiter,
+        int maximumFields,
+        out List<string> fields,
+        out bool exceedsFieldLimit)
+    {
+        fields = [];
+        exceedsFieldLimit = false;
+        StringBuilder field = new();
+        bool quoted = false;
+        bool quoteClosed = false;
+        bool fieldStarted = false;
+
+        for (int index = 0; index < raw.Length; index++)
+        {
+            char character = raw[index];
+            if (quoted)
+            {
+                if (character != '"')
+                {
+                    _ = field.Append(character);
+                    continue;
+                }
+
+                if (index + 1 < raw.Length && raw[index + 1] == '"')
+                {
+                    _ = field.Append('"');
+                    index++;
+                    continue;
+                }
+
+                quoted = false;
+                quoteClosed = true;
+                continue;
+            }
+
+            if (quoteClosed)
+            {
+                if (character != delimiter)
+                {
+                    return false;
+                }
+
+                if (fields.Count >= maximumFields)
+                {
+                    exceedsFieldLimit = true;
+                    return false;
+                }
+
+                fields.Add(field.ToString());
+                _ = field.Clear();
+                quoteClosed = false;
+                fieldStarted = false;
+                continue;
+            }
+
+            if (character == delimiter)
+            {
+                if (fields.Count >= maximumFields)
+                {
+                    exceedsFieldLimit = true;
+                    return false;
+                }
+
+                fields.Add(field.ToString());
+                _ = field.Clear();
+                fieldStarted = false;
+            }
+            else if (character == '"')
+            {
+                if (fieldStarted || field.Length > 0)
+                {
+                    return false;
+                }
+
+                quoted = true;
+                fieldStarted = true;
+            }
+            else
+            {
+                _ = field.Append(character);
+                fieldStarted = true;
+            }
+        }
+
+        if (quoted)
+        {
+            return false;
+        }
+
+        if (fields.Count >= maximumFields)
+        {
+            exceedsFieldLimit = true;
+            return false;
+        }
+
+        fields.Add(field.ToString());
+        return true;
     }
 
     private static List<PositionalAssignment> BindPositionals(
@@ -984,6 +1350,10 @@ public sealed class CliParser(
         CommandDefinition selectedCommand,
         IReadOnlyList<CommandOption> effectiveOptions,
         List<OptionOccurrence> occurrences,
+        Dictionary<OptionDefinition, string> environmentValues,
+        char environmentVariableDelimiter,
+        int maximumEnvironmentValueLength,
+        int maximumEnvironmentCollectionFields,
         List<PositionalAssignment> positionals,
         DiagnosticBuffer diagnostics,
         CancellationToken cancellationToken)
@@ -1010,6 +1380,33 @@ public sealed class CliParser(
                     && ReferenceEquals(occurrence.Option, option))];
             if (optionOccurrences.Count == 0)
             {
+                if (environmentValues.TryGetValue(option, out string? environmentValue))
+                {
+                    if (TryConvertEnvironmentValue(
+                        option,
+                        ownedOption.Owner,
+                        environmentValue,
+                        environmentVariableDelimiter,
+                        maximumEnvironmentValueLength,
+                        maximumEnvironmentCollectionFields,
+                        diagnostics,
+                        cancellationToken,
+                        out object? convertedEnvironmentValue))
+                    {
+                        values.Add(new ParsedValue(
+                            ownedOption.Owner,
+                            option,
+                            null,
+                            convertedEnvironmentValue,
+                            true,
+                            ValuePresence.WithValue,
+                            ValueOrigin.Environment,
+                            []));
+                    }
+
+                    continue;
+                }
+
                 if (option.Arity == OptionArity.BooleanFlag)
                 {
                     values.Add(new ParsedValue(

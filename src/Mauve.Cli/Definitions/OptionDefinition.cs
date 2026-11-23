@@ -38,6 +38,8 @@ public sealed class OptionDefinition
     /// <param name="converter">An exact scalar or collection-element conversion override.</param>
     /// <param name="shortName">The primary short option character.</param>
     /// <param name="shortAliases">Additional short option characters.</param>
+    /// <param name="environmentVariableBinding">Whether environment binding is enabled, disabled, or inherited from the host.</param>
+    /// <param name="environmentVariableName">An optional full environment-variable name override.</param>
     public OptionDefinition(
         string? name,
         Type valueType,
@@ -62,7 +64,9 @@ public sealed class OptionDefinition
         OptionScope scope = OptionScope.Local,
         ValueConverterRegistration? converter = null,
         char? shortName = null,
-        IEnumerable<char>? shortAliases = null)
+        IEnumerable<char>? shortAliases = null,
+        EnvironmentVariableBinding environmentVariableBinding = EnvironmentVariableBinding.Inherit,
+        string? environmentVariableName = null)
     {
         ArgumentNullException.ThrowIfNull(valueType);
 
@@ -101,6 +105,23 @@ public sealed class OptionDefinition
         DisplayGroup = displayGroup;
         Scope = scope;
         Converter = converter;
+        if (!Enum.IsDefined(environmentVariableBinding))
+        {
+            throw new ArgumentOutOfRangeException(nameof(environmentVariableBinding));
+        }
+
+        if (environmentVariableName is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(environmentVariableName);
+            if (environmentVariableName.Contains('=', StringComparison.Ordinal)
+                || environmentVariableName.Contains('\0', StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Environment-variable names cannot contain '=' or null characters.", nameof(environmentVariableName));
+            }
+        }
+
+        EnvironmentVariableBinding = environmentVariableBinding;
+        EnvironmentVariableName = environmentVariableName;
 
         List<OptionAlias> aliasCopy = [];
         List<char> shortAliasCopy = shortAliases is null ? [] : [with(shortAliases)];
@@ -227,6 +248,12 @@ public sealed class OptionDefinition
     /// <summary>Gets the definition-local scalar or element converter.</summary>
     public ValueConverterRegistration? Converter { get; }
 
+    /// <summary>Gets whether environment-variable binding is enabled, disabled, or inherited from the host.</summary>
+    public EnvironmentVariableBinding EnvironmentVariableBinding { get; }
+
+    /// <summary>Gets the optional full environment-variable name override.</summary>
+    public string? EnvironmentVariableName { get; }
+
     internal bool IsHelpOption { get; private init; }
 
     internal bool IsHelpTreeOption { get; private init; }
@@ -238,7 +265,8 @@ public sealed class OptionDefinition
             typeof(bool),
             OptionArity.BooleanFlag,
             aliases: [],
-            shortName: 'h')
+            shortName: 'h',
+            environmentVariableBinding: EnvironmentVariableBinding.Disabled)
         {
             IsHelpOption = true
         };
@@ -246,7 +274,11 @@ public sealed class OptionDefinition
 
     internal static OptionDefinition CreateStandardHelpTree()
     {
-        return new OptionDefinition("help-tree", typeof(bool), OptionArity.BooleanFlag)
+        return new OptionDefinition(
+            "help-tree",
+            typeof(bool),
+            OptionArity.BooleanFlag,
+            environmentVariableBinding: EnvironmentVariableBinding.Disabled)
         {
             IsHelpTreeOption = true
         };

@@ -10,5 +10,8 @@ public enum ValueOrigin
     Default,
 
     /// <summary>The value came from explicit input.</summary>
-    Explicit
+    Explicit,
+
+    /// <summary>The value came from an environment variable.</summary>
+    Environment
 }

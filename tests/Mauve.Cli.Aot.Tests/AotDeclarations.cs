@@ -6,6 +6,20 @@ using Mauve.Cli.Invocation;
 
 namespace Mauve.Cli.Aot.Tests;
 
+[CliCommand("environment-aot", IsRoot = true)]
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated environment-binding scenario is invoked by its acceptance test.")]
+internal sealed partial class AotEnvironmentCommand
+{
+    [CliOption(IsRequired = true, EnvironmentVariableName = "AOT_NAME")]
+    public required string Name { get; init; }
+
+    [CliHandler]
+    internal int Run() => Name.Length;
+}
+
 [CliCommand("aot-todo", IsRoot = true)]
 [CliChild<AotAddCommand>]
 [SuppressMessage(

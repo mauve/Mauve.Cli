@@ -42,9 +42,9 @@ The semantic schema is independent of builder/attribute names:
 
 | Definition | Required information |
 | --- | --- |
-| Option | Stable owner/definition identity; optional prefix-free long name; optional primary short character; ordered long alias records `(name, Normal or Negating)` and short aliases; value/element type and explicit AllowsNull flag; syntax mode; required-presence flag; converter reference; defaults/bare behavior; validators; visibility; sensitivity; description/value label; local/inherited scope. |
+| Option | Stable owner/definition identity; optional prefix-free long name; optional primary short character; ordered long alias records `(name, Normal or Negating)` and short aliases; value/element type and explicit AllowsNull flag; syntax mode; required-presence flag; converter reference; defaults/bare behavior; validators; visibility; sensitivity; description/value label; local/inherited scope; environment-binding policy and optional full variable name ([FEAT-16](FEAT-16-Environment-Option-Binding.md)). |
 | Positional | Owner identity; unique display name; declaration index; value/element type; minimum/maximum token count; converter; default/validators; visibility/sensitivity; description; optional static/provider completion metadata. |
-| Display-only metadata | Safe default text and allowed-value labels; these do not supply a default, enforce validation, or read an environment variable. |
+| Display-only metadata | Safe default text and allowed-value labels; these do not supply a default or enforce validation. Environment names are binding metadata, not display metadata (FEAT-16). |
 
 Long names and aliases are prefix-free and match
 `[A-Za-z][A-Za-z0-9-]*`. Short names and aliases are one ASCII letter;
@@ -126,6 +126,8 @@ group metadata and a narrower positional type path. This library instead
 keeps immutable definitions and per-parse values, and uses the same typed
 conversion pipeline for options and positionals. Maz's environment-variable
 display metadata does not establish a generic config-provider feature.
+Invocation-time option environment binding is separately owned by
+[FEAT-16](FEAT-16-Environment-Option-Binding.md).
 
 The approved name syntax, positional ordering, and collection result shape are
 implemented in the explicit definitions. FEAT-11 must lower declarations to

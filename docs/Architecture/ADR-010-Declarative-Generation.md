@@ -88,6 +88,10 @@ and generator diagnostics had not previously been selected.
   supply an explicit host `ConverterRegistry`.
 - Preserve ordered immutable runtime definitions and expose the same typed
   values to generated handlers and explicit-model handlers.
+- Lower declarative option environment-binding metadata to the shared
+  `OptionDefinition` schema under
+  [ADR-016](ADR-016-Environment-Option-Binding.md); generated code does not
+  read process environment variables.
 - **Superseded for OptionPack declarations by
   [ADR-011](ADR-011-OptionPack-Composition.md):** use
   `[CliOptionPack(Title = ..., Description = ...)]` partial pack classes with
@@ -115,4 +119,5 @@ rules.
 Affected requirements:
 [FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md),
 including FEAT-11-005, FEAT-11-006 and FEAT-11-007, and
-[FEAT-14](../Requirements/FEAT-14-OptionPacks.md).
+[FEAT-14](../Requirements/FEAT-14-OptionPacks.md), and
+[FEAT-16](../Requirements/FEAT-16-Environment-Option-Binding.md).

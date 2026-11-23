@@ -39,8 +39,10 @@ ambient culture or runtime type discovery.
 
 `CliParser` consumes an already-tokenized argument vector. Applications own
 shell quoting and token construction. The parser does not perform response
-file expansion, environment substitution, command execution or fallback
-dispatch. A future inherited-option feature may alter visibility only through
+file expansion, arbitrary environment substitution, command execution or
+fallback dispatch. Invocation-time option environment binding is separately
+owned by [ADR-016](ADR-016-Environment-Option-Binding.md) and never rewrites
+argv. A future inherited-option feature may alter visibility only through
 its own explicit scope model; parser routing does not infer inheritance.
 
 Affected requirements:
@@ -49,4 +51,5 @@ Affected requirements:
 [FEAT-04](../Requirements/FEAT-04-Typed-Conversion.md),
 [FEAT-05](../Requirements/FEAT-05-Cardinality-And-Special-Forms.md),
 [FEAT-06](../Requirements/FEAT-06-Defaults-And-Validation.md),
-and [FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md).
+[FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md), and
+[FEAT-16](../Requirements/FEAT-16-Environment-Option-Binding.md).

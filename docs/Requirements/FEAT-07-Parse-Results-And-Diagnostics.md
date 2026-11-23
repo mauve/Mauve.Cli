@@ -53,7 +53,7 @@ failures have no selected path. An empty argv against a valid model selects
 the root.
 
 Each value entry identifies its owner/definition, presence (`Absent`, `Bare`,
-`WithValue`), origin (`Absent`, `Default`, `Explicit`), availability/invalid
+`WithValue`), origin (`Absent`, `Default`, `Environment`, `Explicit`), availability/invalid
 state and the supplying token indices. Typed value access must distinguish
 unavailable from available null/default(T). Definition lookup is by validated
 identity/handle, not a global alias dictionary. Reject a handle from another
@@ -89,6 +89,9 @@ Stable codes are the public `ParseDiagnosticCode` enum values:
 `ValidationFailed` is defined by active FEAT-06; this feature specifies
 additional result coordinates and deterministic ordering for diagnostics.
 Coordinates are zero-based argv indices, excluding the executable/root name.
+Environment-origin values have no argv coordinates and do not synthesize
+tokens; their source and precedence are owned by
+[FEAT-16](FEAT-16-Environment-Option-Binding.md).
 For `--count=x`, both option/value index are that token and the value offset
 is the UTF-16 code-unit index after its first `=`. Defaults have no token coordinates.
 Descriptions/messages contain safe declared names and bounded reason text,

@@ -2035,6 +2035,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         string barePolicy = GetNamedInt(attribute, "BareValuePolicy") == 1
             ? ", bareValuePolicy: global::Mauve.Cli.Definitions.BareValuePolicy.Null"
             : string.Empty;
+        string environmentBinding = string.Concat(
+            ", environmentVariableBinding: global::Mauve.Cli.Definitions.EnvironmentVariableBinding.",
+            EnumName("EnvironmentVariableBinding", GetNamedInt(attribute, "EnvironmentVariableBinding")));
+        string environmentName = string.Concat(
+            ", environmentVariableName: ",
+            Literal(GetNamedString(attribute, "EnvironmentVariableName")));
         return string.Concat(
             "new global::Mauve.Cli.Definitions.OptionDefinition(",
             name is null ? "null" : Literal(name),
@@ -2066,6 +2072,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             shortName,
             GenerateDefault(defaultInfo),
             converter,
+            environmentBinding,
+            environmentName,
             ")");
     }
 
@@ -2536,6 +2544,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         {
             "OptionArity" => ["RequiredScalar", "OptionalScalar", "BooleanFlag", "RepeatedSingleCollection", "GreedyCollection", "Counting"],
             "OptionScope" => ["Local", "Inherited"],
+            "EnvironmentVariableBinding" => ["Inherit", "Enabled", "Disabled"],
             _ => []
         };
         return (uint)value < (uint)names.Length ? names[value] : names[0];

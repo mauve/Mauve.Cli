@@ -12,8 +12,9 @@ Depends on [FEAT-01](FEAT-01-Command-Model.md),
 [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
 [FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md),
-[FEAT-09](FEAT-09-Invocation-Lifecycle.md), and
-[FEAT-15](FEAT-15-Directives.md). The API and diagnostic decisions
+[FEAT-09](FEAT-09-Invocation-Lifecycle.md),
+[FEAT-15](FEAT-15-Directives.md), and
+[FEAT-16](FEAT-16-Environment-Option-Binding.md). The API and diagnostic decisions
 are recorded in [ADR-010](../Architecture/ADR-010-Declarative-Generation.md).
 Converter/enum/union generation extends that decision under
 [ADR-015](../Architecture/ADR-015-Converter-Ownership-And-Unions.md).

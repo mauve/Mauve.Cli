@@ -23,6 +23,11 @@ public sealed class CliHostOptions
     /// <param name="converters">Additional host converters; exact model/host conflicts are rejected.</param>
     /// <param name="numericCulture">The optional explicit numeric decimal-separator culture.</param>
     /// <param name="syntax">The option prefixes.</param>
+    /// <param name="enableEnvironmentVariables">Whether environment-variable option binding is enabled.</param>
+    /// <param name="environmentVariablePrefix">The environment-variable prefix, defaulting to the normalized root command name.</param>
+    /// <param name="environmentVariableLookup">An optional environment-variable lookup; defaults to the process environment.</param>
+    /// <param name="environmentVariableDelimiter">The delimiter used by CSV-encoded collection values.</param>
+    /// <param name="environmentVariablesEnabledByDefault">Whether options inheriting host policy are eligible for environment binding.</param>
     public CliHostOptions(
         TextWriter? standardOutput = null,
         TextWriter? standardError = null,
@@ -35,7 +40,12 @@ public sealed class CliHostOptions
         Func<HelpTreeDocument, string>? helpTreeRenderer = null,
         ConverterRegistry? converters = null,
         CultureInfo? numericCulture = null,
-        CliSyntaxOptions? syntax = null)
+        CliSyntaxOptions? syntax = null,
+        bool enableEnvironmentVariables = false,
+        string? environmentVariablePrefix = null,
+        Func<string, string?>? environmentVariableLookup = null,
+        char environmentVariableDelimiter = ',',
+        bool environmentVariablesEnabledByDefault = true)
     {
         HelpTextRenderer.ValidateWidth(helpWidth);
         if (executableName is not null)
@@ -55,6 +65,26 @@ public sealed class CliHostOptions
         Converters = converters ?? ConverterRegistry.Empty();
         NumericCulture = ValueConverterEngine.CreateNumericCulture(numericCulture);
         Syntax = syntax ?? CliSyntaxOptions.Default;
+        if (environmentVariablePrefix is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(environmentVariablePrefix);
+            if (environmentVariablePrefix.Contains('=', StringComparison.Ordinal)
+                || environmentVariablePrefix.Contains('\0', StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Environment-variable prefixes cannot contain '=' or null characters.", nameof(environmentVariablePrefix));
+            }
+        }
+
+        if (environmentVariableDelimiter is '"' or '\r' or '\n' or '\0')
+        {
+            throw new ArgumentOutOfRangeException(nameof(environmentVariableDelimiter));
+        }
+
+        EnableEnvironmentVariables = enableEnvironmentVariables;
+        EnvironmentVariablesEnabledByDefault = environmentVariablesEnabledByDefault;
+        EnvironmentVariablePrefix = environmentVariablePrefix;
+        EnvironmentVariableLookup = environmentVariableLookup ?? Environment.GetEnvironmentVariable;
+        EnvironmentVariableDelimiter = environmentVariableDelimiter;
     }
 
     /// <summary>Gets the sink for rendered help.</summary>
@@ -92,4 +122,19 @@ public sealed class CliHostOptions
 
     /// <summary>Gets the option prefixes.</summary>
     public CliSyntaxOptions Syntax { get; }
+
+    /// <summary>Gets whether environment-variable option binding is enabled for this invocation.</summary>
+    public bool EnableEnvironmentVariables { get; }
+
+    /// <summary>Gets whether options inherit environment-variable eligibility by default.</summary>
+    public bool EnvironmentVariablesEnabledByDefault { get; }
+
+    /// <summary>Gets the configured environment-variable prefix, or null to derive it from the root command.</summary>
+    public string? EnvironmentVariablePrefix { get; }
+
+    /// <summary>Gets the environment-variable lookup used for this invocation.</summary>
+    public Func<string, string?> EnvironmentVariableLookup { get; }
+
+    /// <summary>Gets the delimiter used by CSV-encoded collection values.</summary>
+    public char EnvironmentVariableDelimiter { get; }
 }

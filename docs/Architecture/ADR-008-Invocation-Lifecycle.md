@@ -37,6 +37,10 @@ the library.
   through `CliHostOptions`; keep standard console output and conventional
   exit-code behavior as defaults. Preserve completed handler codes and
   propagate unexpected faults.
+- Permit opt-in environment option binding through `CliHostOptions` and the
+  shared parser pipeline under
+  [ADR-016](ADR-016-Environment-Option-Binding.md); do not introduce
+  process-wide configuration state.
 - Require the synchronous generated-root capability for `Run<TCommand>` and
   the general generated-root capability for `RunAsync<TCommand>`. FEAT-11
   owns deterministic whole-tree capability generation.
@@ -52,4 +56,5 @@ compile-time synchronous-root classification remain owned by
 
 Affected requirements:
 [FEAT-09](../Requirements/FEAT-09-Invocation-Lifecycle.md),
-including FEAT-09-005.
+including FEAT-09-005, and
+[FEAT-16](../Requirements/FEAT-16-Environment-Option-Binding.md).

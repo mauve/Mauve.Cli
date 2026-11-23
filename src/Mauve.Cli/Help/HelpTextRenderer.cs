@@ -66,7 +66,11 @@ public static class HelpTextRenderer
             List<HelpDisplayItem> options = [.. group.Options.Select(static option =>
                 new HelpDisplayItem(
                     option.Syntax,
-                    AppendMetadata(option.Description, option.IsRequired, option.DefaultDisplay)))];
+                    AppendMetadata(
+                        option.Description,
+                        option.IsRequired,
+                        option.DefaultDisplay,
+                        option.EnvironmentVariableName)))];
             string groupDescription = group.Description;
             if (group.Options.Any(static option => option.RequiresEqualsForOptionalValue))
             {
@@ -89,7 +93,11 @@ public static class HelpTextRenderer
         }
     }
 
-    private static string AppendMetadata(string description, bool isRequired, string? defaultDisplay)
+    private static string AppendMetadata(
+        string description,
+        bool isRequired,
+        string? defaultDisplay,
+        string? environmentVariableName = null)
     {
         List<string> metadata = [];
         if (isRequired)
@@ -100,6 +108,11 @@ public static class HelpTextRenderer
         if (defaultDisplay is not null)
         {
             metadata.Add(string.Concat("default: ", defaultDisplay));
+        }
+
+        if (environmentVariableName is not null)
+        {
+            metadata.Add(string.Concat("env: ", environmentVariableName));
         }
 
         if (metadata.Count == 0)

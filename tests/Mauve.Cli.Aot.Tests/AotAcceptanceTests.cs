@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
+using Mauve.Cli.Parsing;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -59,6 +60,39 @@ public sealed class AotAcceptanceTests
         Assert.AreEqual(0, exitCode, errors.ToString());
         StringAssert.Contains(output.ToString(), "xW3ZlcnNpb25d", StringComparison.Ordinal);
         Assert.AreEqual(string.Empty, errors.ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-004")]
+    public async Task VerifyGeneratedAndExplicitEnvironmentBinding()
+    {
+        CliHostOptions options = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: static name => name == "AOT_NAME" ? "native" : null);
+        CommandModel generated = AotEnvironmentCommand.CreateModel();
+        InvocationResult generatedResult = await new CliInvoker().InvokeAsync(
+            generated, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, generatedResult.Outcome);
+        Assert.AreEqual(6, generatedResult.ExitCode);
+        Assert.AreEqual(ValueOrigin.Environment, generatedResult.ParseResult!.Values[0].Origin);
+
+        OptionDefinition name = new(
+            "--name",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            isRequired: true,
+            environmentVariableName: "AOT_NAME");
+        CommandModel explicitModel = CommandModel.Create(new CommandBuilder("explicit-environment")
+            .AddOption(name)
+            .SetHandler((context, _) => context.TryGetOptionValue(name, out string? value)
+                ? value!.Length
+                : throw new InvalidOperationException("The explicit environment value is unavailable.")));
+        InvocationResult explicitResult = await new CliInvoker().InvokeAsync(
+            explicitModel, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, explicitResult.Outcome);
+        Assert.AreEqual(generatedResult.ExitCode, explicitResult.ExitCode);
+        Assert.AreEqual(ValueOrigin.Environment, explicitResult.ParseResult!.Values[0].Origin);
     }
 
     private static async Task VerifyGeneratedDirectivesAsync()

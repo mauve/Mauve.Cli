@@ -38,8 +38,8 @@ Return or propagate a documented outcome, including application exit codes and h
 **Security:** The core does not format or expose exception details; the host owns safe presentation and termination.
 
 ### FEAT-09-005 - Generated command host entry points
-Provide synchronous and asynchronous high-level host methods for generated command roots, defaulting omitted arguments to the current process arguments and allowing hosts to configure help/diagnostic sinks, help rendering and non-handler exit codes.
-**Acceptance:** `CliInvoker.Run<TCommand>()` executes a wholly synchronous generated root; `CliInvoker.RunAsync<TCommand>()` executes either synchronous or asynchronous generated roots; explicit argument lists override process arguments; help and invalid-input results use configured output and exit policy.
+Provide synchronous and asynchronous high-level host methods for generated command roots, defaulting omitted arguments to the current process arguments and allowing hosts to configure help/diagnostic sinks, help rendering, non-handler exit codes and opt-in environment option binding.
+**Acceptance:** `CliInvoker.Run<TCommand>()` executes a wholly synchronous generated root; `CliInvoker.RunAsync<TCommand>()` executes either synchronous or asynchronous generated roots; explicit argument lists override process arguments; help and invalid-input results use configured output and exit policy; host entry points and options-aware `InvokeAsync` share environment-binding behavior when enabled.
 **Security:** High-level hosting preserves the shared validated-dispatch path, propagates unexpected handler faults, emits only sanitized help and parser diagnostics, and never terminates the process directly.
 
 ## Design
@@ -90,7 +90,9 @@ the current process arguments excluding the executable name. Their
 `CliHostOptions` configure standard-output/help rendering, standard-error
 diagnostics, and exit codes for invalid input, no handler, and cancellation;
 completed handler exit codes are preserved and unexpected exceptions
-propagate. They do not consume environment variables or install process
+propagate. They consume option environment values only when explicitly
+enabled, as specified by
+[FEAT-16](FEAT-16-Environment-Option-Binding.md), and do not install process
 signal handlers.
 
 Generated roots expose a fresh `CreateBuilder()` through

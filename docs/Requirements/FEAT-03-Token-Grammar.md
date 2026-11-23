@@ -42,6 +42,9 @@ tokens and embedded whitespace. It does not tokenize shell syntax, expand
 response files, substitute environment variables or split comma-separated
 values. It recognizes the first `=` in an option token as the only inline
 value separator.
+Invocation-time option environment binding is a separate whole-value input
+source owned by [FEAT-16](FEAT-16-Environment-Option-Binding.md); it does not
+rewrite or expand argv tokens.
 
 An unconsumed bare token may select an exact child name or alias while
 command selection is open. Once a positional or `--` closes selection, later

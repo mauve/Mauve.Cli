@@ -53,6 +53,66 @@ public sealed class CliModelGeneratorTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-16")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-16-001")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-16-004")]
+    public async Task Generate_LowersEnvironmentMetadataForCommandsAndOptionPacks()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Definitions;
+
+            namespace EnvironmentFixture;
+
+            [CliCommand("environment-tool", IsRoot = true)]
+            public partial class Root(Pack pack)
+            {
+                [CliOption(IsRequired = true, EnvironmentVariableName = "CUSTOM_NAME")]
+                public required string Name { get; init; }
+
+                [CliHandler]
+                private int Run() => Name.Length + pack.Tenant.Length;
+            }
+
+            [CliOptionPack]
+            public partial class Pack
+            {
+                [CliOption(IsRequired = true, EnvironmentVariableBinding = EnvironmentVariableBinding.Enabled)]
+                public required string Tenant { get; init; }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Assert.IsNotEmpty(
+            generated.RunResult.Results.SelectMany(static run => run.GeneratedSources),
+            string.Join(Environment.NewLine, generated.RunResult.Results.Select(static run => run.Exception?.ToString())));
+        Type rootType = EmitAndLoad(generated.OutputCompilation).GetType("EnvironmentFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        OptionDefinition name = model.Root.Options.Single(static option => option.Name == "--name");
+        OptionDefinition tenant = model.Root.Options.Single(static option => option.Name == "--tenant");
+        Assert.AreEqual("CUSTOM_NAME", name.EnvironmentVariableName);
+        Assert.AreEqual(EnvironmentVariableBinding.Inherit, name.EnvironmentVariableBinding);
+        Assert.AreEqual(EnvironmentVariableBinding.Enabled, tenant.EnvironmentVariableBinding);
+
+        CliHostOptions options = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: static variable => variable switch
+            {
+                "CUSTOM_NAME" => "Mauve",
+                "ENVIRONMENT_TOOL_TENANT" => "workspace",
+                _ => null
+            });
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            model, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(14, result.ExitCode);
+        Assert.AreEqual(ValueOrigin.Environment, result.ParseResult!.Values.Single(value => ReferenceEquals(value.Option, name)).Origin);
+        Assert.AreEqual(ValueOrigin.Environment, result.ParseResult.Values.Single(value => ReferenceEquals(value.Option, tenant)).Origin);
+    }
+
+    [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]

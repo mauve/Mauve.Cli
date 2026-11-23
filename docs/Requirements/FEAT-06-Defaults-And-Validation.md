@@ -10,16 +10,18 @@ validate individual and related values before invocation.
 ## Context
 Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 [FEAT-04](FEAT-04-Typed-Conversion.md),
-[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md), and
-[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md). Evidence:
+[FEAT-05](FEAT-05-Cardinality-And-Special-Forms.md),
+[FEAT-07](FEAT-07-Parse-Results-And-Diagnostics.md), and
+[FEAT-16](FEAT-16-Environment-Option-Binding.md). Evidence:
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs` and
-`../maz/specs/CLI Parser Specification.md`. Environment and configuration
-providers are outside this feature.
+`../maz/specs/CLI Parser Specification.md`. Environment values are a separate
+higher-precedence input source; this feature continues to own declared
+defaults and callback ordering.
 
 ## Requirements
 ### FEAT-06-001 - Presence and requiredness
-Track explicit occurrence independently of the resulting value and validate requiredness against a documented presence policy.
-**Acceptance:** Explicit `--count=0` is supplied even if zero is the default; an absent required option fails under the explicit-presence rule.
+Track explicit input occurrence independently of the resulting value and validate requiredness against a documented presence policy.
+**Acceptance:** Explicit `--count=0` is supplied even if zero is the default; a valid environment-bound required option satisfies presence, while an option absent from both argv and environment fails.
 **Security:** A default must not silently satisfy an explicit-input requirement.
 
 ### FEAT-06-002 - Defaults and factories
@@ -131,6 +133,7 @@ mutate the successful result container.
 | Same definition, `--count=0` | Origin Explicit; WasProvided true; no factory called. |
 | Nullable optional filter, bare `--filter` with bare-null policy | Bare occurrence, Explicit origin, available null; distinct from absence. |
 | Required count with default 3, no occurrence | Missing-required error; default does not authorize dispatch or run its factory. |
+| Required count supplied by a valid environment value | Presence is satisfied and the value retains Environment origin; an absent default factory does not run. |
 | Required OptionalScalar supplied bare with a nonnull bare factory | Presence is satisfied and the bare factory runs once; requiredness suppresses only its absent default, not bare behavior. |
 | Integer `--count=bad` with default 3 | InvalidValue; no default substitution or validators. |
 | Fresh-list default in two parses | Different list instances; modifying one result does not change the other. |
@@ -143,8 +146,9 @@ mutate the successful result container.
 Maz's defaults favor a factory over a constant, infer optionality from
 nullability/initializers and retain values on reusable option objects.
 This plan instead separates absent/bare behavior, rejects competing defaults
-and allocates parse-local state. There is no environment/configuration
-fallback or application service lookup in these requirements.
+and allocates parse-local state. Environment/configuration lookup is not
+performed by defaults or factories; the invocation-only environment source
+is owned by [FEAT-16](FEAT-16-Environment-Option-Binding.md).
 Presence, default and callback-order policy follow this accepted contract;
 the complete behavior is captured here, not delegated to maz.
 

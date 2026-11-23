@@ -70,14 +70,12 @@ if (result.Outcome == ParseOutcome.Validated
 
 ```csharp
 using System;
-using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
 
 [CliCommand(IsRoot = true)]
 public partial class GreetCommand
 {
-    [Required]
     [CliOption]
     public required string Name { get; init; }
 
@@ -102,6 +100,35 @@ either API. Generated handlers may return `void`, `int`, `Task`, `Task<int>`,
 Requiredness comes from `[Required]` or the C# `required` modifier unless
 explicitly overridden. Supported constant initializers supply parser defaults
 and default text in help; sensitive and required defaults are not shown.
+
+## Environment option values
+
+Environment binding is opt-in on the host. A missing prefix is derived from
+the root command name; option names are normalized to uppercase with hyphens
+replaced by underscores. Per-option metadata can override the full variable
+name or disable binding:
+
+```csharp
+OptionDefinition endpoint = new(
+    "--endpoint",
+    typeof(string),
+    OptionArity.RequiredScalar,
+    isRequired: true,
+    environmentVariableName: "SERVICE_ENDPOINT");
+CommandModel model = CommandModel.Create(new CommandBuilder("my-tool")
+    .AddOption(endpoint));
+
+CliHostOptions host = new(enableEnvironmentVariables: true);
+return await CliInvoker.RunAsync(model, args, host);
+```
+
+By default, `my-tool --endpoint` can read `MY_TOOL_ENDPOINT`; the explicit
+name above reads `SERVICE_ENDPOINT`. The default precedence is declared
+default, then environment, then explicit command line. Environment-bound
+collections use CSV with doubled-quote escaping, preserve empty fields, and
+can use another single-character delimiter through
+`CliHostOptions.EnvironmentVariableDelimiter`. Hosts can inject
+`environmentVariableLookup` for deterministic tests or custom sources.
 
 Declare command relationships on a parent with `[CliChild<TChild>]` or on a
 child with `[CliParent<TParent>]`; both forms can be mixed in one hierarchy.

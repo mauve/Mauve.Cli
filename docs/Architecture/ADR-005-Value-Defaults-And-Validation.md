@@ -14,10 +14,13 @@ input, or run before structural and conversion checks have succeeded.
 
 - Model absent defaults as `None`, immutable `Constant`, or per-parse
   `Factory`. Do not infer defaults from nullability or runtime type; mutable
-  reference defaults require a factory.
+  reference defaults require a factory. Environment values are a separate
+  invocation input source with precedence over absent defaults under
+  [ADR-016](ADR-016-Environment-Option-Binding.md).
 - Keep optional-option bare behavior separate from absent defaults. A bare
-  occurrence has explicit provenance. Requiredness always requires an
-  explicit occurrence; an absent default on a required definition is inert.
+  occurrence has explicit provenance. Requiredness needs explicit argv or a
+  valid environment input under ADR-016; an absent default on a required
+  definition is inert.
 - Require collection definitions to use `IReadOnlyList<T>` and normalize
   defaults and parsed values into read-only containers. A zero-minimum rest
   positional receives a fresh empty sequence.
@@ -42,4 +45,5 @@ graphs remain application-owned.
 Affected requirements:
 [FEAT-05](../Requirements/FEAT-05-Cardinality-And-Special-Forms.md),
 [FEAT-06](../Requirements/FEAT-06-Defaults-And-Validation.md),
-and [FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md).
+[FEAT-07](../Requirements/FEAT-07-Parse-Results-And-Diagnostics.md), and
+[FEAT-16](../Requirements/FEAT-16-Environment-Option-Binding.md).

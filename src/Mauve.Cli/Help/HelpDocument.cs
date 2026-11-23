@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using Mauve.Cli.Definitions;
+using Mauve.Cli.Invocation;
 
 namespace Mauve.Cli.Help;
 
@@ -65,12 +66,14 @@ public sealed class HelpDocument
     /// <param name="command">The command to describe, or the root when omitted.</param>
     /// <param name="executableName">The executable display name for <c>$0</c>, or the root display label when omitted.</param>
     /// <param name="syntax">The option prefixes used to display option spellings.</param>
+    /// <param name="hostOptions">The host settings used to determine environment-variable names and enablement.</param>
     /// <returns>A read-only help document.</returns>
     public static HelpDocument Create(
         CommandModel model,
         CommandDefinition? command = null,
         string? executableName = null,
-        CliSyntaxOptions? syntax = null)
+        CliSyntaxOptions? syntax = null,
+        CliHostOptions? hostOptions = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         if (executableName is not null)
@@ -79,6 +82,7 @@ public sealed class HelpDocument
         }
         CommandDefinition selected = command ?? model.Root;
         syntax ??= CliSyntaxOptions.Default;
+        hostOptions ??= new CliHostOptions();
         if (!Contains(model.Root, selected))
         {
             throw new ArgumentException("The command does not belong to this model.", nameof(command));
@@ -106,12 +110,35 @@ public sealed class HelpDocument
         List<HelpOptionGroupBuilder> groups = [];
         Dictionary<(CommandDefinition Owner, string Key), HelpOptionGroupBuilder> groupsByKey = [];
         IReadOnlyList<CommandOption> effectiveOptions = CommandModel.GetEffectiveOptions(model.GetPath(selected));
+        string prefix = NormalizeEnvironmentName(hostOptions.EnvironmentVariablePrefix ?? model.Root.Name);
         foreach (CommandOption ownedOption in effectiveOptions)
         {
             OptionDefinition option = ownedOption.Definition;
             if (option.IsHidden)
             {
                 continue;
+            }
+
+            bool environmentBindingEnabled = hostOptions.EnableEnvironmentVariables
+                && option.EnvironmentVariableBinding switch
+                {
+                    EnvironmentVariableBinding.Inherit => hostOptions.EnvironmentVariablesEnabledByDefault,
+                    EnvironmentVariableBinding.Enabled => true,
+                    EnvironmentVariableBinding.Disabled => false,
+                    _ => throw new InvalidOperationException("The option has an unsupported environment-variable binding policy.")
+                };
+            string? environmentVariableName = null;
+            if (environmentBindingEnabled)
+            {
+                environmentVariableName = option.EnvironmentVariableName;
+                if (environmentVariableName is null && option.LongName is string longName)
+                {
+                    environmentVariableName = string.Concat(prefix, "_", NormalizeEnvironmentName(longName));
+                }
+
+                environmentVariableName = environmentVariableName is null
+                    ? null
+                    : HelpTextSanitizer.SingleLine(environmentVariableName);
             }
 
             OptionDisplayGroup? displayGroup = option.DisplayGroup;
@@ -131,7 +158,7 @@ public sealed class HelpDocument
                 groups.Add(group);
             }
 
-            group.Options.Add(CreateOptionItem(option, syntax));
+            group.Options.Add(CreateOptionItem(option, syntax, environmentVariableName));
         }
 
         string[] visiblePositionals = [.. positionals.Select(static positional => positional.Syntax)];
@@ -159,6 +186,9 @@ public sealed class HelpDocument
             [.. selected.Examples.Select(example => HelpExampleExpander.Expand(
                 example, selected.Path, executableName ?? model.Root.Name))]);
     }
+
+    private static string NormalizeEnvironmentName(string value)
+        => value.Replace('-', '_').ToUpperInvariant();
 
     private static HelpDirectiveItem CreateDirectiveItem(DirectiveDefinition directive)
     {
@@ -210,7 +240,10 @@ public sealed class HelpDocument
         return new HelpPositionalItem(syntax, description, positional.MinimumValues > 0, defaultDisplay);
     }
 
-    private static HelpOptionItem CreateOptionItem(OptionDefinition option, CliSyntaxOptions syntax)
+    private static HelpOptionItem CreateOptionItem(
+        OptionDefinition option,
+        CliSyntaxOptions syntax,
+        string? environmentVariableName = null)
     {
         List<string> spellings = [];
         if (option.LongName is string longName)
@@ -252,7 +285,8 @@ public sealed class HelpDocument
             HelpTextSanitizer.Description(option.Description),
             option.IsRequired,
             defaultDisplay,
-            option.Arity == OptionArity.OptionalScalar);
+            option.Arity == OptionArity.OptionalScalar,
+            environmentVariableName);
     }
 
     private static bool CanDisplayDefault(OptionDefinition option)
@@ -349,13 +383,15 @@ public sealed class HelpOptionItem
         string description,
         bool isRequired,
         string? defaultDisplay,
-        bool requiresEqualsForOptionalValue)
+        bool requiresEqualsForOptionalValue,
+        string? environmentVariableName)
     {
         Syntax = syntax;
         Description = description;
         IsRequired = isRequired;
         DefaultDisplay = defaultDisplay;
         RequiresEqualsForOptionalValue = requiresEqualsForOptionalValue;
+        EnvironmentVariableName = environmentVariableName;
     }
 
     /// <summary>Gets the canonical option syntax and aliases.</summary>
@@ -372,6 +408,9 @@ public sealed class HelpOptionItem
 
     /// <summary>Gets whether an optional value must use equals syntax.</summary>
     public bool RequiresEqualsForOptionalValue { get; }
+
+    /// <summary>Gets the eligible environment-variable name, when host processing is enabled.</summary>
+    public string? EnvironmentVariableName { get; }
 }
 
 /// <summary>A stable help group with ordered visible options.</summary>

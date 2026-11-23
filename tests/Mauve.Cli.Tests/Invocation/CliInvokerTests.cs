@@ -385,6 +385,337 @@ public sealed class CliInvokerTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-001")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-002")]
+    public async Task InvokeAsync_BindsEnvironmentValuesBetweenDefaultsAndArgv()
+    {
+        OptionDefinition count = new(
+            "--count",
+            typeof(int),
+            OptionArity.RequiredScalar,
+            defaultValuePolicy: DefaultValuePolicy.Constant,
+            defaultValue: 1);
+        OptionDefinition required = new(
+            "--required",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            isRequired: true);
+        CommandModel model = CommandModel.Create(new CommandBuilder("my-tool")
+            .AddOption(count)
+            .AddOption(required));
+        List<string> lookups = [];
+        CliHostOptions environment = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: name =>
+            {
+                lookups.Add(name);
+                return name switch
+                {
+                    "MY_TOOL_COUNT" => "2",
+                    "MY_TOOL_REQUIRED" => "from-environment",
+                    _ => null
+                };
+            });
+        CliInvoker invoker = new();
+
+        InvocationResult fromEnvironment = await invoker.InvokeAsync(
+            model, [], environment, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.NoHandler, fromEnvironment.Outcome);
+        Assert.IsTrue(fromEnvironment.ParseResult!.TryGetOptionValue(count, out int environmentCount));
+        Assert.AreEqual(2, environmentCount);
+        ParsedValue environmentEntry = fromEnvironment.ParseResult.Values.Single(value => ReferenceEquals(value.Option, count));
+        Assert.AreEqual(ValueOrigin.Environment, environmentEntry.Origin);
+        Assert.AreEqual(ValuePresence.WithValue, environmentEntry.Presence);
+        Assert.IsEmpty(environmentEntry.TokenIndices);
+        Assert.IsTrue(fromEnvironment.ParseResult.TryGetOptionValue(required, out string? requiredValue));
+        Assert.AreEqual("from-environment", requiredValue);
+        Assert.AreSequenceEqual(["MY_TOOL_COUNT", "MY_TOOL_REQUIRED"], lookups);
+
+        InvocationResult fromArgv = await invoker.InvokeAsync(
+            model,
+            ["--count=3", "--required=from-argv"],
+            environment,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.NoHandler, fromArgv.Outcome);
+        Assert.IsTrue(fromArgv.ParseResult!.TryGetOptionValue(count, out int explicitCount));
+        Assert.AreEqual(3, explicitCount);
+        Assert.AreEqual(ValueOrigin.Explicit, fromArgv.ParseResult.Values.Single(value => ReferenceEquals(value.Option, count)).Origin);
+        Assert.HasCount(2, lookups);
+
+        CliHostOptions absentEnvironment = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: static _ => null);
+        InvocationResult fromDefault = await invoker.InvokeAsync(
+            CommandModel.Create(new CommandBuilder("tool").AddOption(count)),
+            [],
+            absentEnvironment,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.NoHandler, fromDefault.Outcome);
+        Assert.IsTrue(fromDefault.ParseResult!.TryGetOptionValue(count, out int defaultCount));
+        Assert.AreEqual(1, defaultCount);
+        Assert.AreEqual(ValueOrigin.Default, fromDefault.ParseResult.Values.Single().Origin);
+
+        int disabledLookups = 0;
+        InvocationResult disabledByDefault = await invoker.InvokeAsync(
+            model,
+            [],
+            new CliHostOptions(environmentVariableLookup: _ =>
+            {
+                disabledLookups++;
+                return "unused";
+            }),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.InvalidInput, disabledByDefault.Outcome);
+        Assert.AreEqual(0, disabledLookups);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-003")]
+    public async Task InvokeAsync_ConvertsEnvironmentFlagsCountsAndCsvCollectionsSafely()
+    {
+        OptionDefinition items = new(
+            "--items",
+            typeof(IReadOnlyList<string>),
+            OptionArity.GreedyCollection,
+            elementType: typeof(string));
+        OptionDefinition enabled = new("--enabled", typeof(bool), OptionArity.BooleanFlag);
+        OptionDefinition retries = new("--retries", typeof(int), OptionArity.Counting);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(items)
+            .AddOption(enabled)
+            .AddOption(retries));
+        string csv = "alpha|\"b,c\"|\"say \"\"hi\"\"\"|";
+        CliHostOptions options = new(
+            enableEnvironmentVariables: true,
+            environmentVariableDelimiter: '|',
+            environmentVariableLookup: name => name switch
+            {
+                "TOOL_ITEMS" => csv,
+                "TOOL_ENABLED" => "true",
+                "TOOL_RETRIES" => "4",
+                _ => null
+            });
+
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            model, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.NoHandler, result.Outcome);
+        Assert.IsTrue(result.ParseResult!.TryGetOptionValue(items, out IReadOnlyList<string>? itemValues));
+        Assert.AreSequenceEqual(["alpha", "b,c", "say \"hi\"", string.Empty], [.. itemValues!]);
+        Assert.IsTrue(result.ParseResult.TryGetOptionValue(enabled, out bool enabledValue));
+        Assert.IsTrue(enabledValue);
+        Assert.IsTrue(result.ParseResult.TryGetOptionValue(retries, out int retryCount));
+        Assert.AreEqual(4, retryCount);
+
+        CliHostOptions malformedCsv = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: static _ => "private-value,\"unterminated");
+        InvocationResult invalid = await new CliInvoker().InvokeAsync(
+            model, [], malformedCsv, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.InvalidInput, invalid.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalid.ParseResult!.Diagnostics[0].Code);
+        Assert.IsNull(invalid.ParseResult.Diagnostics[0].TokenIndex);
+        Assert.IsFalse(invalid.ParseResult.Diagnostics[0].Message.Contains("private-value", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-001")]
+    public async Task InvokeAsync_UsesOptionEligibilityDefaultAndRejectsEnvironmentNameCollisions()
+    {
+        OptionDefinition enabled = new(
+            "--enabled",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            environmentVariableBinding: EnvironmentVariableBinding.Enabled);
+        OptionDefinition inherited = new("--inherited", typeof(string), OptionArity.RequiredScalar);
+        OptionDefinition disabled = new(
+            "--disabled",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            environmentVariableBinding: EnvironmentVariableBinding.Disabled);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(enabled)
+            .AddOption(inherited)
+            .AddOption(disabled));
+        List<string> lookups = [];
+        CliHostOptions options = new(
+            enableEnvironmentVariables: true,
+            environmentVariablesEnabledByDefault: false,
+            environmentVariableLookup: name =>
+            {
+                lookups.Add(name);
+                return "value";
+            });
+
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            model, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.NoHandler, result.Outcome);
+        Assert.AreSequenceEqual(["TOOL_ENABLED"], lookups);
+        Assert.IsTrue(result.ParseResult!.TryGetOptionValue(enabled, out string? enabledValue));
+        Assert.AreEqual("value", enabledValue);
+        Assert.IsFalse(result.ParseResult.TryGetOptionValue(inherited, out string? inheritedValue));
+        Assert.IsNull(inheritedValue);
+        Assert.IsFalse(result.ParseResult.TryGetOptionValue(disabled, out string? disabledValue));
+        Assert.IsNull(disabledValue);
+
+        CommandModel colliding = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--name", typeof(string), OptionArity.RequiredScalar))
+            .AddOption(new OptionDefinition(
+                "--other",
+                typeof(string),
+                OptionArity.RequiredScalar,
+                environmentVariableName: "TOOL_NAME")));
+        int collisionLookups = 0;
+        CliHostOptions collisionOptions = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: _ =>
+            {
+                collisionLookups++;
+                return null;
+            });
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await new CliInvoker().InvokeAsync(
+                colliding, [], collisionOptions, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        Assert.AreEqual(0, collisionLookups);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-001")]
+    public async Task InvokeAsync_UsesOptionBindingOverridesAndSkipsEnvironmentForHelpOrInvalidOrExplicitOptions()
+    {
+        OptionDefinition explicitName = new(
+            "--name",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            environmentVariableName: "CUSTOM_NAME");
+        OptionDefinition disabled = new(
+            "--disabled",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            environmentVariableBinding: EnvironmentVariableBinding.Disabled);
+        OptionDefinition shortOnly = new(
+            null,
+            typeof(string),
+            OptionArity.RequiredScalar,
+            shortName: 'x');
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(explicitName)
+            .AddOption(disabled)
+            .AddOption(shortOnly), includeStandardHelp: true);
+        List<string> lookedUp = [];
+        CliHostOptions options = new(
+            enableEnvironmentVariables: true,
+            environmentVariablePrefix: "APP",
+            environmentVariableLookup: name =>
+            {
+                lookedUp.Add(name);
+                return name == "CUSTOM_NAME" ? "from-environment" : null;
+            });
+
+        InvocationResult environmentResult = await new CliInvoker().InvokeAsync(
+            model, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.NoHandler, environmentResult.Outcome);
+        Assert.IsTrue(environmentResult.ParseResult!.TryGetOptionValue(explicitName, out string? value));
+        Assert.AreEqual("from-environment", value);
+        Assert.AreSequenceEqual(["CUSTOM_NAME"], lookedUp);
+
+        int helpLookups = 0;
+        CliHostOptions helpOptions = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: _ =>
+            {
+                helpLookups++;
+                return "unused";
+            });
+        InvocationResult help = await new CliInvoker().InvokeAsync(
+            model, ["--help"], helpOptions, TestContext.CancellationToken).ConfigureAwait(false);
+        InvocationResult invalidInput = await new CliInvoker().InvokeAsync(
+            model, ["--unknown"], helpOptions, TestContext.CancellationToken).ConfigureAwait(false);
+        InvocationResult explicitResult = await new CliInvoker().InvokeAsync(
+            model,
+            ["--name=from-argv"],
+            new CliHostOptions(
+                enableEnvironmentVariables: true,
+                environmentVariableLookup: _ =>
+                {
+                    helpLookups++;
+                    return "unused";
+                }),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.HelpRequested, help.Outcome);
+        Assert.AreEqual(InvocationOutcome.InvalidInput, invalidInput.Outcome);
+        Assert.AreEqual(InvocationOutcome.NoHandler, explicitResult.Outcome);
+        Assert.AreEqual(0, helpLookups);
+        Assert.IsTrue(explicitResult.ParseResult!.TryGetOptionValue(explicitName, out string? explicitValue));
+        Assert.AreEqual("from-argv", explicitValue);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-003")]
+    public async Task InvokeAsync_PropagatesEnvironmentLookupFaults()
+    {
+        InvalidOperationException expected = new("environment lookup fault");
+        CliHostOptions options = new(
+            enableEnvironmentVariables: true,
+            environmentVariableLookup: _ => throw expected);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--name", typeof(string), OptionArity.RequiredScalar)));
+
+        InvalidOperationException actual = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await new CliInvoker().InvokeAsync(
+                model, [], options, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.AreSame(expected, actual);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-003")]
+    public async Task InvokeAsync_EnforcesEnvironmentValueAndCollectionLimits()
+    {
+        OptionDefinition value = new("--value", typeof(string), OptionArity.RequiredScalar);
+        CommandModel shortValueModel = CommandModel.Create(
+            new CommandBuilder("tool").AddOption(value),
+            new CliLimits(maximumTokenLength: 3));
+        InvocationResult oversizedValue = await new CliInvoker().InvokeAsync(
+            shortValueModel,
+            [],
+            new CliHostOptions(enableEnvironmentVariables: true, environmentVariableLookup: static _ => "long"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.InvalidInput, oversizedValue.Outcome);
+        Assert.AreEqual("environment.length.limit", oversizedValue.ParseResult!.Diagnostics[0].FailureCode);
+
+        OptionDefinition items = new(
+            "--items",
+            typeof(IReadOnlyList<string>),
+            OptionArity.GreedyCollection,
+            elementType: typeof(string));
+        CommandModel fewFieldsModel = CommandModel.Create(
+            new CommandBuilder("tool").AddOption(items),
+            new CliLimits(maximumArgumentCount: 2));
+        InvocationResult tooManyFields = await new CliInvoker().InvokeAsync(
+            fewFieldsModel,
+            [],
+            new CliHostOptions(enableEnvironmentVariables: true, environmentVariableLookup: static _ => "a,b,c"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.InvalidInput, tooManyFields.Outcome);
+        Assert.AreEqual("environment.csv.limit", tooManyFields.ParseResult!.Diagnostics[0].FailureCode);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-09")]
     [TestProperty(Metadata.Requirement, "FEAT-09-005")]
     public async Task RunAsync_UsesExplicitModelHostOutputAndExitCodes()

@@ -118,6 +118,12 @@ public sealed class CliOptionAttribute(string? name = null) : Attribute
 
     /// <summary>Gets or sets the behavior for an optional-valued option used without a value.</summary>
     public BareValuePolicy BareValuePolicy { get; set; }
+
+    /// <summary>Gets or sets whether environment-variable binding is enabled, disabled, or inherited from the host.</summary>
+    public EnvironmentVariableBinding EnvironmentVariableBinding { get; set; }
+
+    /// <summary>Gets or sets the full environment-variable name override.</summary>
+    public string? EnvironmentVariableName { get; set; }
 }
 
 /// <summary>Declares a positional argument on a generated command type.</summary>

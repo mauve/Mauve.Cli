@@ -125,6 +125,22 @@ public sealed class CliInvoker(CliParser? parser = null)
         CancellationToken cancellationToken = default)
         => InvokeCoreAsync(model, arguments, new CliHostOptions(), cancellationToken);
 
+    /// <summary>Parses and invokes one command with explicit host configuration.</summary>
+    /// <param name="model">The validated command model.</param>
+    /// <param name="arguments">Tokens excluding the executable name.</param>
+    /// <param name="options">The host output, converter, and environment-binding settings.</param>
+    /// <param name="cancellationToken">The caller-owned cancellation token.</param>
+    /// <returns>The invocation outcome and any completed parse result.</returns>
+    public ValueTask<InvocationResult> InvokeAsync(
+        CommandModel model,
+        IReadOnlyList<string> arguments,
+        CliHostOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return InvokeCoreAsync(model, arguments, options, cancellationToken);
+    }
+
     private async ValueTask<InvocationResult> InvokeCoreAsync(
         CommandModel model,
         IReadOnlyList<string> arguments,
@@ -141,7 +157,7 @@ public sealed class CliInvoker(CliParser? parser = null)
         ParseResult parseResult;
         try
         {
-            parseResult = _parser.ParseForInvocation(model, arguments, cancellationToken);
+            parseResult = _parser.ParseForInvocation(model, arguments, cancellationToken, hostOptions);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -267,7 +283,7 @@ public sealed class CliInvoker(CliParser? parser = null)
                 CommandDefinition selectedCommand = result.SelectedCommand
                     ?? throw new InvalidOperationException("A help request has no selected command.");
                 HelpOutput.Write(
-                    HelpDocument.Create(model, selectedCommand, options.ExecutableName, options.Syntax),
+                    HelpDocument.Create(model, selectedCommand, options.ExecutableName, options.Syntax, options),
                     options.StandardOutput.WriteLine,
                     options.HelpWidth,
                     options.HelpRenderer);

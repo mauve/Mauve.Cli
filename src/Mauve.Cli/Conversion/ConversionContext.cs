@@ -9,7 +9,7 @@ public sealed class ConversionContext
     internal ConversionContext(
         Type targetType,
         string definitionName,
-        int tokenIndex,
+        int? tokenIndex,
         CultureInfo numericCulture,
         bool isSensitive)
     {
@@ -27,7 +27,7 @@ public sealed class ConversionContext
     public string DefinitionName { get; }
 
     /// <summary>Gets the zero-based token index.</summary>
-    public int TokenIndex { get; }
+    public int? TokenIndex { get; }
 
     /// <summary>Gets the explicit numeric culture for this parse.</summary>
     public CultureInfo NumericCulture { get; }

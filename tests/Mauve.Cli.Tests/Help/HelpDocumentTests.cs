@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
@@ -11,6 +13,8 @@ namespace Mauve.Cli.Tests.Help;
 [TestClass]
 public sealed class HelpDocumentTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-005")]
@@ -128,7 +132,8 @@ public sealed class HelpDocumentTests
 
         HelpDocument empty = HelpDocument.Create(CommandModel.Create(new CommandBuilder("empty")));
         Assert.AreEqual("empty", empty.Usage);
-        Assert.AreEqual("Usage: empty\n", HelpTextRenderer.Render(empty));
+        string renderedEmpty = HelpTextRenderer.Render(empty);
+        Assert.AreEqual("Usage: empty\n", renderedEmpty);
     }
 
     [TestMethod]
@@ -148,6 +153,55 @@ public sealed class HelpDocumentTests
         HelpDocument help = HelpDocument.Create(model, syntax: new CliSyntaxOptions("++", "+"));
 
         Assert.AreEqual("++output, +o, ++out, +p <value>", help.OptionGroups.Single().Options.Single().Syntax);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-001")]
+    public async Task Run_HelpPrintsEnvironmentNamesInlineOnlyWhenEnabled()
+    {
+        OptionDefinition logLevel = new("--log-level", typeof(string), OptionArity.RequiredScalar);
+        OptionDefinition region = new(
+            "--region",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            environmentVariableName: "CUSTOM_REGION");
+        OptionDefinition disabled = new(
+            "--secret",
+            typeof(string),
+            OptionArity.RequiredScalar,
+            environmentVariableBinding: EnvironmentVariableBinding.Disabled);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(logLevel)
+            .AddOption(region)
+            .AddOption(disabled), includeStandardHelp: true);
+        string defaultHostHelp = HelpTextRenderer.Render(HelpDocument.Create(model));
+        using StringWriter output = new();
+        int lookups = 0;
+        CliHostOptions options = new(
+            standardOutput: output,
+            enableEnvironmentVariables: true,
+            environmentVariablePrefix: "MY_APP",
+            environmentVariableLookup: _ =>
+            {
+                lookups++;
+                return "private-value";
+            });
+
+        int exitCode = await CliInvoker.RunAsync(
+            model,
+            ["--help"],
+            options,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual(0, lookups);
+        Assert.IsFalse(defaultHostHelp.Contains("env:", StringComparison.Ordinal));
+        StringAssert.Contains(output.ToString(), "--log-level <value>", StringComparison.Ordinal);
+        StringAssert.Contains(output.ToString(), "env: MY_APP_LOG_LEVEL", StringComparison.Ordinal);
+        StringAssert.Contains(output.ToString(), "env: CUSTOM_REGION", StringComparison.Ordinal);
+        Assert.IsFalse(output.ToString().Contains("env: MY_APP_SECRET", StringComparison.Ordinal));
+        Assert.IsFalse(output.ToString().Contains("Environment variables:", StringComparison.Ordinal));
     }
 
     [TestMethod]

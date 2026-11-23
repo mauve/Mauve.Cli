@@ -22,7 +22,8 @@ FEAT-03-002, FEAT-03-003, FEAT-03-004 and all requirements of
 [FEAT-12](FEAT-12-Inherited-And-Global-Options.md),
 [FEAT-13](FEAT-13-NativeAot-And-Trimming.md), and
 [FEAT-14](FEAT-14-OptionPacks.md), and
-[FEAT-15](FEAT-15-Directives.md) except retired FEAT-15-007 have active implementation owners.
+[FEAT-15](FEAT-15-Directives.md) except retired FEAT-15-007, and
+[FEAT-16](FEAT-16-Environment-Option-Binding.md) have active implementation owners.
 Focused tests are declared for active requirements. The validation ledger
 records which test and publish/run evidence has actually been observed.
 FEAT-08-005 owns command invocation examples; FEAT-11-006 owns XML-derived

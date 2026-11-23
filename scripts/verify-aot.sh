@@ -52,6 +52,11 @@ command -v jq >/dev/null
         src/Mauve.Cli/Completion/ShellCompletion.cs \
         src/Mauve.Cli/Invocation/CliHostOptions.cs \
         src/Mauve.Cli/Invocation/IGeneratedCliCommand.cs \
+        src/Mauve.Cli/Parsing/CliParser.cs \
+        src/Mauve.Cli/Parsing/ValueOrigin.cs \
+        src/Mauve.Cli/Conversion/ConversionContext.cs \
+        src/Mauve.Cli/Definitions/EnvironmentVariableBinding.cs \
+        src/Mauve.Cli/Declarations/CliAttributes.cs \
         src/Mauve.Cli/Conversion/ICliValueConverter.cs \
         src/Mauve.Cli/Conversion/ValueConverterRegistration.cs \
         src/Mauve.Cli/Conversion/UnionConverterBuilder.cs \
@@ -72,6 +77,8 @@ command -v jq >/dev/null
         tests/Mauve.Cli.Aot.Tests/AotDeclarations.cs \
         tests/Mauve.Cli.Aot.Tests/AotAcceptanceTests.cs \
         tests/Mauve.Cli.Aot.Tests/Mauve.Cli.Aot.Tests.csproj \
+        docs/Requirements/FEAT-16-Environment-Option-Binding.md \
+        docs/Architecture/ADR-016-Environment-Option-Binding.md \
         scripts/verify-aot.sh \
         scripts/verify-conversion-examples.sh \
         docs/Architecture/ADR-013-NativeAot-Support-Matrix.md \
@@ -289,16 +296,20 @@ for mode in managed native; do
     dotnet tool run governance -- test-results --trx "${reports[0]}" \
         --output "$evidence/$test_name-$mode-evidence.json"
     jq -e '
-        (.Tests | length == 2)
+        (.Tests | length == 3)
         and (.Tests | all(.Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-15" and .Status == "Passed" and .Passed == 1))
+        and (.Features | any(.Id == "FEAT-16" and .Status == "Passed" and .Passed == 1))
         and ([.Requirements[]
             | select(.Id | startswith("FEAT-13-"))
             | select(.Status == "Passed" and .Passed == 1)] | length == 4)
         and ([.Requirements[]
             | select(.Id | startswith("FEAT-15-"))
             | select(.Status == "Passed" and .Passed == 1)] | length == 3)
+        and ([.Requirements[]
+            | select(.Id == "FEAT-16-004")
+            | select(.Status == "Passed" and .Passed == 1)] | length == 1)
     ' "$evidence/$test_name-$mode-evidence.json" >/dev/null
 done
 
