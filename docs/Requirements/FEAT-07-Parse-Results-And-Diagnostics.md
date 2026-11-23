@@ -106,10 +106,12 @@ units of the token before escaping. Pass `includeArgumentText: false` to
 either formatter to omit it; the unmodified token remains inspectable on the
 result. Unknown command and option text is not echoed.
 Callback validation failures supply a bounded reason identifier (at most
-64 ASCII letters/digits/dot/underscore/hyphen), not display text. The default
-formatter uses only its own category templates and safe declared names,
-not application reason identifiers/messages. Application-provided reasons
-are inspectable by the caller, which owns any custom presentation/redaction.
+64 ASCII letters/digits/dot/underscore/hyphen) and may supply an explicit
+public message. The default formatter appends the single-line, sanitized,
+512-code-unit message to the category template, except for sensitive or
+hidden targets. Item failures prefix the reason with a one-based item number.
+Authors own the safety of public message content: never include secrets or
+raw input. Exception text and reason identifiers are not implicitly rendered.
 Malformed/oversized callback reason identifiers are callback contract faults,
 not truncated or rendered strings; throw a fixed InvalidOperationException
 without including their content.
@@ -129,6 +131,9 @@ following option may produce two diagnostics. An invalid supplied value
 does not additionally become MissingRequired: occurrence and validity differ.
 Unexpected callback exceptions propagate as application faults, rather than
 being mislabeled as user-input errors or successful defaults.
+`CliValidationException` is the explicit expected-rejection exception and is
+translated to a structured validation failure under
+[ADR-017](../Architecture/ADR-017-Declarative-Validation.md).
 
 #### Bounds and unmatched behavior
 

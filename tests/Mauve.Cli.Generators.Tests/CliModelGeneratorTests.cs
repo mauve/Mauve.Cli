@@ -53,6 +53,122 @@ public sealed class CliModelGeneratorTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-008")]
+    public async Task Generate_RegistersValidationRulesAndCrossValueTargets()
+    {
+        const string declaration = """
+            using System;
+            using System.Collections.Generic;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Validation;
+
+            namespace ValidationFixture;
+            [CliCommand(IsRoot = true)]
+            public partial class Root(Pack pack)
+            {
+                [CliOption] [CliRange(1, 10)] public int Count { get; init; } = 3;
+                [CliOption] [CliRange("0.25", "0.75")] public decimal Ratio { get; init; } = 0.5m;
+                [CliOption] [CliMinValue(1)] [CliMaxValue(10)] public int? Bound { get; init; }
+                [CliOption] [CliMinLength(2)] [CliMaxLength(5)] public string? Name { get; init; }
+                [CliOption] [CliRange("2026-03-01", "2026-06-30")] public DateOnly? Date { get; init; }
+                [CliOption] [CliRange("08:00", "18:00")] public TimeOnly? Time { get; init; }
+                [CliOption] [CliRange("2026-01-01T00:00Z", "2026-12-31T23:59Z")] public DateTimeOffset? Timestamp { get; init; }
+                [CliOption] [CliRange("00:01:00", "01:00:00")] public TimeSpan? Duration { get; init; }
+                [CliOption(IsRequired = true)] [CliLength(2, 5, Target = CliValidationTarget.Items)]
+                [CliValidator<TagRule>(Target = CliValidationTarget.Items)]
+                public required IReadOnlyList<string> Tags { get; init; }
+                [CliCrossValidator]
+                private static ValueValidationOutcome Check(int count, string mode)
+                    => count > 5 && mode == "fast"
+                        ? ValueValidationOutcome.FailureForParameter("cross.invalid", 1, message: "Fast mode requires a count of at most 5.")
+                        : ValueValidationOutcome.Success;
+                [CliHandler] private int Run() => Count + pack.Mode.Length + Tags.Count;
+            }
+            [CliOptionPack] public partial class Pack
+            {
+                [CliOption] [CliAllowedValues("slow", "fast")] public string Mode { get; init; } = "slow";
+            }
+            public sealed class TagRule : ICliValidator<string>
+            {
+                public static ValueValidationOutcome Validate(string? value, ValidationContext context)
+                    => value == "bad" ? throw new CliValidationException(ValueValidationOutcome.Failure("tag.bad", "This tag is reserved."))
+                        : ValueValidationOutcome.Success;
+            }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type root = EmitAndLoad(generated.OutputCompilation).GetType("ValidationFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        ParseResult item = new CliParser().Parse(model, ["--tags=good", "--tags", "bad"]);
+        ParseResult cross = new CliParser().Parse(model, ["--tags=good", "--count=6", "--mode=fast"]);
+        ParseResult fractional = new CliParser().Parse(model, ["--tags=good", "--ratio=0.8"]);
+        ParseResult below = new CliParser().Parse(model, ["--tags=good", "--bound=0"]);
+        ParseResult above = new CliParser().Parse(model, ["--tags=good", "--bound=11"]);
+        ParseResult shortName = new CliParser().Parse(model, ["--tags=good", "--name=x"]);
+        ParseResult earlyDate = new CliParser().Parse(model, ["--tags=good", "--date=2026-02-01"]);
+        ParseResult earlyTime = new CliParser().Parse(model, ["--tags=good", "--time=07:00"]);
+        ParseResult earlyTimestamp = new CliParser().Parse(model, ["--tags=good", "--timestamp=2025-12-31T23:59Z"]);
+        ParseResult shortDuration = new CliParser().Parse(model, ["--tags=good", "--duration=00:00:10"]);
+        InvocationResult valid = await new CliInvoker().InvokeAsync(model, ["--tags=good"], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("tag.bad", item.Diagnostics[0].FailureCode);
+        Assert.AreEqual(2, item.Diagnostics[0].ValueTokenIndex);
+        StringAssert.Contains(item.Diagnostics[0].ToString(), "Item 2: This tag is reserved.", StringComparison.Ordinal);
+        Assert.AreEqual("cross.invalid", cross.Diagnostics[0].FailureCode);
+        Assert.AreEqual(2, cross.Diagnostics[0].ValueTokenIndex);
+        StringAssert.Contains(cross.Diagnostics[0].ToString(), "Fast mode requires a count of at most 5.", StringComparison.Ordinal);
+        Assert.AreEqual("range.invalid", fractional.Diagnostics[0].FailureCode);
+        Assert.AreEqual("minimum.invalid", below.Diagnostics[0].FailureCode);
+        Assert.AreEqual("maximum.invalid", above.Diagnostics[0].FailureCode);
+        Assert.AreEqual("length.invalid", shortName.Diagnostics[0].FailureCode);
+        Assert.AreEqual("range.invalid", earlyDate.Diagnostics[0].FailureCode);
+        Assert.AreEqual("range.invalid", earlyTime.Diagnostics[0].FailureCode);
+        Assert.AreEqual("range.invalid", earlyTimestamp.Diagnostics[0].FailureCode);
+        Assert.AreEqual("range.invalid", shortDuration.Diagnostics[0].FailureCode);
+        Assert.AreEqual(InvocationOutcome.Completed, valid.Outcome);
+        Assert.AreEqual(8, valid.ExitCode);
+
+        GeneratorResult edited = Generate(declaration.Replace("CliRange(1, 10)", "CliRange(1, 9)", StringComparison.Ordinal));
+        AssertNoErrors(edited);
+        Assert.AreNotEqual(
+            generated.RunResult.Results.SelectMany(static run => run.GeneratedSources)
+                .First(static source => source.SourceText.ToString().Contains("Range<", StringComparison.Ordinal)).SourceText.ToString(),
+            edited.RunResult.Results.SelectMany(static run => run.GeneratedSources)
+                .First(static source => source.SourceText.ToString().Contains("Range<", StringComparison.Ordinal)).SourceText.ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-008")]
+    public void Generate_RejectsInvalidValidationDeclarations()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root
+            {
+                [CliOption] RULE public int Count { get; init; } = 3;
+            }
+            """;
+        foreach (string rule in new[]
+        {
+            "[CliRange(10, 1)]",
+            "[CliRange(\"bad\", \"2\")]",
+            "[CliRange(\"0.5\", \"1.5\")]",
+            "[CliMinValue(10)] [CliMaxValue(1)]",
+            "[CliLength(1, 5)]",
+            "[CliAllowedValues(\"one\", \"one\")]",
+            "[CliNotEmpty(Target = CliValidationTarget.Items)]"
+        })
+        {
+            GeneratorResult generated = Generate(declaration.Replace("RULE", rule, StringComparison.Ordinal));
+            Assert.IsTrue(generated.RunResult.Diagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"), rule);
+            Assert.IsEmpty(generated.RunResult.Results.SelectMany(static run => run.GeneratedSources)
+                .Where(static source => source.SourceText.ToString().Contains("CreateModel", StringComparison.Ordinal)));
+        }
+    }
+
+    [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-16")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-16-001")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-16-004")]

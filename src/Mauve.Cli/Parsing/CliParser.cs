@@ -1514,6 +1514,7 @@ public sealed class CliParser(
 
             List<object?> convertedValues = [];
             List<int> tokenIndices = [];
+            List<ValueCoordinate> valueCoordinates = [];
             bool conversionSucceeded = true;
             foreach (OptionOccurrence occurrence in optionOccurrences)
             {
@@ -1530,6 +1531,7 @@ public sealed class CliParser(
                     }
 
                     tokenIndices.Add(occurrence.OptionIndex);
+                    valueCoordinates.Add(new ValueCoordinate(occurrence.OptionIndex, raw.TokenIndex, raw.ValueOffset, raw.Value.Length));
                     if (raw.TokenIndex != occurrence.OptionIndex)
                     {
                         tokenIndices.Add(raw.TokenIndex);
@@ -1563,7 +1565,8 @@ public sealed class CliParser(
                     ? ValuePresence.WithValue
                     : ValuePresence.Bare,
                 ValueOrigin.Explicit,
-                [.. tokenIndices.Distinct().Order()]));
+                [.. tokenIndices.Distinct().Order()],
+                [.. valueCoordinates]));
         }
 
         foreach (PositionalAssignment assignment in positionals)
@@ -1605,7 +1608,8 @@ public sealed class CliParser(
                 available,
                 supplied ? ValuePresence.WithValue : ValuePresence.Absent,
                 supplied ? ValueOrigin.Explicit : isRest ? ValueOrigin.Default : ValueOrigin.Absent,
-                [.. tokenIndices]));
+                [.. tokenIndices],
+                [.. assignment.Occurrences.Select(static occurrence => new ValueCoordinate(null, occurrence.Index, null, occurrence.Value.Length))]));
         }
 
         return values;
@@ -1762,7 +1766,15 @@ public sealed class CliParser(
             foreach (IValueValidator validator in validators)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ValueValidationOutcome outcome = validator.Validate(entry.Value, context);
+                ValueValidationOutcome outcome;
+                try
+                {
+                    outcome = validator.Validate(entry.Value, context);
+                }
+                catch (CliValidationException exception)
+                {
+                    outcome = exception.Outcome;
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 string? failureCode = GetValidationFailureCode(outcome);
                 if (failureCode is null)
@@ -1770,22 +1782,7 @@ public sealed class CliParser(
                     continue;
                 }
 
-                int? tokenIndex = entry.TokenIndices.Count == 0 ? null : entry.TokenIndices[0];
-                AddDiagnostic(diagnostics, entry.Option is not null
-                    ? ParseDiagnostic.ForOption(
-                        ParseDiagnosticCode.ValidationFailed,
-                        entry.Option,
-                        entry.Owner,
-                        tokenIndex,
-                        tokenIndex,
-                        failureCode: failureCode)
-                    : ParseDiagnostic.ForPositional(
-                        ParseDiagnosticCode.ValidationFailed,
-                        entry.Positional!,
-                        selectedCommand,
-                        tokenIndex,
-                        tokenIndex,
-                        failureCode: failureCode));
+                AddValidationDiagnostic(selectedCommand, values, entry, outcome, failureCode, diagnostics);
             }
         }
     }
@@ -1800,14 +1797,87 @@ public sealed class CliParser(
         foreach (CrossValueValidator validator in selectedCommand.CrossValidators)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ValueValidationOutcome outcome = validator(context);
+            ValueValidationOutcome outcome;
+            try
+            {
+                outcome = validator(context);
+            }
+            catch (CliValidationException exception)
+            {
+                outcome = exception.Outcome;
+            }
             cancellationToken.ThrowIfCancellationRequested();
             string? failureCode = GetValidationFailureCode(outcome);
             if (failureCode is not null)
             {
-                AddDiagnostic(diagnostics, ParseDiagnostic.ForCrossValidation(selectedCommand, failureCode));
+                AddValidationDiagnostic(selectedCommand, values, null, outcome, failureCode, diagnostics);
             }
         }
+    }
+
+    private static void AddValidationDiagnostic(
+                CommandDefinition selectedCommand,
+                List<ParsedValue> values,
+                ParsedValue? current,
+                ValueValidationOutcome outcome,
+                string failureCode,
+                DiagnosticBuffer diagnostics)
+    {
+        ParsedValue? entry = outcome.Target is null
+            ? current
+            : values.Find(value => ReferenceEquals(value.Option, outcome.Target) || ReferenceEquals(value.Positional, outcome.Target))
+                ?? throw new InvalidOperationException("A validator returned an invalid target.");
+        if (entry is null)
+        {
+            if (outcome.ItemIndex is not null || outcome.ValueOffset is not null)
+            {
+                throw new InvalidOperationException("A validator returned an invalid item index.");
+            }
+
+            AddDiagnostic(diagnostics, ParseDiagnostic.ForCrossValidation(selectedCommand, failureCode, outcome.Message));
+            return;
+        }
+
+        int itemIndex = outcome.ItemIndex ?? 0;
+        if (outcome.ValueOffset is not null && outcome.ItemIndex is null
+            && (entry.Option?.ElementType is not null || entry.Positional?.ElementType is not null))
+        {
+            throw new InvalidOperationException("A validator returned an invalid value offset.");
+        }
+
+        if (outcome.ItemIndex is not null
+            && (entry.Value is not ICollection collection || itemIndex >= collection.Count))
+        {
+            throw new InvalidOperationException("A validator returned an invalid item index.");
+        }
+
+        ValueCoordinate coordinate = itemIndex < entry.ValueCoordinates.Count
+            ? entry.ValueCoordinates[itemIndex]
+            : default;
+        if (coordinate.ValueIndex is not null && outcome.ValueOffset > coordinate.ValueLength)
+        {
+            throw new InvalidOperationException("A validator returned an invalid value offset.");
+        }
+
+        int? valueOffset = outcome.ValueOffset is int relative && coordinate.ValueIndex is not null
+            ? (coordinate.ValueOffset ?? 0) + relative
+            : coordinate.ValueOffset;
+        int? tokenIndex = coordinate.OptionIndex ?? (entry.ValueCoordinates.Count == 0 && entry.TokenIndices.Count > 0
+            ? entry.TokenIndices[0]
+            : null);
+        string? message = outcome.Message;
+        if (message is not null && outcome.ItemIndex is int rejectedItem)
+        {
+            message = string.Create(CultureInfo.InvariantCulture, $"Item {rejectedItem + 1L}: {message}");
+        }
+
+        AddDiagnostic(diagnostics, entry.Option is not null
+            ? ParseDiagnostic.ForOption(
+                ParseDiagnosticCode.ValidationFailed, entry.Option, entry.Owner, tokenIndex,
+                coordinate.ValueIndex, valueOffset, failureCode, validationMessage: message)
+            : ParseDiagnostic.ForPositional(
+                ParseDiagnosticCode.ValidationFailed, entry.Positional!, entry.Owner, tokenIndex,
+                coordinate.ValueIndex, valueOffset, failureCode, validationMessage: message));
     }
 
     private static string? GetValidationFailureCode(ValueValidationOutcome outcome)

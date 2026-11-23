@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
+using Mauve.Cli.Validation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -14,6 +15,23 @@ namespace Mauve.Cli.Tests.Help;
 public sealed class HelpDocumentTests
 {
     public TestContext TestContext { get; set; } = null!;
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-001")]
+    public void Create_DisplaysSanitizedAllowedValuesExceptForSensitiveOptions()
+    {
+        OptionDefinition mode = new("mode", typeof(string), OptionArity.RequiredScalar,
+            validators: [CliValidators.AllowedValues("safe", "fast\nmode")]);
+        OptionDefinition secret = new("secret", typeof(string), OptionArity.RequiredScalar, isSensitive: true,
+            validators: [CliValidators.AllowedValues("private-choice")]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(mode).AddOption(secret));
+
+        string output = HelpTextRenderer.Render(HelpDocument.Create(model));
+
+        StringAssert.Contains(output, "allowed: safe, fast mode", StringComparison.Ordinal);
+        Assert.DoesNotContain("private-choice", output);
+    }
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]

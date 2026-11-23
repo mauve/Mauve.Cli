@@ -16,7 +16,8 @@ Depends on [FEAT-02](FEAT-02-Options-And-Arguments.md),
 `../maz/CliGenerator.Tests/CliParserBehaviorTests.cs` and
 `../maz/specs/CLI Parser Specification.md`. Environment values are a separate
 higher-precedence input source; this feature continues to own declared
-defaults and callback ordering.
+defaults and callback ordering. Declarative validation and precise locations
+are specified by [ADR-017](../Architecture/ADR-017-Declarative-Validation.md).
 
 ## Requirements
 ### FEAT-06-001 - Presence and requiredness
@@ -38,6 +39,16 @@ Apply registered per-value validators after successful conversion and report fai
 Validate declared relationships after values/defaults are assembled and before invocation.
 **Acceptance:** A mutually exclusive pair fails when both occur and succeeds when only one occurs; an invalid combination never reaches a handler.
 **Security:** A validator exception or unverifiable prerequisite fails closed, not as success.
+
+### FEAT-06-005 - Built-in value constraints
+Provide inclusive numeric and temporal ranges, string length and collection count, nonempty string and collection, ordinal string sets, and element-level validation in the shared model.
+**Acceptance:** Bounds are inclusive, a whitespace-only string is rejected, and an invalid collection element is located at its supplying token. Built-in failures explain the violated bound, length/count, nonempty constraint or allowed set.
+**Security:** Constraint values are immutable, and sensitive allowed values are not exposed through help or completion.
+
+### FEAT-06-006 - Structured validation rejections
+Support returned failures and `CliValidationException` with an optional definition and collection-item target.
+**Acceptance:** A rejected scalar or collection item identifies its original option and value coordinates, including inline offsets; default and environment values have no invented argv coordinates. Returned and thrown rejections can supply a public reason, preserved through item and generated parameter targeting.
+**Security:** Other callback exceptions propagate as application faults; failure codes are bounded and exception messages are not rendered. Public reasons are bounded, sanitized and suppressed for sensitive or hidden targets; authors must not include secrets or raw input. Invalid targets fail closed.
 
 ## Design
 #### Value states and defaults
@@ -106,8 +117,8 @@ failure; run cross-validation only if that whole stage succeeded.
 Within cross-validation likewise accumulate returned failures up to the cap.
 This prevents needless callbacks on malformed input without turning one
 validator failure into an unspecified fail-fast policy.
-A returned validation failure is an input diagnostic. A thrown factory or
-validator exception is an application callback fault: abort and propagate
+A returned validation failure or a `CliValidationException` is an input diagnostic.
+Any other thrown factory or validator exception is an application callback fault: abort and propagate
 to the host without handler invocation or automatic message logging.
 No parse result is produced on a propagated fault; prior accumulated
 diagnostics are not returned separately. The original exception may contain
@@ -124,6 +135,24 @@ Arbitrary custom reference values cannot be deep-frozen; validators must
 not mutate them, and callers wanting enforced immutability must register
 immutable value types. Add tests that ordinary collection validators cannot
 mutate the successful result container.
+
+Built-in range bounds are inclusive; string lengths use UTF-16 code units and
+collection lengths count items. Nonempty rejects null, empty, whitespace-only
+strings and null or empty collections. Allowed strings use ordinal matching
+and reject null. Length and range skip available null values; absent values
+are never passed to validators. Each item rule runs in logical item order and
+reports its first rejection. Allowed sets are immutable, may be declared
+only once per definition, and contain at most 512 values of at most 512
+UTF-16 code units each. `FailureAt` uses a UTF-16 offset relative to the
+selected value, while a diagnostic exposes the resulting offset in the argv
+token. Non-argv values have no token coordinates. See ADR-017 for the
+typed exception and invalid-target contracts.
+
+An optional `message` on failure factories supplies an actionable public
+reason. It is sanitized to one line and at most 512 UTF-16 code units;
+empty reasons retain generic output. Built-in rules provide constraint text,
+and item rejections add a one-based item number. Exception messages are never
+implicitly displayed. Sensitive and hidden targets suppress public reasons.
 
 #### Acceptance matrix
 
@@ -160,8 +189,9 @@ the complete behavior is captured here, not delegated to maz.
 Portable behavior tests are declared in
 [`CliParserTests`](../../tests/Mauve.Cli.Tests/Parsing/CliParserTests.cs)
 for presence, required defaults, factory isolation, value validation,
-cross-value validation and callback faults. No product test-run evidence has
-been recorded yet; see the [validation ledger](../validation-gaps.md).
+cross-value validation and callback faults. The built-in constraints and
+structured rejection tests passed with imported TRX evidence; see the
+[validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

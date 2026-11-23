@@ -1,10 +1,40 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
+using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Aot.Tests;
+
+[CliCommand("validation-aot", IsRoot = true)]
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated validation scenario constructs this command.")]
+internal sealed partial class AotValidationCommand
+{
+    [CliOption(IsRequired = true, Arity = OptionArity.RepeatedSingleCollection)]
+    [CliLength(2, 8, Target = CliValidationTarget.Items)]
+    [CliValidator<AotTagValidator>(Target = CliValidationTarget.Items)]
+    public required IReadOnlyList<string> Tags { get; init; }
+
+    [CliOption]
+    [CliRange(1, 10)]
+    public int Count { get; init; } = 3;
+
+    [CliHandler]
+    internal int Run() => Count + Tags.Count;
+}
+
+internal readonly struct AotTagValidator : ICliValidator<string>
+{
+    public static ValueValidationOutcome Validate(string? value, ValidationContext context) =>
+        value == "bad"
+            ? throw new CliValidationException(ValueValidationOutcome.Failure("tag.bad"))
+            : ValueValidationOutcome.Success;
+}
 
 [CliCommand("environment-aot", IsRoot = true)]
 [SuppressMessage(

@@ -46,6 +46,8 @@ command -v jq >/dev/null
         examples/02-Commands/Declarative/Commands.Declarative.csproj \
         examples/02-Commands/Manual/Program.cs \
         examples/02-Commands/Manual/Commands.Manual.csproj \
+        examples/05-Validation/Declarative/Program.cs \
+        examples/05-Validation/Manual/Program.cs \
         src/Mauve.Cli/Invocation/CliInvoker.cs \
         src/Mauve.Cli/Invocation/PredefinedDirectives.cs \
         src/Mauve.Cli/Completion/CompletionCommandLine.cs \
@@ -57,6 +59,12 @@ command -v jq >/dev/null
         src/Mauve.Cli/Conversion/ConversionContext.cs \
         src/Mauve.Cli/Definitions/EnvironmentVariableBinding.cs \
         src/Mauve.Cli/Declarations/CliAttributes.cs \
+        src/Mauve.Cli/Declarations/CliValidationAttributes.cs \
+        src/Mauve.Cli/Validation/CliValidationException.cs \
+        src/Mauve.Cli/Validation/CliValidators.cs \
+        src/Mauve.Cli/Validation/ICliValidator.cs \
+        src/Mauve.Cli/Validation/ValueValidationOutcome.cs \
+        src/Mauve.Cli/Parsing/ParsedValue.cs \
         src/Mauve.Cli/Conversion/ICliValueConverter.cs \
         src/Mauve.Cli/Conversion/ValueConverterRegistration.cs \
         src/Mauve.Cli/Conversion/UnionConverterBuilder.cs \
@@ -296,14 +304,15 @@ for mode in managed native; do
     dotnet tool run governance -- test-results --trx "${reports[0]}" \
         --output "$evidence/$test_name-$mode-evidence.json"
     jq -e '
-        (.Tests | length == 3)
+        (.Tests | length == 4)
         and (.Tests | all(.Status == "Passed" and .Passed == 1))
-        and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 1))
+        and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 2))
         and (.Features | any(.Id == "FEAT-15" and .Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-16" and .Status == "Passed" and .Passed == 1))
         and ([.Requirements[]
-            | select(.Id | startswith("FEAT-13-"))
-            | select(.Status == "Passed" and .Passed == 1)] | length == 4)
+            | select((.Id | startswith("FEAT-13-")) and .Id != "FEAT-13-003")
+            | select(.Status == "Passed" and .Passed == 1)] | length == 3)
+        and (.Requirements | any(.Id == "FEAT-13-003" and .Status == "Passed" and .Passed == 2))
         and ([.Requirements[]
             | select(.Id | startswith("FEAT-15-"))
             | select(.Status == "Passed" and .Passed == 1)] | length == 3)

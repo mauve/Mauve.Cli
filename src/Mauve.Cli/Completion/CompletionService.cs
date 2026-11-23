@@ -306,6 +306,29 @@ public sealed class CompletionService(
 
         object definition = option ?? (object?)positional
             ?? throw new InvalidOperationException("A completion target has no definition.");
+        IReadOnlyList<string> allowedValues = option?.AllowedValues ?? positional!.AllowedValues;
+        if (allowedValues.Count > 0)
+        {
+            bool candidateTooLong = false;
+            int inspected = 0;
+            foreach (string value in allowedValues)
+            {
+                if (inspected++ == _maximumRawCandidates)
+                {
+                    return LimitOrCompleted(candidates, true);
+                }
+
+                AddValueCandidate(value, option?.Description ?? positional?.Description, prefix, segment, activeToken,
+                    option, positional, candidates, unique, ref candidateTooLong);
+                if (candidateTooLong || candidates.Count > _maximumEmittedCandidates)
+                {
+                    return LimitOrCompleted(candidates, true);
+                }
+            }
+
+            return LimitOrCompleted(candidates, candidateTooLong);
+        }
+
         if (providers.TryGet(definition, out ProviderRegistration registration))
         {
             if (!DependenciesAreVisible(registration.Dependencies, scan))

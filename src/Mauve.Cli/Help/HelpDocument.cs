@@ -233,7 +233,8 @@ public sealed class HelpDocument
         string name = HelpTextSanitizer.SingleLine(positional.Name);
         string shape = isRest ? string.Concat(name, "...") : name;
         string syntax = positional.MinimumValues == 0 ? $"[{shape}]" : $"<{shape}>";
-        string description = HelpTextSanitizer.Description(positional.Description);
+        string description = AppendAllowedValues(HelpTextSanitizer.Description(positional.Description),
+            positional.IsSensitive, positional.AllowedValues);
         string? defaultDisplay = CanDisplayDefault(positional)
             ? HelpTextSanitizer.SingleLine(positional.DefaultDisplay!)
             : null;
@@ -282,11 +283,24 @@ public sealed class HelpDocument
             : null;
         return new HelpOptionItem(
             optionSyntax,
-            HelpTextSanitizer.Description(option.Description),
+            AppendAllowedValues(HelpTextSanitizer.Description(option.Description), option.IsSensitive, option.AllowedValues),
             option.IsRequired,
             defaultDisplay,
             option.Arity == OptionArity.OptionalScalar,
             environmentVariableName);
+    }
+
+    private static string AppendAllowedValues(string description, bool sensitive, IReadOnlyList<string> values)
+    {
+        if (sensitive || values.Count == 0)
+        {
+            return description;
+        }
+
+        string choices = string.Join(", ", values.Take(16).Select(static value =>
+            HelpTextSanitizer.SingleLine(value.Length > 128 ? value[..128] : value)));
+        return string.Concat(description, description.Length == 0 ? string.Empty : " ",
+            "(allowed: ", choices, values.Count > 16 ? ", ..." : string.Empty, ")");
     }
 
     private static bool CanDisplayDefault(OptionDefinition option)

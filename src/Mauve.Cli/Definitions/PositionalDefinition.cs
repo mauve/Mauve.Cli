@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Validation;
 
@@ -108,6 +109,11 @@ public sealed class PositionalDefinition
 
     /// <summary>Gets the ordered validators for available values.</summary>
     public IReadOnlyList<IValueValidator> Validators => _validators;
+
+    /// <summary>Gets the allowed string values declared by a built-in validator, if any.</summary>
+    public IReadOnlyList<string> AllowedValues =>
+        _validators.OfType<IAllowedValues>().Select(static validator => validator.Values)
+            .FirstOrDefault(static values => values.Count > 0) ?? [];
 
     /// <summary>Gets explicit display text for a declared default, when allowed.</summary>
     public string? DefaultDisplay { get; }

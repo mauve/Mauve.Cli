@@ -88,6 +88,9 @@ and generator diagnostics had not previously been selected.
   supply an explicit host `ConverterRegistry`.
 - Preserve ordered immutable runtime definitions and expose the same typed
   values to generated handlers and explicit-model handlers.
+- Lower declaration-level validation constraints and static providers to
+  shared model validators as specified by
+  [ADR-017](ADR-017-Declarative-Validation.md).
 - Lower declarative option environment-binding metadata to the shared
   `OptionDefinition` schema under
   [ADR-016](ADR-016-Environment-Option-Binding.md); generated code does not

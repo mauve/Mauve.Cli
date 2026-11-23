@@ -22,6 +22,31 @@ public sealed class CliInvokerTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-006")]
+    public async Task InvokeAsync_ValidationRejectionsDoNotInventEnvironmentOrDefaultCoordinates()
+    {
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar,
+            defaultValuePolicy: DefaultValuePolicy.Constant, defaultValue: 20,
+            validators: [CliValidators.Range(1, 10)]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(count));
+        InvocationResult defaultResult = await new CliInvoker().InvokeAsync(model, [], TestContext.CancellationToken).ConfigureAwait(false);
+        CliHostOptions options = new(enableEnvironmentVariables: true,
+            environmentVariableLookup: static name => name == "TOOL_COUNT" ? "30" : null);
+        InvocationResult environmentResult = await new CliInvoker().InvokeAsync(
+            model, [], options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        foreach (InvocationResult result in new[] { defaultResult, environmentResult })
+        {
+            Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+            Assert.AreEqual("range.invalid", result.ParseResult!.Diagnostics[0].FailureCode);
+            Assert.IsNull(result.ParseResult.Diagnostics[0].TokenIndex);
+            Assert.IsNull(result.ParseResult.Diagnostics[0].ValueTokenIndex);
+            Assert.IsNull(result.ParseResult.Diagnostics[0].ValueOffset);
+        }
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-006")]
     public async Task Run_HelpTreeUsesHostOutputAndPreservesDirectiveOrder()

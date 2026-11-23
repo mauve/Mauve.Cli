@@ -8,6 +8,30 @@ and the installed [policy](../governance.md).
 
 ## Current baseline
 
+Actionable validation reasons passed 139 runtime and 45 generator Release
+tests without skips. Metadata-bearing TRX and imported evidence are under
+`artifacts/test-results/validation-reasons/`. The added
+`Parse_ExplainsCollectionAndCrossFailuresAndBoundsPublicMessages` test covers
+collection reasons, untargeted cross-validator reasons, sanitization,
+length limits and sensitive/hidden target suppression. Existing item,
+typed-exception and generator tests now assert preserved public reasons.
+The full `bash scripts/verify.sh` gate passed with 188 Release tests,
+including 4 managed AOT tests, formatting and Governance checks.
+Trimmed/NativeAOT executions, including validation-example reason assertions,
+passed under `artifacts/aot-verification/linux-x64/20261123T121723Z/`;
+the gate log is `artifacts/verification-validation-reasons.log`.
+
+Declarative validation passed the 187-test Release solution run: 138 runtime,
+45 generator and 4 managed AOT tests. Metadata-bearing runtime and generator
+TRX and imported requirement evidence are under
+`artifacts/test-results/declarative-validation/`. The full
+`bash scripts/verify.sh` gate passed, including Linux x64 trimmed and NativeAOT
+publication and execution under
+`artifacts/aot-verification/linux-x64/20261123T112339Z/`. The validation
+examples passed process checks in both modes; these are smoke checks, not
+product test-run acceptance. The script's final summary text was corrected
+after that run to account for the two added validation examples.
+
 The converter/union work passed the 159-test Release solution run: 121 runtime
 tests, 36 generator tests and two managed AOT tests, without skips. Fresh
 metadata-bearing runtime/generator TRX and imported requirement evidence are
@@ -92,6 +116,9 @@ is claimed.
 
 | Requirement | Validation method | Evidence or procedure | Owner | Environment / prerequisites | Gap or waiver details |
 | --- | --- | --- | --- | --- | --- |
+| FEAT-06-005 | portable automated | `CliParserTests.Parse_BuiltInRulesAndCustomItemRejectionsUseValueCoordinates`; `CliParserTests.Parse_ExplainsCollectionAndCrossFailuresAndBoundsPublicMessages` | Mauve.Cli maintainers | .NET 11 | Passed: two tests; TRX and imported evidence under `artifacts/test-results/validation-reasons/`. |
+| FEAT-06-006 | portable automated | `CliParserTests.Parse_BuiltInRulesAndCustomItemRejectionsUseValueCoordinates`; `CliParserTests.Parse_CrossValidationTargetsAndContractFaultsAreDistinguished`; `CliParserTests.Parse_ExplainsCollectionAndCrossFailuresAndBoundsPublicMessages`; `CliInvokerTests.InvokeAsync_ValidationRejectionsDoNotInventEnvironmentOrDefaultCoordinates` | Mauve.Cli maintainers | .NET 11 | Passed: four tests; TRX and imported evidence under `artifacts/test-results/validation-reasons/`. |
+| FEAT-11-008 | portable automated | `CliModelGeneratorTests.Generate_RegistersValidationRulesAndCrossValueTargets`; `CliModelGeneratorTests.Generate_RejectsInvalidValidationDeclarations` | Mauve.Cli maintainers | .NET 11; Roslyn | Passed: two tests; TRX and imported evidence under `artifacts/test-results/validation-reasons/`. |
 | FEAT-04-001 | portable automated | `BuiltInConversionTests.Parse_ConvertsNewScalarTypes`; `BuiltInConversionTests.Parse_PathsAreLexicalAndNeedNotExist`; `BuiltInConversionTests.Parse_CreatesTypedCollectionsAndNullableValues` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
 | FEAT-04-002 | portable automated | `BuiltInConversionTests.Parse_HalfUsesSelectedNumericCultureOnly` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |
 | FEAT-04-003 | portable automated | `ConverterRegistrationTests.Parse_UsesDefinitionModelAndHostConvertersWithoutMutatingSnapshots`; `ConverterRegistrationTests.Run_UsesHostConfigurationAndRejectsConflictingRegistriesBeforeCallbacks`; `ConverterRegistrationTests.Create_RejectsMismatchedConvertersAndChildRegistrations`; `ConverterRegistrationTests.Parse_UnionCasesUseFirstSuccessAndSupportNestedNullableCollections`; `ConverterRegistrationTests.Parse_UnionFaultsPropagateAndInvalidDependenciesAreRejected` | Mauve.Cli maintainers | .NET 11 | Passed in the 121-test Release runtime run; metadata-bearing TRX imported under `artifacts/test-results/conversion-unions/`. |

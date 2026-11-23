@@ -53,7 +53,7 @@ public sealed class ParseDiagnostic
     /// <summary>Gets the zero-based argv index that supplied an invalid value.</summary>
     public int? ValueTokenIndex { get; }
 
-    /// <summary>Gets the UTF-16 offset of an inline value after its first equals sign.</summary>
+    /// <summary>Gets the UTF-16 offset within the value token, when known.</summary>
     public int? ValueOffset { get; }
 
     /// <summary>Gets the safe definition name or a generic hidden-item label.</summary>
@@ -99,7 +99,8 @@ public sealed class ParseDiagnostic
         int? valueTokenIndex = null,
         int? valueOffset = null,
         string? failureCode = null,
-        CommandDefinition? selectedCommand = null)
+        CommandDefinition? selectedCommand = null,
+        string? validationMessage = null)
     {
         string name = option.IsHidden ? "hidden option" : option.Name;
         string message = code switch
@@ -123,7 +124,7 @@ public sealed class ParseDiagnostic
         };
         return new ParseDiagnostic(
             code,
-            message,
+            WithValidationMessage(message, option.IsSensitive || option.IsHidden ? null : validationMessage),
             tokenIndex,
             valueTokenIndex,
             valueOffset,
@@ -141,7 +142,8 @@ public sealed class ParseDiagnostic
         int? tokenIndex,
         int? valueTokenIndex = null,
         int? valueOffset = null,
-        string? failureCode = null)
+        string? failureCode = null,
+        string? validationMessage = null)
     {
         string name = positional.IsHidden ? "hidden argument" : positional.Name;
         string message = code switch
@@ -162,7 +164,7 @@ public sealed class ParseDiagnostic
         };
         return new ParseDiagnostic(
             code,
-            message,
+            WithValidationMessage(message, positional.IsSensitive || positional.IsHidden ? null : validationMessage),
             tokenIndex,
             valueTokenIndex,
             valueOffset,
@@ -211,12 +213,13 @@ public sealed class ParseDiagnostic
 
     internal static ParseDiagnostic ForCrossValidation(
         CommandDefinition command,
-        string failureCode)
+        string failureCode,
+        string? validationMessage = null)
     {
         string name = command.IsHidden ? "hidden command" : HelpTextSanitizer.SingleLine(command.Name);
         return new ParseDiagnostic(
             ParseDiagnosticCode.ValidationFailed,
-            $"Values for command '{name}' failed validation.",
+            WithValidationMessage($"Values for command '{name}' failed validation.", command.IsHidden ? null : validationMessage),
             null,
             null,
             null,
@@ -226,6 +229,9 @@ public sealed class ParseDiagnostic
             [],
             4);
     }
+
+    private static string WithValidationMessage(string message, string? reason) =>
+        reason is null ? message : $"{message} {reason}";
 
     private static int GetOrderingPhase(ParseDiagnosticCode code)
     {

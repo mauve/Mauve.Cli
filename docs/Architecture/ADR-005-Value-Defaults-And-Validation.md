@@ -29,7 +29,9 @@ input, or run before structural and conversion checks have succeeded.
   validators in definition/registration order, and run cross-value validators
   only if value validation succeeds.
 - Accumulate returned validation failures up to the diagnostic bound.
-  Propagate thrown converter, factory and validator exceptions to the host;
+  Propagate thrown converter, factory and unexpected validator exceptions to the host;
+  the dedicated `CliValidationException` is translated to a diagnostic under
+  [ADR-017](ADR-017-Declarative-Validation.md);
   do not substitute values or render exception messages.
 - Give validators an invocation-local read-only context with typed handles
   and explicit presence checks.

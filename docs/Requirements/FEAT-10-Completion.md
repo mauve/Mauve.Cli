@@ -45,6 +45,11 @@ Translate a bounded shell completion command-line payload and UTF-16 cursor posi
 **Security:** Treat the payload as inert text, never perform expansion or execution, and respect model input limits.
 
 ## Design
+Declared allowed-string validators provide bounded value candidates before
+application providers; hidden and sensitive definitions provide none. The
+same set is validated by the parser and projected into non-sensitive help,
+as specified by [ADR-017](../Architecture/ADR-017-Declarative-Validation.md).
+
 #### Completion protocol boundary
 
 The opt-in FEAT-15 completion directive accepts a full command-line payload

@@ -18,7 +18,8 @@ public sealed class ParsedValue
         bool isAvailable,
         ValuePresence presence,
         ValueOrigin origin,
-        int[] tokenIndices)
+        int[] tokenIndices,
+        ValueCoordinate[]? valueCoordinates = null)
     {
         Owner = owner;
         Option = option;
@@ -28,6 +29,7 @@ public sealed class ParsedValue
         Presence = presence;
         Origin = origin;
         _tokenIndices = Array.AsReadOnly(tokenIndices);
+        ValueCoordinates = valueCoordinates ?? [];
     }
 
     /// <summary>Gets the command that owns the definition.</summary>
@@ -53,4 +55,8 @@ public sealed class ParsedValue
 
     /// <summary>Gets the original argv indices that supplied the value.</summary>
     public IReadOnlyList<int> TokenIndices => _tokenIndices;
+
+    internal IReadOnlyList<ValueCoordinate> ValueCoordinates { get; }
 }
+
+internal readonly record struct ValueCoordinate(int? OptionIndex, int? ValueIndex, int? ValueOffset, int ValueLength);

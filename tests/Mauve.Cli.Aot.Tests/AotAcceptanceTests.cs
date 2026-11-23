@@ -6,6 +6,7 @@ using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
+using Mauve.Cli.Validation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -16,6 +17,36 @@ namespace Mauve.Cli.Aot.Tests;
 public sealed class AotAcceptanceTests
 {
     public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Exercises generated and explicit validation after native publication.</summary>
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-13")]
+    [TestProperty(Metadata.Requirement, "FEAT-13-003")]
+    public async Task VerifyGeneratedAndExplicitValidation()
+    {
+        CommandModel generated = AotValidationCommand.CreateModel();
+        OptionDefinition tags = new("tags", typeof(System.Collections.Generic.IReadOnlyList<string>),
+            OptionArity.RepeatedSingleCollection, elementType: typeof(string), isRequired: true,
+            validators:
+            [
+                CliValidators.Each<string>(CliValidators.StringLength(2, 8)),
+                CliValidators.Each<string>(CliValidators.Provider<string, AotTagValidator>())
+            ]);
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar,
+            defaultValuePolicy: DefaultValuePolicy.Constant, defaultValue: 3,
+            validators: [CliValidators.Range(1, 10)]);
+        CommandModel explicitModel = CommandModel.Create(new CommandBuilder("explicit")
+            .AddOption(tags).AddOption(count).SetHandler(static (_, _) => 4));
+        foreach (CommandModel model in new[] { generated, explicitModel })
+        {
+            InvocationResult valid = await new CliInvoker().InvokeAsync(model, ["--tags=ok"], TestContext.CancellationToken).ConfigureAwait(false);
+            ParseResult invalid = new CliParser().Parse(model, ["--tags=ok", "--tags", "bad"]);
+            Assert.AreEqual(InvocationOutcome.Completed, valid.Outcome);
+            Assert.AreEqual(4, valid.ExitCode);
+            Assert.AreEqual("tag.bad", invalid.Diagnostics[0].FailureCode);
+            Assert.AreEqual(2, invalid.Diagnostics[0].ValueTokenIndex);
+        }
+    }
 
     /// <summary>Runs identical parser acceptance scenarios against both model paths.</summary>
     [TestMethod]

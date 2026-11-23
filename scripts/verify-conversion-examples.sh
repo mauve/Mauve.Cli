@@ -64,7 +64,7 @@ mkdir -p "$evidence"
         Directory.Build.props Directory.Packages.props global.json NuGet.Config \
         .editorconfig examples/.editorconfig
     find src/Mauve.Cli src/Mauve.Cli.Generators \
-        examples/12-BuiltInTypes examples/13-CustomConverters \
+        examples/05-Validation examples/12-BuiltInTypes examples/13-CustomConverters \
         -type d \( -name bin -o -name obj \) -prune -o \
         -type f \( -name '*.cs' -o -name '*.csproj' -o -name '*.props' \
         -o -name 'packages.lock.json' -o -name '.editorconfig' -o -name 'README.md' \) \
@@ -180,11 +180,45 @@ verify_custom() {
         "$@" '[audit:B-7' '0xGG]' --code B-42 --mask 0xFF --count 10 B-9
 }
 
+verify_validation() {
+    local label="$1"
+    shift
+    verify_case "$label" validation-valid 0 \
+        'limit=10; name=guest; mode=safe; label=ready; tags=ok; path=(none); start=(none)' "$@" --tag=ok
+    verify_case "$label" validation-completion 0 'fast' "$@" --demo-completion
+    verify_case "$label" validation-range 2 "" "$@" --tag=ok --limit 99
+    verify_case "$label" validation-date 2 "" "$@" --tag=ok --start=2027-01-01
+    verify_case "$label" validation-conversion 2 "" "$@" --tag=ok --limit=bad
+    verify_case "$label" validation-length 2 "" "$@" --tag=ok --name=x
+    verify_case "$label" validation-empty 2 "" "$@" --tag=ok '--name=  '
+    verify_case "$label" validation-set 2 "" "$@" --tag=ok --mode=other
+    verify_case "$label" validation-count 2 "" "$@" --tag=aa --tag=bb --tag=cc --tag=dd --tag=ee
+    verify_case "$label" validation-item-length 2 "" "$@" --tag=ok --tag=x
+    verify_case "$label" validation-item-exception 2 "" "$@" --tag=ok --tag=xray
+    verify_case "$label" validation-custom 2 "" "$@" --tag=ok --label=blocked
+    verify_case "$label" validation-cross 2 "" "$@" --tag=ok --mode=fast --limit=21
+    verify_case "$label" validation-positional 2 "" "$@" --tag=ok ""
+    grep -Fq 'Argument 3:' "$evidence/$label-validation-range.stderr"
+    grep -Fq 'Argument 2:' "$evidence/$label-validation-item-exception.stderr"
+    grep -Fq 'Argument 2:' "$evidence/$label-validation-cross.stderr"
+    grep -Fq 'Value must be between 1 and 50 (inclusive).' "$evidence/$label-validation-range.stderr"
+    grep -Fq 'Collection count must be between 1 and 4 (inclusive).' "$evidence/$label-validation-count.stderr"
+    grep -Fq 'Item 2: String length in UTF-16 code units must be between 2 and 12 (inclusive).' "$evidence/$label-validation-item-length.stderr"
+    grep -Fq "Item 2: Tags starting with 'x' are reserved." "$evidence/$label-validation-item-exception.stderr"
+    grep -Fq 'Fast mode requires --limit to be at most 20.' "$evidence/$label-validation-cross.stderr"
+    if ! "$@" --help | grep -Fq 'allowed: safe, fast'; then
+        echo "Allowed values are missing from validation help: $label" >&2
+        exit 1
+    fi
+}
+
 verify_outputs() {
     local label="$1"
     local kind="$2"
     shift 2
-    if [[ "$kind" == "BuiltInTypes" ]]; then
+    if [[ "$kind" == "Validation" ]]; then
+        verify_validation "$label" "$@"
+    elif [[ "$kind" == "BuiltInTypes" ]]; then
         verify_built_ins "$label" "$@"
     else
         verify_custom "$label" "$@"
@@ -202,7 +236,7 @@ hash_outputs() {
         >"$evidence/$label-output-sha256.txt"
 }
 
-for folder in 12-BuiltInTypes 13-CustomConverters; do
+for folder in 05-Validation 12-BuiltInTypes 13-CustomConverters; do
     kind="${folder#*-}"
     for variant in Declarative Manual; do
         example="$kind.$variant"
@@ -243,7 +277,7 @@ if [[ -n "$smoke" ]]; then
     echo "Managed-only conversion example smokes verified; trimmed/native publication not run." \
         | tee "$evidence/result.txt"
 else
-    echo "All four conversion examples verified after distinct trimmed and NativeAOT publication." \
+    echo "All six validation and conversion examples verified after distinct trimmed and NativeAOT publication." \
         | tee "$evidence/result.txt"
 fi
 echo "Process-smoke evidence (not MSTest/Governance test-run acceptance): $evidence"

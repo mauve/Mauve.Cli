@@ -55,7 +55,26 @@ Infer option requiredness and positional minimum cardinality from the C# `requir
 **Acceptance:** A required command or pack property rejects missing input; an optional initializer supplies the same typed default to parsing and the handler and displays it in help. Explicit overrides win, and nonconstant initializers fail with MCLI002.
 **Security:** Initializer expressions are not executed during generation, model construction, help or completion. Required defaults are inert, sensitive defaults are never displayed, and unsupported expressions fail without generating an affected root.
 
+### FEAT-11-008 - Declarative validation
+Generate shared model validators for range, length, allowed values, nonempty, static custom providers and static cross-value methods on command and OptionPack declarations.
+**Acceptance:** A generated range or item constraint and a cross-value validator produce the same diagnostics and locations as equivalent explicit definitions.
+**Security:** Reject malformed or mismatched declarations with `MCLI002`; use direct static references without runtime reflection or command-object construction during validation.
+
 ## Design
+`CliRange`, `CliMinValue`, `CliMaxValue`, `CliLength`, `CliMinLength`,
+`CliMaxLength`, `CliNotEmpty`, `CliAllowedValues` and
+`CliValidator<TProvider>` are supported on command options, positionals and
+OptionPack options. Their target is the whole value or each collection item.
+Ranges accept integral bounds or invariant text and target supported numeric,
+`DateOnly`, `TimeOnly`, `DateTimeOffset`, and `TimeSpan` types. Temporal text
+uses the corresponding built-in converter's invariant formats. Static providers implement `ICliValidator<T>` for the exact
+target type. A `[CliCrossValidator]` method is static, returns
+`ValueValidationOutcome`, and binds parameters by case-insensitive matching
+of names and exact types to command/pack properties; ambiguous or unavailable
+bindings do not silently select a different property. `FailureForParameter`
+identifies an input by zero-based parameter index. Generated callbacks skip a
+method when a bound optional value is unavailable.
+
 XML documentation is optional. Command `<summary>` and `<remarks>` supply
 short and long descriptions; property `<summary>` supplies an option or
 positional description; pack `<summary>` supplies its short title and
@@ -168,6 +187,10 @@ recorded in the validation ledger.
 **Instruments:** none - source generation adds no runtime instrumentation.
 
 ## Verification
+`CliModelGeneratorTests.Generate_RegistersValidationRulesAndCrossValueTargets`
+and `Generate_RejectsInvalidValidationDeclarations` passed for FEAT-11-008;
+see the [validation ledger](../validation-gaps.md) for imported TRX evidence.
+
 `CliModelGeneratorTests.Generate_InfersRequiredAndConstantDefaultsForCommandsAndPacks`,
 `Generate_RequiresPositionalWithRequiredModifier`,
 `Generate_UsesTypedInvariantConstantDisplaysAndNullableDefaults`,

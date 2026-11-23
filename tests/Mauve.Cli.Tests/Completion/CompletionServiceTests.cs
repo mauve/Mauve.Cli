@@ -8,6 +8,7 @@ using Mauve.Cli.Completion;
 using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
+using Mauve.Cli.Validation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -17,6 +18,27 @@ namespace Mauve.Cli.Tests.Completion;
 public sealed class CompletionServiceTests
 {
     public required TestContext TestContext { get; set; }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-001")]
+    public async Task CompleteAsync_UsesAllowedValuesButSuppressesSensitiveDefinitions()
+    {
+        OptionDefinition mode = new("mode", typeof(string), OptionArity.RequiredScalar,
+            validators: [CliValidators.AllowedValues("fast", "safe")]);
+        OptionDefinition secret = new("secret", typeof(string), OptionArity.RequiredScalar, isSensitive: true,
+            validators: [CliValidators.AllowedValues("secret-value")]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(mode).AddOption(secret));
+        CompletionService service = new();
+
+        CompletionResult visible = await service.CompleteAsync(
+            new CompletionRequest(model, ["--mode=f"], 0, 8), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult hidden = await service.CompleteAsync(
+            new CompletionRequest(model, ["--secret="], 0, 9), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual("fast", visible.Candidates.Single().InsertionText);
+        Assert.IsEmpty(hidden.Candidates);
+    }
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]

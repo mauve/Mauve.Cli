@@ -16,6 +16,107 @@ namespace Mauve.Cli.Tests.Parsing;
 public sealed class CliParserTests
 {
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-005")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-006")]
+    public void Parse_BuiltInRulesAndCustomItemRejectionsUseValueCoordinates()
+    {
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar,
+            defaultValuePolicy: DefaultValuePolicy.Constant, defaultValue: 5,
+            validators: [CliValidators.Range(1, 10)]);
+        OptionDefinition tags = new("tag", typeof(IReadOnlyList<string>), OptionArity.RepeatedSingleCollection,
+            elementType: typeof(string),
+            validators:
+            [
+                CliValidators.Each<string>(CliValidators.StringLength(2, 8)),
+                CliValidators.Each<string>(new ValueValidator<string>(static (value, _) => value == "bad"
+                    ? throw new CliValidationException(ValueValidationOutcome.FailureAt("tag.bad", 1, "This tag is reserved."))
+                    : ValueValidationOutcome.Success))
+            ]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(count).AddOption(tags));
+        CliParser parser = new();
+
+        ParseResult scalar = parser.Parse(model, ["--count", "11"]);
+        ParseResult item = parser.Parse(model, ["--tag=ok", "--tag", "bad"]);
+        ParseResult inline = parser.Parse(model, ["--tag=ok", "--tag=x"]);
+        ParseResult valid = parser.Parse(model, ["--count=10", "--tag=ok"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, valid.Outcome);
+        Assert.AreEqual("range.invalid", scalar.Diagnostics[0].FailureCode);
+        Assert.AreEqual(0, scalar.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(1, scalar.Diagnostics[0].ValueTokenIndex);
+        StringAssert.Contains(scalar.Diagnostics[0].ToString(), "Value must be between 1 and 10 (inclusive).", StringComparison.Ordinal);
+        Assert.AreEqual("tag.bad", item.Diagnostics[0].FailureCode);
+        Assert.AreEqual(1, item.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(2, item.Diagnostics[0].ValueTokenIndex);
+        Assert.AreEqual(1, item.Diagnostics[0].ValueOffset);
+        StringAssert.Contains(item.Diagnostics[0].ToString(), "Item 2: This tag is reserved.", StringComparison.Ordinal);
+        Assert.AreEqual("length.invalid", inline.Diagnostics[0].FailureCode);
+        Assert.AreEqual(1, inline.Diagnostics[0].ValueTokenIndex);
+        Assert.AreEqual(6, inline.Diagnostics[0].ValueOffset);
+        StringAssert.Contains(inline.Diagnostics[0].ToString(), "Item 2: String length must be between 2 and 8 (inclusive).", StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-005")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-006")]
+    public void Parse_ExplainsCollectionAndCrossFailuresAndBoundsPublicMessages()
+    {
+        OptionDefinition tags = new("tag", typeof(IReadOnlyList<string>), OptionArity.RepeatedSingleCollection,
+            elementType: typeof(string), validators: [CliValidators.CollectionLength<string>(2, 4)]);
+        ParseResult collection = new CliParser().Parse(CommandModel.Create(new CommandBuilder("tool").AddOption(tags)), ["--tag=a"]);
+        StringAssert.Contains(collection.Diagnostics[0].ToString(), "Collection count must be between 2 and 4 (inclusive).", StringComparison.Ordinal);
+
+        ValueValidationOutcome rejection = ValueValidationOutcome.Failure("cross.bad", "Use a different combination.\n\u001b\u202e" + new string('a', 600));
+        CommandModel cross = CommandModel.Create(new CommandBuilder("tool").AddCrossValidator(_ => rejection));
+        ParseResult result = new CliParser().Parse(cross, []);
+        StringAssert.Contains(result.Diagnostics[0].ToString(), "Use a different combination.", StringComparison.Ordinal);
+        Assert.IsLessThanOrEqualTo(512, rejection.Message!.Length);
+        Assert.IsFalse(result.Diagnostics[0].Message.Contains('\n', StringComparison.Ordinal));
+        Assert.IsFalse(result.Diagnostics[0].Message.Contains('\u001b', StringComparison.Ordinal));
+        Assert.IsFalse(result.Diagnostics[0].Message.Contains('\u202e', StringComparison.Ordinal));
+
+        foreach (bool hidden in new[] { false, true })
+        {
+            OptionDefinition secret = new("secret", typeof(string), OptionArity.RequiredScalar,
+                isSensitive: !hidden, isHidden: hidden,
+                validators: [new ValueValidator<string>(static (_, _) => ValueValidationOutcome.Failure("secret.bad", "Private reason."))]);
+            PositionalDefinition path = new("path", typeof(string), isSensitive: !hidden, isHidden: hidden,
+                validators: [new ValueValidator<string>(static (_, _) => ValueValidationOutcome.Failure("secret.bad", "Private reason."))]);
+            CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(secret).AddPositional(path));
+            ParseResult redacted = new CliParser().Parse(model, ["--secret=value", "path"]);
+            Assert.HasCount(2, redacted.Diagnostics);
+            Assert.IsTrue(redacted.Diagnostics.All(static diagnostic => !diagnostic.ToString().Contains("Private reason.", StringComparison.Ordinal)));
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-006")]
+    public void Parse_CrossValidationTargetsAndContractFaultsAreDistinguished()
+    {
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(count)
+            .AddCrossValidator(_ => throw new CliValidationException(ValueValidationOutcome.Failure("cross.bad", count, message: "Choose a smaller count."))));
+        ParseResult result = new CliParser().Parse(model, ["--count=3"]);
+        Assert.AreEqual("cross.bad", result.Diagnostics[0].FailureCode);
+        Assert.AreEqual(0, result.Diagnostics[0].ValueTokenIndex);
+        Assert.AreEqual(8, result.Diagnostics[0].ValueOffset);
+        StringAssert.Contains(result.Diagnostics[0].ToString(), "Choose a smaller count.", StringComparison.Ordinal);
+
+        OptionDefinition foreign = new("other", typeof(int), OptionArity.RequiredScalar);
+        CommandModel invalid = CommandModel.Create(new CommandBuilder("tool").AddOption(count)
+            .AddCrossValidator(_ => ValueValidationOutcome.Failure("cross.bad", foreign)));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => new CliParser().Parse(invalid, ["--count=3"]));
+
+        OptionDefinition text = new("text", typeof(string), OptionArity.RequiredScalar,
+            validators: [new ValueValidator<string>(static (_, _) => ValueValidationOutcome.FailureAt("bad.offset", 5))]);
+        CommandModel invalidOffset = CommandModel.Create(new CommandBuilder("tool").AddOption(text));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => new CliParser().Parse(invalidOffset, ["--text=abc"]));
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-006")]
     public void Parse_HelpTreeHonorsHelpPrecedenceAndConflicts()

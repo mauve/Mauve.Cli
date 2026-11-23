@@ -26,6 +26,16 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private const string _directiveInclusionAttributeName = "Mauve.Cli.Declarations.CliDirectiveAttribute`1";
     private const string _optionPackAttributeName = "Mauve.Cli.Declarations.CliOptionPackAttribute";
     private const string _converterAttributeName = "Mauve.Cli.Declarations.CliConverterAttribute`1";
+    private const string _rangeAttributeName = "Mauve.Cli.Declarations.CliRangeAttribute";
+    private const string _minValueAttributeName = "Mauve.Cli.Declarations.CliMinValueAttribute";
+    private const string _maxValueAttributeName = "Mauve.Cli.Declarations.CliMaxValueAttribute";
+    private const string _lengthAttributeName = "Mauve.Cli.Declarations.CliLengthAttribute";
+    private const string _minLengthAttributeName = "Mauve.Cli.Declarations.CliMinLengthAttribute";
+    private const string _maxLengthAttributeName = "Mauve.Cli.Declarations.CliMaxLengthAttribute";
+    private const string _allowedAttributeName = "Mauve.Cli.Declarations.CliAllowedValuesAttribute";
+    private const string _notEmptyAttributeName = "Mauve.Cli.Declarations.CliNotEmptyAttribute";
+    private const string _validatorAttributeName = "Mauve.Cli.Declarations.CliValidatorAttribute`1";
+    private const string _crossValidatorAttributeName = "Mauve.Cli.Declarations.CliCrossValidatorAttribute";
     private const string _contextType = "global::Mauve.Cli.Invocation.CommandInvocationContext";
     private const string _packContextType = "global::Mauve.Cli.Invocation.OptionPackContext";
 
@@ -157,6 +167,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         {
             ReadCommandEdges(context, command, commands, syntaxTreeOrder);
             command.IsValid &= ReadPackInclusions(context, command.Symbol, command.Packs, packs);
+            command.IsValid &= ReadCrossValidators(context, command, syntaxTreeOrder);
             ReadCommandDirectives(context, command, directives, syntaxTreeOrder);
         }
 
@@ -335,6 +346,13 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             AttributeData? argumentAttribute = FindAttribute(property, _argumentAttributeName);
             if (optionAttribute is null && argumentAttribute is null)
             {
+                if (property.GetAttributes().Any(IsValidationAttribute))
+                {
+                    Report(context, _invalidMember, property.Locations.FirstOrDefault() ?? Location.None,
+                        "Validation attributes require a bound option or positional argument.");
+                    command.IsValid = false;
+                }
+
                 continue;
             }
 
@@ -445,6 +463,13 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
             if (optionAttribute is null)
             {
+                if (property.GetAttributes().Any(IsValidationAttribute))
+                {
+                    Report(context, _invalidMember, property.Locations.FirstOrDefault() ?? Location.None,
+                        "Validation attributes require a bound option.");
+                    pack.IsValid = false;
+                }
+
                 continue;
             }
 
@@ -869,6 +894,18 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
 
         if (!isDirective && !TryReadDefault(context, property, compilation, out defaultInfo))
+        {
+            return false;
+        }
+
+        if (isDirective && property.GetAttributes().Any(IsValidationAttribute))
+        {
+            Report(context, _invalidMember, GetLocation(attribute, property),
+                "Validation attributes are not supported on directive values.");
+            return false;
+        }
+
+        if (!isDirective && !ValidateValidationAttributes(context, property, compilation))
         {
             return false;
         }
@@ -1515,6 +1552,11 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             _ = builder.Append("        _ = command.AddPositional(").Append(ArgumentInfo.FieldName(suffix, index)).AppendLine(");");
         }
 
+        foreach (CrossValidatorInfo validator in command.CrossValidators)
+        {
+            EmitCrossValidator(builder, validator);
+        }
+
         foreach (ChildInfo child in command.Children)
         {
             _ = builder.Append("        _ = command.AddChild(")
@@ -1927,7 +1969,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         for (int index = 0; index < pack.Options.Count; index++)
         {
             OptionInfo option = pack.Options[index];
-            _ = builder.Append("    private static readonly global::Mauve.Cli.Definitions.OptionDefinition ")
+            _ = builder.Append("    internal static readonly global::Mauve.Cli.Definitions.OptionDefinition ")
                 .Append(OptionInfo.FieldName(suffix, index)).Append(" = ")
                 .Append(GenerateOption(option)).AppendLine(";");
         }
@@ -2001,7 +2043,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static string GenerateOption(OptionInfo option)
         => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name, option.Description,
-            GeneratePropertyConverter(option.Property), IsRequiredOption(option.Attribute, option.Property), option.Default);
+            GeneratePropertyConverter(option.Property), IsRequiredOption(option.Attribute, option.Property), option.Default,
+            GenerateValidators(option.Property));
 
     private static string GenerateOption(
         AttributeData attribute,
@@ -2010,7 +2053,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         string? description = null,
         string converter = "",
         bool isRequired = false,
-        DefaultInfo? defaultInfo = null)
+        DefaultInfo? defaultInfo = null,
+        string validators = "")
     {
         string? name = GetOptionLongName(attribute, inferredMemberName);
         int arityValue = GetOptionArity(attribute, valueType);
@@ -2071,6 +2115,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             barePolicy,
             shortName,
             GenerateDefault(defaultInfo),
+            validators,
             converter,
             environmentBinding,
             environmentName,
@@ -2106,8 +2151,443 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             ", isSensitive: ",
             GetNamedBoolean(argument.Attribute, "IsSensitive") ? "true" : "false",
             GenerateDefault(argument.Default),
+            GenerateValidators(argument.Property),
             GeneratePropertyConverter(argument.Property),
             ")");
+    }
+
+    private static bool IsValidationAttribute(AttributeData attribute) =>
+        IsAttribute(attribute, _rangeAttributeName) || IsAttribute(attribute, _lengthAttributeName)
+        || IsAttribute(attribute, _minValueAttributeName) || IsAttribute(attribute, _maxValueAttributeName)
+        || IsAttribute(attribute, _minLengthAttributeName) || IsAttribute(attribute, _maxLengthAttributeName)
+        || IsAttribute(attribute, _allowedAttributeName) || IsAttribute(attribute, _notEmptyAttributeName)
+        || IsAttribute(attribute, _validatorAttributeName);
+
+    private static bool ValidateValidationAttributes(
+        SourceProductionContext context, IPropertySymbol property, Compilation compilation)
+    {
+        bool valid = true;
+        bool collection = TryGetCollectionElementType(property.Type, out ITypeSymbol? element);
+        int allowedCount = 0;
+        decimal?[] lowerValues = new decimal?[2];
+        decimal?[] upperValues = new decimal?[2];
+        int[] lowerLengths = [0, 0];
+        int[] upperLengths = [int.MaxValue, int.MaxValue];
+        foreach (AttributeData attribute in property.GetAttributes().Where(IsValidationAttribute))
+        {
+            int target = GetNamedInt(attribute, "Target");
+            ITypeSymbol type = target == 1 && element is not null ? element : property.Type;
+            ITypeSymbol scalar = UnwrapNullable(type);
+            bool isString = scalar.SpecialType == SpecialType.System_String;
+            bool isCollection = TryGetCollectionElementType(type, out _);
+            bool ruleValid = target is 0 or 1 && (target == 0 || collection);
+            if (IsAttribute(attribute, _rangeAttributeName))
+            {
+                ruleValid &= TryReadTemporalRange(attribute, scalar, out _, out _)
+                    || (TryReadRange(attribute, out decimal minimum, out decimal maximum)
+                        && minimum <= maximum && IsSupportedRange(scalar.SpecialType, minimum, maximum));
+            }
+            else if (IsAttribute(attribute, _minValueAttributeName) || IsAttribute(attribute, _maxValueAttributeName))
+            {
+                ruleValid &= TryReadSingleBound(attribute, scalar, out _);
+            }
+            else if (IsAttribute(attribute, _lengthAttributeName))
+            {
+                int minimum = (int)attribute.ConstructorArguments[0].Value!;
+                int maximum = (int)attribute.ConstructorArguments[1].Value!;
+                ruleValid &= minimum >= 0 && maximum >= minimum && (isString || isCollection);
+            }
+            else if (IsAttribute(attribute, _minLengthAttributeName) || IsAttribute(attribute, _maxLengthAttributeName))
+            {
+                int bound = (int)attribute.ConstructorArguments[0].Value!;
+                ruleValid &= bound >= 0 && (isString || isCollection);
+            }
+            else if (IsAttribute(attribute, _notEmptyAttributeName))
+            {
+                ruleValid &= isString || isCollection;
+            }
+            else if (IsAttribute(attribute, _allowedAttributeName))
+            {
+                allowedCount++;
+                ImmutableArray<TypedConstant> values = attribute.ConstructorArguments[0].Values;
+                string?[] strings = [.. values.Select(static value => value.Value as string)];
+                ruleValid &= isString && strings.Length is > 0 and <= 512
+                    && strings.All(static value => value is not null && value.Length <= 512)
+                    && strings.Distinct(StringComparer.Ordinal).Count() == strings.Length && allowedCount == 1;
+            }
+            else
+            {
+                ITypeSymbol? provider = attribute.AttributeClass?.TypeArguments.FirstOrDefault();
+                ruleValid &= provider is INamedTypeSymbol named
+                    && compilation.IsSymbolAccessibleWithin(named, property.ContainingType)
+                    && named.AllInterfaces.Any(contract =>
+                        contract.OriginalDefinition.ToDisplayString() == "Mauve.Cli.Validation.ICliValidator<T>"
+                        && SymbolEqualityComparer.IncludeNullability.Equals(contract.TypeArguments[0], type));
+            }
+
+            if (!ruleValid)
+            {
+                Report(context, _invalidMember, GetLocation(attribute, property),
+                    "Validation constraints require compatible targets, valid bounds, and an accessible matching validator provider.");
+                valid = false;
+            }
+            else if (IsAttribute(attribute, _rangeAttributeName)
+                || IsAttribute(attribute, _minValueAttributeName) || IsAttribute(attribute, _maxValueAttributeName))
+            {
+                if (!IsAttribute(attribute, _maxValueAttributeName))
+                {
+                    decimal bound = GetBoundOrder(attribute.ConstructorArguments[0].Value, scalar);
+                    lowerValues[target] = lowerValues[target] is decimal previous ? Math.Max(previous, bound) : bound;
+                }
+
+                if (!IsAttribute(attribute, _minValueAttributeName))
+                {
+                    int index = IsAttribute(attribute, _rangeAttributeName) ? 1 : 0;
+                    decimal bound = GetBoundOrder(attribute.ConstructorArguments[index].Value, scalar);
+                    upperValues[target] = upperValues[target] is decimal previous ? Math.Min(previous, bound) : bound;
+                }
+            }
+            else if (IsAttribute(attribute, _lengthAttributeName)
+                || IsAttribute(attribute, _minLengthAttributeName) || IsAttribute(attribute, _maxLengthAttributeName))
+            {
+                if (!IsAttribute(attribute, _maxLengthAttributeName))
+                {
+                    lowerLengths[target] = Math.Max(lowerLengths[target], (int)attribute.ConstructorArguments[0].Value!);
+                }
+
+                if (!IsAttribute(attribute, _minLengthAttributeName))
+                {
+                    int index = IsAttribute(attribute, _lengthAttributeName) ? 1 : 0;
+                    upperLengths[target] = Math.Min(upperLengths[target], (int)attribute.ConstructorArguments[index].Value!);
+                }
+            }
+        }
+
+        for (int target = 0; target < 2; target++)
+        {
+            if (lowerValues[target] > upperValues[target] || lowerLengths[target] > upperLengths[target])
+            {
+                Report(context, _invalidMember, property.Locations.FirstOrDefault() ?? Location.None,
+                    "Validation minimums cannot exceed maximums.");
+                valid = false;
+            }
+        }
+
+        return valid;
+    }
+
+    private static decimal GetBoundOrder(object? value, ITypeSymbol type)
+    {
+        return value is string text && TryReadTemporalBound(type.ToDisplayString(), text, out _, out long ticks)
+            ? ticks
+            : decimal.Parse(Convert.ToString(value, CultureInfo.InvariantCulture),
+                NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryReadRange(AttributeData attribute, out decimal minimum, out decimal maximum)
+    {
+        string? minimumText = Convert.ToString(attribute.ConstructorArguments[0].Value, CultureInfo.InvariantCulture);
+        string? maximumText = Convert.ToString(attribute.ConstructorArguments[1].Value, CultureInfo.InvariantCulture);
+        bool minimumValid = decimal.TryParse(minimumText, NumberStyles.Number | NumberStyles.AllowExponent,
+            CultureInfo.InvariantCulture, out minimum);
+        bool maximumValid = decimal.TryParse(maximumText, NumberStyles.Number | NumberStyles.AllowExponent,
+            CultureInfo.InvariantCulture, out maximum);
+        return minimumValid && maximumValid;
+    }
+
+    private static bool TryReadSingleBound(AttributeData attribute, ITypeSymbol type, out string expression)
+    {
+        expression = string.Empty;
+        object? value = attribute.ConstructorArguments[0].Value;
+        if (value is string text && TryReadTemporalBound(type.ToDisplayString(), text, out expression, out _))
+        {
+            return true;
+        }
+
+        string? number = Convert.ToString(value, CultureInfo.InvariantCulture);
+        if (!decimal.TryParse(number, NumberStyles.Number | NumberStyles.AllowExponent,
+            CultureInfo.InvariantCulture, out decimal bound) || !IsSupportedRange(type.SpecialType, bound, bound))
+        {
+            return false;
+        }
+
+        expression = $"({FormatType(type)})({FormatConstant(bound)})";
+        return true;
+    }
+
+    private static bool TryReadTemporalRange(
+        AttributeData attribute, ITypeSymbol type, out string minimum, out string maximum)
+    {
+        minimum = string.Empty;
+        maximum = string.Empty;
+        if (attribute.ConstructorArguments[0].Value is not string minimumText
+            || attribute.ConstructorArguments[1].Value is not string maximumText)
+        {
+            return false;
+        }
+
+        string name = type.ToDisplayString();
+        return TryReadTemporalBound(name, minimumText, out minimum, out long minimumTicks)
+            && TryReadTemporalBound(name, maximumText, out maximum, out long maximumTicks)
+            && minimumTicks <= maximumTicks;
+    }
+
+    private static bool TryReadTemporalBound(string type, string text, out string expression, out long ticks)
+    {
+        expression = string.Empty;
+        ticks = 0;
+        if (type == "System.DateOnly"
+            && DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date))
+        {
+            ticks = date.Ticks;
+            expression = $"new global::System.DateOnly({date.Year}, {date.Month}, {date.Day})";
+            return true;
+        }
+
+        if (type == "System.TimeOnly"
+            && DateTime.TryParseExact(text, ["HH:mm", "HH:mm:ss", "HH:mm:ss.FFFFFFF"],
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime time))
+        {
+            ticks = time.TimeOfDay.Ticks;
+            expression = $"new global::System.TimeOnly({ticks.ToString(CultureInfo.InvariantCulture)}L)";
+            return true;
+        }
+
+        if (type == "System.TimeSpan"
+            && TimeSpan.TryParseExact(text, "c", CultureInfo.InvariantCulture, out TimeSpan duration))
+        {
+            ticks = duration.Ticks;
+            expression = $"new global::System.TimeSpan({ticks.ToString(CultureInfo.InvariantCulture)}L)";
+            return true;
+        }
+
+        if (type == "System.DateTimeOffset")
+        {
+            bool utc = text.EndsWith("Z", StringComparison.Ordinal);
+            string suffix = utc ? "'Z'" : "zzz";
+            string[] formats =
+            [
+                "yyyy-MM-dd'T'HH:mm" + suffix,
+                "yyyy-MM-dd'T'HH:mm:ss" + suffix,
+                "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF" + suffix
+            ];
+            DateTimeStyles style = utc ? DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal : DateTimeStyles.None;
+            if (DateTimeOffset.TryParseExact(text, formats, CultureInfo.InvariantCulture, style, out DateTimeOffset timestamp))
+            {
+                ticks = timestamp.UtcDateTime.Ticks;
+                expression = $"new global::System.DateTimeOffset({timestamp.Ticks.ToString(CultureInfo.InvariantCulture)}L, new global::System.TimeSpan({timestamp.Offset.Ticks.ToString(CultureInfo.InvariantCulture)}L))";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSupportedRange(SpecialType type, decimal minimum, decimal maximum)
+    {
+        bool integralBounds = decimal.Truncate(minimum) == minimum && decimal.Truncate(maximum) == maximum;
+        return (type is < SpecialType.System_SByte or > SpecialType.System_UInt64 || integralBounds)
+            && (int)type switch
+            {
+                (int)SpecialType.System_SByte => minimum >= sbyte.MinValue && maximum <= sbyte.MaxValue,
+                (int)SpecialType.System_Byte => minimum >= byte.MinValue && maximum <= byte.MaxValue,
+                (int)SpecialType.System_Int16 => minimum >= short.MinValue && maximum <= short.MaxValue,
+                (int)SpecialType.System_UInt16 => minimum >= ushort.MinValue && maximum <= ushort.MaxValue,
+                (int)SpecialType.System_Int32 => minimum >= int.MinValue && maximum <= int.MaxValue,
+                (int)SpecialType.System_UInt32 => minimum >= uint.MinValue && maximum <= uint.MaxValue,
+                (int)SpecialType.System_Int64 => minimum >= long.MinValue && maximum <= long.MaxValue,
+                (int)SpecialType.System_UInt64 => minimum >= ulong.MinValue && maximum <= ulong.MaxValue,
+                (int)SpecialType.System_Single or (int)SpecialType.System_Double
+                    or (int)SpecialType.System_Decimal => true,
+                _ => false
+            };
+    }
+
+    private static string GenerateValidators(IPropertySymbol property)
+    {
+        List<string> validators = [];
+        foreach (AttributeData attribute in property.GetAttributes().Where(IsValidationAttribute))
+        {
+            bool items = GetNamedInt(attribute, "Target") == 1;
+            ITypeSymbol type = items ? GetScalarType(property.Type) : property.Type;
+            ITypeSymbol unwrapped = UnwrapNullable(type);
+            string typeName = FormatType(unwrapped);
+            string prefix = "global::Mauve.Cli.Validation.CliValidators.";
+            string expression;
+            if (IsAttribute(attribute, _rangeAttributeName))
+            {
+                if (TryReadTemporalRange(attribute, unwrapped, out string minimumExpression, out string maximumExpression))
+                {
+                    expression = $"{prefix}Range<{typeName}>({minimumExpression}, {maximumExpression})";
+                }
+                else
+                {
+                    _ = TryReadRange(attribute, out decimal minimum, out decimal maximum);
+                    expression = $"{prefix}Range<{typeName}>(({typeName})({FormatConstant(minimum)}), ({typeName})({FormatConstant(maximum)}))";
+                }
+                if (!SymbolEqualityComparer.Default.Equals(type, unwrapped))
+                {
+                    expression = $"{prefix}Nullable<{typeName}>({expression})";
+                }
+
+            }
+            else if (IsAttribute(attribute, _minValueAttributeName) || IsAttribute(attribute, _maxValueAttributeName))
+            {
+                _ = TryReadSingleBound(attribute, unwrapped, out string bound);
+                string method = IsAttribute(attribute, _minValueAttributeName) ? "Minimum" : "Maximum";
+                expression = $"{prefix}{method}<{typeName}>({bound})";
+                if (!SymbolEqualityComparer.Default.Equals(type, unwrapped))
+                {
+                    expression = $"{prefix}Nullable<{typeName}>({expression})";
+                }
+            }
+            else if (IsAttribute(attribute, _lengthAttributeName))
+            {
+                string minimum = Convert.ToInt32(attribute.ConstructorArguments[0].Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+                string maximum = Convert.ToInt32(attribute.ConstructorArguments[1].Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+                expression = unwrapped.SpecialType == SpecialType.System_String
+                    ? $"{prefix}StringLength({minimum}, {maximum})"
+                    : $"{prefix}CollectionLength<{FormatType(GetScalarType(type))}>({minimum}, {maximum})";
+            }
+            else if (IsAttribute(attribute, _minLengthAttributeName) || IsAttribute(attribute, _maxLengthAttributeName))
+            {
+                string bound = Convert.ToInt32(attribute.ConstructorArguments[0].Value, CultureInfo.InvariantCulture)
+                    .ToString(CultureInfo.InvariantCulture);
+                string minimum = IsAttribute(attribute, _minLengthAttributeName) ? bound : "0";
+                string maximum = IsAttribute(attribute, _maxLengthAttributeName) ? bound : "global::System.Int32.MaxValue";
+                expression = unwrapped.SpecialType == SpecialType.System_String
+                    ? $"{prefix}StringLength({minimum}, {maximum})"
+                    : $"{prefix}CollectionLength<{FormatType(GetScalarType(type))}>({minimum}, {maximum})";
+            }
+            else if (IsAttribute(attribute, _notEmptyAttributeName))
+            {
+                expression = unwrapped.SpecialType == SpecialType.System_String
+                    ? $"{prefix}NotEmpty()"
+                    : $"{prefix}NotEmptyCollection<{FormatType(GetScalarType(type))}>()";
+            }
+            else if (IsAttribute(attribute, _allowedAttributeName))
+            {
+                string values = string.Join(", ", attribute.ConstructorArguments[0].Values.Select(static value => Literal(value.Value as string)));
+                expression = $"{prefix}AllowedValues({values})";
+            }
+            else
+            {
+                expression = $"{prefix}Provider<{FormatType(type)}, {FormatType(attribute.AttributeClass!.TypeArguments[0])}>()";
+            }
+
+            validators.Add(items ? $"{prefix}Each<{FormatType(type)}>({expression})" : expression);
+        }
+
+        return validators.Count == 0 ? string.Empty
+            : string.Concat(", validators: new global::Mauve.Cli.Validation.IValueValidator[] { ",
+                string.Join(", ", validators), " }");
+    }
+
+    private static bool ReadCrossValidators(
+        SourceProductionContext context, CommandInfo command, IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+    {
+        List<CrossParameterInfo> available = [];
+        string suffix = GetStableSuffix(command.Symbol);
+        for (int index = 0; index < command.Options.Count; index++)
+        {
+            available.Add(new CrossParameterInfo(command.Options[index].Property, OptionInfo.FieldName(suffix, index), true));
+        }
+
+        for (int index = 0; index < command.Arguments.Count; index++)
+        {
+            available.Add(new CrossParameterInfo(command.Arguments[index].Property, ArgumentInfo.FieldName(suffix, index), false));
+        }
+
+        HashSet<PackInfo> visited = [];
+        foreach (PackInclusionInfo inclusion in command.Packs)
+        {
+            CollectCrossPack(inclusion.Pack, available, visited);
+        }
+
+        bool valid = true;
+        foreach (IMethodSymbol method in command.Symbol.GetMembers().OfType<IMethodSymbol>()
+            .Where(static method => FindAttribute(method, _crossValidatorAttributeName) is not null)
+            .OrderBy(method => GetSourceOrder(FindAttribute(method, _crossValidatorAttributeName)!, method, syntaxTreeOrder)))
+        {
+            List<CrossParameterInfo> parameters = [];
+            bool methodValid = method.IsStatic && !method.IsGenericMethod
+                && method.ReturnType.ToDisplayString() == "Mauve.Cli.Validation.ValueValidationOutcome";
+            foreach (IParameterSymbol parameter in method.Parameters)
+            {
+                CrossParameterInfo[] matches = [.. available.Where(item =>
+                    string.Equals(item.Property.Name, parameter.Name, StringComparison.OrdinalIgnoreCase)
+                    && SymbolEqualityComparer.IncludeNullability.Equals(item.Property.Type, parameter.Type))];
+                if (parameter.RefKind != RefKind.None || matches.Length != 1)
+                {
+                    methodValid = false;
+                }
+                else
+                {
+                    parameters.Add(matches[0]);
+                }
+            }
+
+            if (!methodValid)
+            {
+                Report(context, _invalidMember, method.Locations.FirstOrDefault() ?? Location.None,
+                    "Cross validators must be static, return ValueValidationOutcome, and use uniquely matching bound property parameters.");
+                valid = false;
+            }
+            else
+            {
+                command.CrossValidators.Add(new CrossValidatorInfo(method, parameters));
+            }
+        }
+
+        return valid;
+    }
+
+    private static void CollectCrossPack(PackInfo pack, List<CrossParameterInfo> available, HashSet<PackInfo> visited)
+    {
+        if (!visited.Add(pack))
+        {
+            return;
+        }
+
+        string suffix = GetStableSuffix(pack.Symbol);
+        for (int index = 0; index < pack.Options.Count; index++)
+        {
+            string field = string.Concat(FormatType(pack.Symbol), ".", OptionInfo.FieldName(suffix, index));
+            available.Add(new CrossParameterInfo(pack.Options[index].Property, field, true));
+        }
+
+        foreach (PackInclusionInfo inclusion in pack.Inclusions)
+        {
+            CollectCrossPack(inclusion.Pack, available, visited);
+        }
+    }
+
+    private static void EmitCrossValidator(StringBuilder builder, CrossValidatorInfo validator)
+    {
+        _ = builder.AppendLine("        _ = command.AddCrossValidator(static context =>");
+        _ = builder.AppendLine("        {");
+        for (int index = 0; index < validator.Parameters.Count; index++)
+        {
+            CrossParameterInfo parameter = validator.Parameters[index];
+            _ = builder.Append("            if (!context.TryGet").Append(parameter.IsOption ? "Option" : "Positional")
+                .Append("Value<").Append(FormatType(parameter.Property.Type)).Append(">(")
+                .Append(parameter.Field).Append(", out var value").Append(index.ToString(CultureInfo.InvariantCulture))
+                .AppendLine(")) return global::Mauve.Cli.Validation.ValueValidationOutcome.Success;");
+        }
+
+        string args = string.Join(", ", Enumerable.Range(0, validator.Parameters.Count)
+            .Select(static index => "value" + index.ToString(CultureInfo.InvariantCulture) + "!"));
+        string fields = string.Join(", ", validator.Parameters.Select(static parameter => parameter.Field));
+        _ = builder.AppendLine("            try");
+        _ = builder.AppendLine("            {");
+        _ = builder.Append("                return ").Append(EscapeIdentifier(validator.Method.Name))
+            .Append('(').Append(args).Append(").ResolveParameters(").Append(fields).AppendLine(");");
+        _ = builder.AppendLine("            }");
+        _ = builder.AppendLine("            catch (global::Mauve.Cli.Validation.CliValidationException exception)");
+        _ = builder.AppendLine("            {");
+        _ = builder.Append("                return exception.Outcome.ResolveParameters(").Append(fields).AppendLine(");");
+        _ = builder.AppendLine("            }");
+        _ = builder.AppendLine("        });");
     }
 
     private static string GenerateDefault(DefaultInfo? defaultInfo) => defaultInfo is null
@@ -2849,9 +3329,27 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public List<ITypeSymbol> NullableConverters { get; } = [];
 
+        public List<CrossValidatorInfo> CrossValidators { get; } = [];
+
         public IMethodSymbol? Handler { get; set; }
 
         public bool IsValid { get; set; } = true;
+    }
+
+    private sealed class CrossParameterInfo(IPropertySymbol property, string field, bool isOption)
+    {
+        public IPropertySymbol Property { get; } = property;
+
+        public string Field { get; } = field;
+
+        public bool IsOption { get; } = isOption;
+    }
+
+    private sealed class CrossValidatorInfo(IMethodSymbol method, List<CrossParameterInfo> parameters)
+    {
+        public IMethodSymbol Method { get; } = method;
+
+        public List<CrossParameterInfo> Parameters { get; } = parameters;
     }
 
     private sealed class DirectiveInfo(

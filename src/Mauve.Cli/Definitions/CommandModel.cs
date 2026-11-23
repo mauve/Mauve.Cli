@@ -695,6 +695,11 @@ with(StringComparer.Ordinal),             command.Name
             }
         }
 
+        if (option.Validators.OfType<IAllowedValues>().Count(static validator => validator.Values.Count > 0) > 1)
+        {
+            throw InvalidModel("An option cannot have multiple allowed-value sets.");
+        }
+
         HashSet<string> names = [with(StringComparer.Ordinal)];
         if (option.LongName is string canonicalLongName)
         {
@@ -833,6 +838,11 @@ with(StringComparer.Ordinal),             command.Name
             {
                 throw InvalidModel(string.Create(CultureInfo.InvariantCulture, $"Validator for positional '{positional.Name}' has the wrong value type."));
             }
+        }
+
+        if (positional.Validators.OfType<IAllowedValues>().Count(static validator => validator.Values.Count > 0) > 1)
+        {
+            throw InvalidModel("A positional argument cannot have multiple allowed-value sets.");
         }
 
         if (positional.MinimumValues is < 0 or > 1)
