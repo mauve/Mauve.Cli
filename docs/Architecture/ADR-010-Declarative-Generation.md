@@ -32,8 +32,9 @@ and generator diagnostics had not previously been selected.
   Normalize both forms into one graph, order sibling edges by the compilation
   syntax tree and attribute span, reject all declared cycles, and report
   `MCLI003` on both attributes when an edge uses both forms.
-- Require top-level, non-generic partial command classes and partial get-only
-  bound properties. Infer order from compilation syntax-tree order and source
+- Require top-level, non-generic partial command classes and get/init
+  auto-properties for bound command and pack members. Standalone directive
+  values remain partial get-only properties. Infer order from compilation syntax-tree order and source
   span, including declarations split across partial class files.
 - Infer omitted command, option and positional names as kebab-case C#
   identifiers, stripping a trailing `Command` suffix from command types.
@@ -51,6 +52,11 @@ and generator diagnostics had not previously been selected.
   the declared type. `OptionArity.Counting` is an explicit `int`/`int?`
   override whose use is enabled by parser/host syntax configuration; it is
   never inferred from an integer property.
+- Infer option requiredness and positional minimum from C# `required` and the
+  exact DataAnnotations `RequiredAttribute`, unless a named CLI override is
+  supplied. Use Roslyn to evaluate supported constant initializers into typed
+  parser defaults and invariant help display metadata. Required defaults stay
+  inert and sensitive defaults stay hidden under FEAT-06 and FEAT-08.
 - Preserve omitted optional display metadata as `null`; explicit empty text is
   not rewritten to omission.
   Require handlers to be instance methods with no parameters, one
@@ -58,9 +64,10 @@ and generator diagnostics had not previously been selected.
   supported by FEAT-09.
 - Generate one deterministic partial source per command and expose
   `CreateModel` and `CreateBuilder` on each declared root. Generated handlers
-  directly construct the selected command, attach an invocation-scoped
-  binding context, and call the declared method. Runtime assembly scanning
-  is not used.
+  directly construct the selected command, initialize its properties from the
+  validated parse result, and call the declared method. No command object is
+  created for parse-only, help or completion. Runtime assembly scanning is not
+  used; handlers can request the invocation context for presence and origin.
 - Make each valid generated root implement `IGeneratedCliCommand`, whose
   static model-factory contract is satisfied by the generated `CreateModel`.
   Implement `ISynchronousGeneratedCliCommand` only when every handler in the
@@ -73,8 +80,8 @@ and generator diagnostics had not previously been selected.
   visible-name collisions. Diagnostics contain invariant guidance, not
   declared literal values. An invalid root emits no root registration source.
 - Keep unsupported declaration features explicit errors. The API does not
-  infer defaults from property initializers or optional-scalar token syntax
-  from nullability. Static converter providers, generated enum maps and union
+  infer optional-scalar token syntax from nullability or execute nonconstant
+  initializer expressions. Static converter providers, generated enum maps and union
   factories are now supported under
   [ADR-015](ADR-015-Converter-Ownership-And-Unions.md); arbitrary
   reflection-discovered callbacks remain unsupported. Callers can still
@@ -84,14 +91,14 @@ and generator diagnostics had not previously been selected.
 - **Superseded for OptionPack declarations by
   [ADR-011](ADR-011-OptionPack-Composition.md):** use
   `[CliOptionPack(Title = ..., Description = ...)]` partial pack classes with
-  `[CliOption]` partial option properties, and declare nested pack dependencies
+  `[CliOption]` get/init option properties, and declare nested pack dependencies
   in command/pack constructors. Every generated command and pack must have
   exactly one instance constructor; a parameterless constructor is supported,
   while constructor parameters may only be declared pack dependencies.
   Unsupported parameter types or ambiguous multiple constructors are invalid
   members (MCLI002) and suppress root registration. The generator constructs
-  and binds nested packs before parent constructors and attaches each
-  instance's own context afterward. Generated root builders continue to
+  and binds nested packs before parent constructors and initializes each
+  instance's own properties after its constructor. Generated root builders continue to
   permit explicit root-owned options before shared `CommandModel.Create`
   validation.
 
@@ -107,5 +114,5 @@ rules.
 
 Affected requirements:
 [FEAT-11](../Requirements/FEAT-11-Declarative-Api-And-Generation.md),
-including FEAT-11-005 and FEAT-11-006, and
+including FEAT-11-005, FEAT-11-006 and FEAT-11-007, and
 [FEAT-14](../Requirements/FEAT-14-OptionPacks.md).

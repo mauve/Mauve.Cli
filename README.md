@@ -70,21 +70,25 @@ if (result.Outcome == ParseOutcome.Validated
 
 ```csharp
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using Mauve.Cli.Declarations;
-using Mauve.Cli.Definitions;
 
 [CliCommand(IsRoot = true)]
 public partial class GreetCommand
 {
-    [CliOption(IsRequired = true)]
-    public partial string Name { get; }
+    [Required]
+    [CliOption]
+    public required string Name { get; init; }
+
+    [CliOption]
+    public string Greeting { get; init; } = "Hello";
 
     [CliHandler]
     private async Task<int> Run()
     {
         await Task.Yield();
-        Console.WriteLine($"Hello, {Name}!");
+        Console.WriteLine($"{Greeting}, {Name}!");
         return 0;
     }
 }
@@ -95,6 +99,9 @@ dispatch. It derives `greet` and `--name` from the C# identifiers and derives
 the scalar arity from `string`. Option packs can group reusable options in
 either API. Generated handlers may return `void`, `int`, `Task`, `Task<int>`,
 `ValueTask`, or `ValueTask<int>`; async-void handlers are unsupported.
+Requiredness comes from `[Required]` or the C# `required` modifier unless
+explicitly overridden. Supported constant initializers supply parser defaults
+and default text in help; sensitive and required defaults are not shown.
 
 Declare command relationships on a parent with `[CliChild<TChild>]` or on a
 child with `[CliParent<TParent>]`; both forms can be mixed in one hierarchy.

@@ -41,7 +41,7 @@ dotnet run --project examples/13-CustomConverters/Manual -- \
 | Value | Declarative registration | Explicit registration |
 | --- | --- | --- |
 | `--code`, positional `input`, audit `code` | `[CliConverter<BuildCodeConverter>(CompletionSafe = true)]` on `BuildCode` automatically registers the type in the generated root. | `root.RegisterConverter<BuildCode, BuildCodeConverter>(completionSafe: true)` registers the model-wide provider. |
-| `--mask`, audit `mask` | `[CliConverter<HexIntConverter>(CompletionSafe = true)]` on the bound partial property overrides just that definition. | `ValueConverterRegistration.Create<int, HexIntConverter>(completionSafe: true)` is passed to the option or directive value definition. |
+| `--mask`, audit `mask` | `[CliConverter<HexIntConverter>(CompletionSafe = true)]` on the bound property overrides just that definition. | `ValueConverterRegistration.Create<int, HexIntConverter>(completionSafe: true)` is passed to the option or directive value definition. |
 | `--count` | No override; uses built-in decimal `int` parsing. | No override; uses the same built-in parsing. |
 
 Standalone declarative directive properties use `[CliOption]` to declare

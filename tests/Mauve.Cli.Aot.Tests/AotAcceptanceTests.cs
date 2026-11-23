@@ -32,6 +32,10 @@ public sealed class AotAcceptanceTests
         Assert.AreSequenceEqual(["aot-todo add --count 2 AAA", "native-todo add --count 2 AAA"], [.. help.Examples]);
         await AotScenario.VerifyAsync(generated, null).ConfigureAwait(false);
 
+        CommandModel defaults = AotConversionCommand.CreateModel();
+        Assert.IsTrue(defaults.Root.Options.Single(static option => option.Name == "--choice").IsRequired);
+        Assert.AreEqual("classic", defaults.Root.Options.Single(static option => option.Name == "--flavor").DefaultValue);
+        StringAssert.Contains(HelpTextRenderer.Render(HelpDocument.Create(defaults)), "default: classic", StringComparison.Ordinal);
         CommandModel explicitModel = AotScenario.CreateExplicitModel(out ScenarioHandles explicitHandles);
         await AotScenario.VerifyAsync(explicitModel, explicitHandles).ConfigureAwait(false);
         await AotConversionScenario.VerifyAsync().ConfigureAwait(false);

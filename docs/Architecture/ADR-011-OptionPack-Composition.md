@@ -36,7 +36,7 @@ ordinary definitions governed by existing scope, conversion and result rules.
   runtime context key contract. Generated declarations do not ask users for
   inclusion keys.
 - Declare a generated pack as a `[CliOptionPack(Title = ..., Description = ...)]`
-  partial class, with `[CliOption]` partial properties for its options.
+  partial class, with `[CliOption]` get/init properties for its options.
   Omitted Title and Description come from XML summary and remarks respectively,
   following FEAT-11-006; explicit attribute values take precedence. This
   metadata inference does not alter grouping identity or option scope.
@@ -53,8 +53,8 @@ ordinary definitions governed by existing scope, conversion and result rules.
   runtime context contract; do not add public type-based lookup or a general
   dependency-injection mechanism.
 - Construct a fresh pack graph per invocation, recursively constructing and
-  binding nested packs before invoking a parent constructor. Attach each
-  instance's own scoped context after its constructor returns. Constructors
+  binding nested packs before invoking a parent constructor. Initialize each
+  instance's own properties after its constructor returns. Constructors
   receive declared pack dependencies, not arbitrary services.
 - Infer option order from source order and ordinary option arity from property
   type. Generated root builders continue to expose `CreateBuilder()` so

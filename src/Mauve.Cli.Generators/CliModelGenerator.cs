@@ -111,7 +111,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 AttributeData? attribute = FindAttribute(type, _optionPackAttributeName);
                 if (attribute is not null)
                 {
-                    packs.Add(type, CreatePackInfo(context, type, attribute, syntaxTreeOrder));
+                    packs.Add(type, CreatePackInfo(context, type, attribute, syntaxTreeOrder, compilation));
                 }
             }
         }
@@ -130,7 +130,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            CommandInfo command = CreateCommandInfo(context, type, attribute, syntaxTreeOrder);
+            CommandInfo command = CreateCommandInfo(context, type, attribute, syntaxTreeOrder, compilation);
             commands.Add(type, command);
         }
 
@@ -142,7 +142,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 AttributeData? attribute = FindAttribute(type, _directiveAttributeName);
                 if (attribute is not null && GetConstructorString(attribute, 0) is null)
                 {
-                    directives.Add(type, CreateDirectiveInfo(context, type, attribute, syntaxTreeOrder));
+                    directives.Add(type, CreateDirectiveInfo(context, type, attribute, syntaxTreeOrder, compilation));
                 }
             }
         }
@@ -279,7 +279,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         SourceProductionContext context,
         INamedTypeSymbol symbol,
         AttributeData attribute,
-        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder,
+        Compilation compilation)
     {
         string name = GetConstructorString(attribute, 0) ?? DeriveCommandName(symbol.Name);
         bool isRoot = GetNamedBoolean(attribute, "IsRoot");
@@ -344,7 +345,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (!ValidateProperty(context, property, optionAttribute ?? argumentAttribute!))
+            if (!ValidateProperty(context, property, optionAttribute ?? argumentAttribute!, compilation, out DefaultInfo? defaultInfo))
             {
                 command.IsValid = false;
                 continue;
@@ -360,12 +361,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             if (optionAttribute is not null)
             {
                 command.Options.Add(new OptionInfo(property, optionAttribute, sourceOrder,
-                    GetDisplayString(optionAttribute, "Description", propertyDocumentation.Summary)));
+                    GetDisplayString(optionAttribute, "Description", propertyDocumentation.Summary), defaultInfo));
             }
             else
             {
                 command.Arguments.Add(new ArgumentInfo(property, argumentAttribute!, sourceOrder,
-                    GetDisplayString(argumentAttribute!, "Description", propertyDocumentation.Summary)));
+                    GetDisplayString(argumentAttribute!, "Description", propertyDocumentation.Summary), defaultInfo));
             }
         }
 
@@ -402,7 +403,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         SourceProductionContext context,
         INamedTypeSymbol symbol,
         AttributeData attribute,
-        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder,
+        Compilation compilation)
     {
         CliXmlDocumentation documentation = ReadDocumentation(context, symbol, attribute, readExamples: false);
         PackInfo pack = new(symbol, attribute,
@@ -446,7 +448,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (!ValidateProperty(context, property, optionAttribute))
+            if (!ValidateProperty(context, property, optionAttribute, compilation, out DefaultInfo? defaultInfo))
             {
                 pack.IsValid = false;
                 continue;
@@ -458,7 +460,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 property,
                 optionAttribute,
                 GetSourceOrder(optionAttribute, property, syntaxTreeOrder),
-                GetDisplayString(optionAttribute, "Description", propertyDocumentation.Summary)));
+                GetDisplayString(optionAttribute, "Description", propertyDocumentation.Summary),
+                defaultInfo));
         }
 
         pack.Options.Sort(static (left, right) => left.SourceOrder.CompareTo(right.SourceOrder));
@@ -467,8 +470,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         string[] fieldNames = [.. pack.Options.Select((_, index) => OptionInfo.FieldName(suffix, index))];
         if (fieldNames.Any(fieldName => symbol.GetMembers(fieldName).Length > 0)
             || symbol.GetMembers("__MauveBuildPack_" + suffix).Length > 0
-            || symbol.GetMembers("__MauveCreatePack_" + suffix).Length > 0
-            || symbol.GetMembers("__mauvePackContext_" + suffix).Length > 0)
+            || symbol.GetMembers("__MauveCreatePack_" + suffix).Length > 0)
         {
             Report(context, _invalidDeclaration, GetLocation(attribute, symbol), "A generated option-pack member conflicts with a declared member.");
             pack.IsValid = false;
@@ -492,6 +494,31 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
 
         bool valid = true;
+        foreach (ISymbol member in owner.GetMembers())
+        {
+            if (member is IFieldSymbol { IsRequired: true }
+                || (member is IPropertySymbol { IsRequired: true } requiredProperty
+                    && FindAttribute(requiredProperty, _optionAttributeName) is null
+                    && FindAttribute(requiredProperty, _argumentAttributeName) is null))
+            {
+                Report(context, _invalidMember, member.Locations.FirstOrDefault() ?? Location.None,
+                    "Required command and option-pack members must be declared CLI properties.");
+                valid = false;
+            }
+        }
+
+        for (INamedTypeSymbol? ancestor = owner.BaseType; ancestor is not null; ancestor = ancestor.BaseType)
+        {
+            if (ancestor.GetMembers().Any(static member =>
+                member is IPropertySymbol { IsRequired: true } or IFieldSymbol { IsRequired: true }))
+            {
+                Report(context, _invalidMember, owner.Locations.FirstOrDefault() ?? Location.None,
+                    "Commands and option packs cannot inherit required members.");
+                valid = false;
+                break;
+            }
+        }
+
         HashSet<INamedTypeSymbol> includedTypes = [with(SymbolEqualityComparer.Default)];
         foreach (IParameterSymbol parameter in constructors[0].Parameters)
         {
@@ -526,7 +553,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         SourceProductionContext context,
         INamedTypeSymbol symbol,
         AttributeData attribute,
-        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder)
+        IReadOnlyDictionary<SyntaxTree, int> syntaxTreeOrder,
+        Compilation compilation)
     {
         string name = GetConstructorString(attribute, 0) ?? DeriveDirectiveName(symbol.Name);
         DirectiveInfo directive = new(symbol, attribute, name);
@@ -565,7 +593,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (!ValidateProperty(context, property, optionAttribute))
+            if (!ValidateProperty(context, property, optionAttribute, compilation, out _, isDirective: true))
             {
                 directive.IsValid = false;
                 continue;
@@ -726,6 +754,13 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             return false;
         }
 
+        if (method.ContainingType.GetMembers().Any(static member =>
+            member is IPropertySymbol { IsRequired: true } or IFieldSymbol { IsRequired: true }))
+        {
+            Report(context, _invalidMember, GetLocation(methodDirective.Attribute, method), "A method directive cannot construct a root with required members before command input is validated.");
+            return false;
+        }
+
         return true;
     }
 
@@ -764,8 +799,12 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     private static bool ValidateProperty(
         SourceProductionContext context,
         IPropertySymbol property,
-        AttributeData attribute)
+        AttributeData attribute,
+        Compilation compilation,
+        out DefaultInfo? defaultInfo,
+        bool isDirective = false)
     {
+        defaultInfo = null;
         bool isOption = IsAttribute(attribute, _optionAttributeName);
         string? declaredOptionName = isOption ? GetOptionLongName(attribute, property.Name) : null;
         string declaredName = isOption ? declaredOptionName ?? string.Empty
@@ -809,18 +848,28 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             .Any(static declaration => declaration.ExpressionBody is not null
                 || declaration.AccessorList?.Accessors.Any(static accessor =>
                     accessor.Body is not null || accessor.ExpressionBody is not null) == true);
-        if (!hasPartialDeclaration
+        if ((isDirective
+                ? !hasPartialDeclaration || property.SetMethod is not null
+                : hasPartialDeclaration || property.SetMethod?.IsInitOnly != true)
             || hasUserImplementation
             || property.IsStatic
+            || property.IsAbstract
+            || property.IsExtern
             || property.IsIndexer
             || property.ReturnsByRef
             || property.ReturnsByRefReadonly
             || property.GetMethod is null
-            || property.SetMethod is not null
             || property.Type.TypeKind == TypeKind.Dynamic
             || property.Type.TypeKind == TypeKind.Pointer)
         {
-            Report(context, _invalidMember, GetLocation(attribute, property), "A bound member must be a partial, get-only, non-static instance property with a supported value type.");
+            Report(context, _invalidMember, GetLocation(attribute, property), isDirective
+                ? "A directive value must be a partial, get-only, non-static instance property with a supported value type."
+                : "A bound member must be a non-static auto-property with get and init accessors and a supported value type.");
+            return false;
+        }
+
+        if (!isDirective && !TryReadDefault(context, property, compilation, out defaultInfo))
+        {
             return false;
         }
 
@@ -859,7 +908,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 || (arity == 1 && bareValuePolicy != 1)
                 || (arity != 1 && bareValuePolicy != 0)
                 || (bareValuePolicy == 1 && !IsNullable(property.Type))
-                || (arity is 0 or 1 && !GetNamedBoolean(attribute, "IsRequired") && !IsNullable(property.Type)))
+                || (arity is 0 or 1 && !(isDirective ? GetNamedBoolean(attribute, "IsRequired") : IsRequiredOption(attribute, property))
+                    && !IsNullable(property.Type) && defaultInfo?.Value is null))
             {
                 Report(context, _invalidMember, GetLocation(attribute, property), "Optional-valued options must use the supported null bare-value policy, and possibly absent scalar options require nullable properties.");
                 return false;
@@ -867,7 +917,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         }
         else
         {
-            (int minimum, int maximum) = GetArgumentBounds(attribute, property.Type);
+            (int minimum, int maximum) = GetArgumentBounds(attribute, property);
             bool isRest = maximum == -1;
             bool isScalar = maximum == 1;
             bool typeMismatch = isRest
@@ -879,21 +929,145 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 return false;
             }
 
-            if (minimum == 0 && !IsNullable(property.Type) && isScalar)
+            if (minimum == 0 && !IsNullable(property.Type) && isScalar && defaultInfo?.Value is null)
             {
                 Report(context, _invalidMember, GetLocation(attribute, property), "An optional single-value argument requires a nullable property type.");
                 return false;
             }
         }
 
+        if (defaultInfo is not null
+            && ((isOption && GetOptionArity(attribute, property.Type) is 2 or 3 or 4 or 5)
+                || (!isOption && GetArgumentBounds(attribute, property).Maximum == -1)))
+        {
+            Report(context, _invalidMember, GetLocation(attribute, property), "Initializers are not supported for flags, counting options, collections, or rest arguments.");
+            return false;
+        }
+
         string generatedTryName = string.Concat("TryGet", property.Name);
-        if (property.ContainingType.GetMembers(generatedTryName).Length > 0)
+        if (isDirective && property.ContainingType.GetMembers(generatedTryName).Length > 0)
         {
             Report(context, _invalidMember, GetLocation(attribute, property), $"Generated accessor '{generatedTryName}' conflicts with an existing member.");
             return false;
         }
 
         return true;
+    }
+
+    private static bool TryReadDefault(
+        SourceProductionContext context,
+        IPropertySymbol property,
+        Compilation compilation,
+        out DefaultInfo? defaultInfo)
+    {
+        defaultInfo = null;
+        PropertyDeclarationSyntax? declaration = property.DeclaringSyntaxReferences
+            .Select(static reference => reference.GetSyntax())
+            .OfType<PropertyDeclarationSyntax>()
+            .FirstOrDefault();
+        ExpressionSyntax? expression = declaration?.Initializer?.Value;
+        if (expression is null)
+        {
+            return true;
+        }
+
+        SemanticModel model = compilation.GetSemanticModel(expression.SyntaxTree);
+        Optional<object?> constant = model.GetConstantValue(expression, context.CancellationToken);
+        ITypeSymbol type = UnwrapNullable(property.Type);
+        bool supportedType = constant.Value is null
+            || type.TypeKind == TypeKind.Enum
+            || type.SpecialType is >= SpecialType.System_Boolean and <= SpecialType.System_Double
+            || type.SpecialType == SpecialType.System_String;
+        if (!constant.HasValue
+            || !supportedType
+            || !model.ClassifyConversion(expression, property.Type).IsImplicit
+            || (constant.Value is null && !IsNullable(property.Type)))
+        {
+            Report(context, _invalidMember, expression.GetLocation(), "A bound initializer must be a compatible compile-time primitive, enum, string, or nullable null constant.");
+            return false;
+        }
+
+        object? value = ConvertDefaultConstant(constant.Value, type);
+        string valueExpression = value is null
+            ? "null"
+            : string.Concat("(", FormatType(property.Type), ")(", FormatConstant(value), ")");
+        string display = FormatDefaultDisplay(value, type);
+        defaultInfo = new DefaultInfo(value, valueExpression, display);
+        return true;
+    }
+
+    private static object? ConvertDefaultConstant(object? value, ITypeSymbol type)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        ITypeSymbol storageType = type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType: not null } named
+            ? named.EnumUnderlyingType
+            : type;
+        TypeCode typeCode = (int)storageType.SpecialType switch
+        {
+            (int)SpecialType.System_Boolean => TypeCode.Boolean,
+            (int)SpecialType.System_Char => TypeCode.Char,
+            (int)SpecialType.System_SByte => TypeCode.SByte,
+            (int)SpecialType.System_Byte => TypeCode.Byte,
+            (int)SpecialType.System_Int16 => TypeCode.Int16,
+            (int)SpecialType.System_UInt16 => TypeCode.UInt16,
+            (int)SpecialType.System_Int32 => TypeCode.Int32,
+            (int)SpecialType.System_UInt32 => TypeCode.UInt32,
+            (int)SpecialType.System_Int64 => TypeCode.Int64,
+            (int)SpecialType.System_UInt64 => TypeCode.UInt64,
+            (int)SpecialType.System_Single => TypeCode.Single,
+            (int)SpecialType.System_Double => TypeCode.Double,
+            (int)SpecialType.System_Decimal => TypeCode.Decimal,
+            (int)SpecialType.System_String => TypeCode.String,
+            _ => throw new InvalidOperationException("The initializer constant has an unsupported type.")
+        };
+        object convertedValue = value is char character && typeCode is not TypeCode.Char and not TypeCode.String
+            ? (ushort)character
+            : value;
+        return Convert.ChangeType(convertedValue, typeCode, CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatConstant(object value)
+    {
+        return value switch
+        {
+            decimal decimalValue => string.Concat(decimalValue.ToString(CultureInfo.InvariantCulture), "m"),
+            float singleValue => float.IsNaN(singleValue) ? "global::System.Single.NaN"
+                : float.IsPositiveInfinity(singleValue) ? "global::System.Single.PositiveInfinity"
+                : float.IsNegativeInfinity(singleValue) ? "global::System.Single.NegativeInfinity"
+                : string.Concat(singleValue.ToString("R", CultureInfo.InvariantCulture), "f"),
+            double doubleValue => double.IsNaN(doubleValue) ? "global::System.Double.NaN"
+                : double.IsPositiveInfinity(doubleValue) ? "global::System.Double.PositiveInfinity"
+                : double.IsNegativeInfinity(doubleValue) ? "global::System.Double.NegativeInfinity"
+                : string.Concat(doubleValue.ToString("R", CultureInfo.InvariantCulture), "d"),
+            _ => SymbolDisplay.FormatPrimitive(value, quoteStrings: true, useHexadecimalNumbers: false)
+                ?? throw new InvalidOperationException("The initializer constant cannot be formatted.")
+        };
+    }
+
+    private static string FormatDefaultDisplay(object? value, ITypeSymbol type)
+    {
+        if (value is null)
+        {
+            return "null";
+        }
+
+        if (type is INamedTypeSymbol { TypeKind: TypeKind.Enum } enumType)
+        {
+            IFieldSymbol? field = enumType.GetMembers().OfType<IFieldSymbol>()
+                .FirstOrDefault(member => member.HasConstantValue && Equals(member.ConstantValue, value));
+            if (field is not null)
+            {
+                return field.Name;
+            }
+        }
+
+        return value is bool boolean
+            ? boolean ? "true" : "false"
+            : Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     private static bool ValidateHandler(
@@ -1306,34 +1480,6 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 .Append(GenerateArgument(argument)).AppendLine(";");
         }
 
-        string contextField = string.Concat("__mauveContext_", suffix);
-        string attachName = string.Concat("__MauveAttach_", suffix);
-        _ = builder.Append("    private ").Append(_contextType).Append("? ").Append(contextField).AppendLine(";");
-        _ = builder.Append("    internal void ").Append(attachName).Append('(').Append(_contextType).AppendLine(" context)");
-        _ = builder.AppendLine("    {");
-        _ = builder.Append("        ").Append(contextField).AppendLine(" = context;");
-        _ = builder.AppendLine("    }");
-
-        for (int index = 0; index < command.Options.Count; index++)
-        {
-            EmitPropertyBinding(
-                builder,
-                command.Options[index].Property,
-                OptionInfo.FieldName(suffix, index),
-                contextField,
-                isOption: true);
-        }
-
-        for (int index = 0; index < command.Arguments.Count; index++)
-        {
-            EmitPropertyBinding(
-                builder,
-                command.Arguments[index].Property,
-                ArgumentInfo.FieldName(suffix, index),
-                contextField,
-                isOption: false);
-        }
-
         string buildName = string.Concat("__MauveBuildCommand_", suffix);
         _ = builder.Append("    internal static global::Mauve.Cli.Definitions.CommandBuilder ").Append(buildName).AppendLine("()");
         _ = builder.AppendLine("    {");
@@ -1397,7 +1543,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         if (command.Handler is not null)
         {
-            EmitHandler(builder, command, suffix, attachName);
+            EmitHandler(builder, command, suffix);
         }
 
         if (command.IsRoot)
@@ -1786,14 +1932,6 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 .Append(GenerateOption(option)).AppendLine(";");
         }
 
-        string contextField = "__mauvePackContext_" + suffix;
-        _ = builder.Append("    private ").Append(_packContextType).Append("? ").Append(contextField).AppendLine(";");
-        for (int index = 0; index < pack.Options.Count; index++)
-        {
-            EmitPropertyBinding(builder, pack.Options[index].Property, OptionInfo.FieldName(suffix, index),
-                contextField, isOption: true, isPack: true);
-        }
-
         string buildName = string.Concat("__MauveBuildPack_", suffix);
         _ = builder.Append("    internal static global::Mauve.Cli.Definitions.OptionPackBuilder ").Append(buildName).AppendLine("()");
         _ = builder.AppendLine("    {");
@@ -1816,8 +1954,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         _ = builder.AppendLine("    {");
         _ = builder.Append("        ").Append(typeName).Append(" instance = new(");
         EmitPackConstructorArguments(builder, pack.Inclusions, "context", nested: true);
-        _ = builder.AppendLine(");");
-        _ = builder.Append("        instance.").Append(contextField).AppendLine(" = context;");
+        _ = builder.AppendLine(")");
+        EmitObjectInitializers(builder, pack.Options, [], suffix);
         _ = builder.AppendLine("        return instance;");
         _ = builder.AppendLine("    }");
         _ = builder.AppendLine("}");
@@ -1862,14 +2000,17 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     }
 
     private static string GenerateOption(OptionInfo option)
-        => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name, option.Description, GeneratePropertyConverter(option.Property));
+        => GenerateOption(option.Attribute, option.Property.Type, option.Property.Name, option.Description,
+            GeneratePropertyConverter(option.Property), IsRequiredOption(option.Attribute, option.Property), option.Default);
 
     private static string GenerateOption(
         AttributeData attribute,
         ITypeSymbol valueType,
         string? inferredMemberName = null,
         string? description = null,
-        string converter = "")
+        string converter = "",
+        bool isRequired = false,
+        DefaultInfo? defaultInfo = null)
     {
         string? name = GetOptionLongName(attribute, inferredMemberName);
         int arityValue = GetOptionArity(attribute, valueType);
@@ -1907,7 +2048,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             " }, allowsNull: ",
             GetNamedBoolean(attribute, "AllowsNull") || IsNullable(GetScalarType(valueType)) ? "true" : "false",
             ", isRequired: ",
-            GetNamedBoolean(attribute, "IsRequired") ? "true" : "false",
+            isRequired ? "true" : "false",
             ", description: ",
             Literal(description ?? GetNamedString(attribute, "Description")),
             ", valueLabel: ",
@@ -1923,6 +2064,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             " }",
             barePolicy,
             shortName,
+            GenerateDefault(defaultInfo),
             converter,
             ")");
     }
@@ -1931,7 +2073,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
     {
         string name = GetConstructorString(argument.Attribute, 0)
             ?? DeriveMemberName(argument.Property.Name);
-        (int minimum, int maximum) = GetArgumentBounds(argument.Attribute, argument.Property.Type);
+        (int minimum, int maximum) = GetArgumentBounds(argument.Attribute, argument.Property);
         string maximumText = maximum < 0 ? "null" : maximum.ToString(CultureInfo.InvariantCulture);
         string typeForTypeof = FormatTypeForTypeof(argument.Property.Type);
         string element = maximum != 1
@@ -1955,9 +2097,15 @@ public sealed class CliModelGenerator : IIncrementalGenerator
             GetNamedBoolean(argument.Attribute, "IsHidden") ? "true" : "false",
             ", isSensitive: ",
             GetNamedBoolean(argument.Attribute, "IsSensitive") ? "true" : "false",
+            GenerateDefault(argument.Default),
             GeneratePropertyConverter(argument.Property),
             ")");
     }
+
+    private static string GenerateDefault(DefaultInfo? defaultInfo) => defaultInfo is null
+        ? string.Empty
+        : string.Concat(", defaultValuePolicy: global::Mauve.Cli.Definitions.DefaultValuePolicy.Constant, defaultValue: ",
+            defaultInfo.Expression, ", defaultDisplay: ", Literal(defaultInfo.Display));
 
     private static string GeneratePropertyConverter(IPropertySymbol property)
     {
@@ -2205,52 +2353,44 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         _ = builder.AppendLine("        _ = command.AddConverters(converters.Build());");
     }
 
-    private static void EmitPropertyBinding(
+    private static void EmitObjectInitializers(
+        StringBuilder builder,
+        List<OptionInfo> options,
+        List<ArgumentInfo> arguments,
+        string suffix)
+    {
+        _ = builder.AppendLine("        {");
+        for (int index = 0; index < options.Count; index++)
+        {
+            EmitObjectInitializer(builder, options[index].Property, OptionInfo.FieldName(suffix, index), "Option", index);
+        }
+
+        for (int index = 0; index < arguments.Count; index++)
+        {
+            EmitObjectInitializer(builder, arguments[index].Property, ArgumentInfo.FieldName(suffix, index), "Positional", index);
+        }
+
+        _ = builder.AppendLine("        };");
+    }
+
+    private static void EmitObjectInitializer(
         StringBuilder builder,
         IPropertySymbol property,
         string definitionField,
-        string contextField,
-        bool isOption,
-        bool isPack = false)
+        string kind,
+        int index)
     {
-        string propertyType = FormatType(property.Type);
-        string propertyName = EscapeIdentifier(property.Name);
-        string tryName = EscapeIdentifier(string.Concat("TryGet", property.Name));
-        string accessibility = AccessibilityText(property.DeclaredAccessibility);
-        _ = builder.Append("    ").Append(accessibility).Append(" partial ").Append(propertyType).Append(' ')
-            .Append(propertyName).AppendLine();
-        _ = builder.AppendLine("    {");
-        _ = builder.AppendLine("        get");
-        _ = builder.AppendLine("        {");
-        _ = builder.Append("            if (!").Append(tryName).AppendLine("(out var value))");
-        _ = builder.AppendLine("            {");
-        _ = builder.AppendLine(isPack
-            ? "                throw new global::System.InvalidOperationException(\"The option-pack value is unavailable.\");"
-            : "                throw new global::System.InvalidOperationException(\"The command value is unavailable.\");");
-        _ = builder.AppendLine("            }");
-        _ = builder.AppendLine("            return value;");
-        _ = builder.AppendLine("        }");
-        _ = builder.AppendLine("    }");
-        _ = builder.Append("    ").Append(accessibility).Append(" bool ").Append(tryName)
-            .Append("(out ").Append(propertyType).AppendLine(" value)");
-        _ = builder.AppendLine("    {");
-        _ = builder.Append("        ").Append(isPack ? _packContextType : _contextType).Append(" context = ")
-            .Append(contextField)
-            .AppendLine(isPack
-                ? " ?? throw new global::System.InvalidOperationException(\"Option-pack binding is not attached.\");"
-                : " ?? throw new global::System.InvalidOperationException(\"Command binding is not attached.\");");
-        _ = builder.Append("        return context.")
-            .Append(isOption ? "TryGetOptionValue<" : "TryGetPositionalValue<")
-            .Append(propertyType)
-            .Append(">(").Append(definitionField).AppendLine(", out value!);");
-        _ = builder.AppendLine("    }");
+        string variable = string.Concat("__mauve", kind, index.ToString(CultureInfo.InvariantCulture));
+        _ = builder.Append("            ").Append(EscapeIdentifier(property.Name)).Append(" = context.TryGet")
+            .Append(kind).Append("Value<").Append(FormatType(property.Type)).Append(">(")
+            .Append(definitionField).Append(", out var ").Append(variable)
+            .Append(") ? ").Append(variable).AppendLine("! : default!,");
     }
 
     private static void EmitHandler(
         StringBuilder builder,
         CommandInfo command,
-        string suffix,
-        string attachName)
+        string suffix)
     {
         IMethodSymbol handler = command.Handler!;
         string handlerName = EscapeIdentifier(handler.Name);
@@ -2273,8 +2413,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         _ = builder.AppendLine("    {");
         _ = builder.Append("        ").Append(fullyQualifiedTypeName).Append(" instance = new(");
         EmitPackConstructorArguments(builder, command.Packs, "context", nested: false);
-        _ = builder.AppendLine(");");
-        _ = builder.Append("        instance.").Append(attachName).AppendLine("(context);");
+        _ = builder.AppendLine(")");
+        EmitObjectInitializers(builder, command.Options, command.Arguments, suffix);
         if (returnType == "void")
         {
             _ = builder.Append("        ").Append(invocation).AppendLine(";");
@@ -2550,11 +2690,16 @@ public sealed class CliModelGenerator : IIncrementalGenerator
                 : TryGetCollectionElementType(valueType, out _) ? 4 : 0;
     }
 
+    private static bool IsRequiredOption(AttributeData attribute, IPropertySymbol property)
+        => HasNamedArgument(attribute, "IsRequired")
+            ? GetNamedBoolean(attribute, "IsRequired")
+            : property.IsRequired || FindAttribute(property, "System.ComponentModel.DataAnnotations.RequiredAttribute") is not null;
+
     private static (int Minimum, int Maximum) GetArgumentBounds(
         AttributeData attribute,
-        ITypeSymbol valueType)
+        IPropertySymbol property)
     {
-        bool collection = TryGetCollectionElementType(valueType, out _);
+        bool collection = TryGetCollectionElementType(property.Type, out _);
         return (
             GetNamedInt(attribute, "MinimumValues", 1),
             GetNamedInt(attribute, "MaximumValues", collection ? -1 : 1));
@@ -2786,7 +2931,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         IPropertySymbol property,
         AttributeData attribute,
         SourceOrder sourceOrder,
-        string? description = null)
+        string? description = null,
+        DefaultInfo? defaultInfo = null)
     {
         public IPropertySymbol Property { get; } = property;
 
@@ -2796,6 +2942,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
         public string? Description { get; } = description ?? GetNamedString(attribute, "Description");
 
+        public DefaultInfo? Default { get; } = defaultInfo;
+
         public static string FieldName(string suffix, int index) => string.Concat("__mauveOption_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
     }
 
@@ -2803,7 +2951,8 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         IPropertySymbol property,
         AttributeData attribute,
         SourceOrder sourceOrder,
-        string? description)
+        string? description,
+        DefaultInfo? defaultInfo)
     {
         public IPropertySymbol Property { get; } = property;
 
@@ -2812,7 +2961,15 @@ public sealed class CliModelGenerator : IIncrementalGenerator
         public SourceOrder SourceOrder { get; } = sourceOrder;
 
         public string? Description { get; } = description;
+        public DefaultInfo? Default { get; } = defaultInfo;
         public static string FieldName(string suffix, int index) => string.Concat("__mauveArgument_", suffix, "_", index.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private sealed class DefaultInfo(object? value, string expression, string display)
+    {
+        public object? Value { get; } = value;
+        public string Expression { get; } = expression;
+        public string Display { get; } = display;
     }
 
     private sealed class ChildInfo(

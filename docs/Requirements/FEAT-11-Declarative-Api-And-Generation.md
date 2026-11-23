@@ -20,7 +20,7 @@ Converter/enum/union generation extends that decision under
 
 ## Requirements
 ### FEAT-11-001 - Declarative registration
-Attributes declare a root, generic child or parent relationships, options, positional arguments and an optional handler. Names, order and ordinary cardinality are inferred from symbols, source position and property types unless explicitly overridden. The generator emits a `CreateModel` factory and typed binding accessors.
+Attributes declare a root, generic child or parent relationships, options, positional arguments and an optional handler. Names, order and ordinary cardinality are inferred from symbols, source position and property types unless explicitly overridden. The generator emits a `CreateModel` factory and typed construction-time bindings.
 **Acceptance:** A nested declaration with prefix-free long names, `ShortName`/`ShortAliases`, short-only options, inferred kebab-case names, typed option and positional argument compiles and invokes its handler; `--arg 1 2 3 --arg 4` binds one ordered collection.
 **Security:** Generation uses direct type and method references; it does not scan assemblies or evaluate declaration text.
 
@@ -36,7 +36,7 @@ The builder API and generated model share the same definitions, parser and invoc
 
 ### FEAT-11-004 - Declaration diagnostics
 Reject unsupported class/property/handler shapes, hierarchy cycles anywhere in the declared graph, and hierarchy collisions at the declaration site with corrective diagnostics. Declaring the same edge with both `CliChild` and `CliParent` reports `MCLI003` at both attributes.
-**Acceptance:** A non-partial bound property and duplicate sibling alias produce errors, and the invalid root receives no generated registration.
+**Acceptance:** A bound property without an init accessor and duplicate sibling alias produce errors, and the invalid root receives no generated registration.
 **Security:** Diagnostics use stable generator-only IDs and do not include declaration literal values.
 
 ### FEAT-11-005 - Generated invocation capability
@@ -48,6 +48,11 @@ Generated roots expose a common static model-factory contract; roots whose reach
 Infer omitted display metadata and shell invocation examples from command, option, positional and OptionPack XML documentation at build time.
 **Acceptance:** Command summary/remarks become Description/LongDescription; option and positional summaries become Description; pack summary/remarks become Title/Description. Explicit attribute values, including empty strings and null, win. Ordered shell code examples compile into the same metadata as explicit builders; non-shell examples remain documentation-only. XML-only edits update generated output.
 **Security:** Read documentation without expanding external includes or resolving XML entities; do not execute example text or discover documentation at runtime. Invalid shell examples produce MCLI002 and suppress root registration.
+
+### FEAT-11-007 - Requiredness and initializer metadata
+Infer option requiredness and positional minimum cardinality from the C# `required` modifier and `System.ComponentModel.DataAnnotations.RequiredAttribute`, and infer typed absent defaults and help display from supported constant property initializers. Explicit `CliOption.IsRequired` and `CliArgument.MinimumValues` take precedence. Directive values retain their separate declaration semantics.
+**Acceptance:** A required command or pack property rejects missing input; an optional initializer supplies the same typed default to parsing and the handler and displays it in help. Explicit overrides win, and nonconstant initializers fail with MCLI002.
+**Security:** Initializer expressions are not executed during generation, model construction, help or completion. Required defaults are inert, sensitive defaults are never displayed, and unsupported expressions fail without generating an affected root.
 
 ## Design
 XML documentation is optional. Command `<summary>` and `<remarks>` supply
@@ -74,8 +79,9 @@ source-derived order. A parent can declare `[CliChild<TChild>]` or its child
 can declare `[CliParent<TParent>]`; both forms normalize to the same edge.
 Sibling edges are ordered by compilation syntax-tree index and the declaring
 attribute's span, including mixed forms and partial declarations. A command
-edge must not use both forms. Bound properties are partial, get-only instance
-properties. Command types, option properties and positional properties derive
+edge must not use both forms. Bound command and pack properties are non-static
+auto-properties with `get` and `init` accessors; standalone directive values
+remain partial get-only properties under FEAT-15. Command types, option properties and positional properties derive
 kebab-case names when omitted. A handler is a direct instance method with no
 parameters or one `CancellationToken`, and uses a return shape supported by
 FEAT-09.
@@ -94,9 +100,25 @@ OptionalScalar token syntax.
 The generator emits deterministic partial sources and `CreateModel` and
 `CreateBuilder` factories for each valid root. It builds ordinary immutable
 definitions and uses the runtime model validator. A handler creates a fresh command object for that
-invocation, attaches its `CommandInvocationContext`, and reads values through
-generated typed getters and `TryGet` companions. No application object is
-created for parse-only operations.
+invocation and initializes its properties from the validated parse result.
+Unavailable optional properties receive their type default; initializer-backed
+defaults are already present in the parse result. No application object is
+created for parse-only, help or completion operations. Handlers needing
+presence or origin can inspect the supplied `CommandInvocationContext`.
+
+The generator recognizes the exact DataAnnotations `RequiredAttribute` and
+the C# `required` modifier on options and positionals. A named option
+`IsRequired` or positional `MinimumValues` overrides inference even when false
+or zero. Scalar and collection positionals otherwise default to minimum one,
+so the inferred positional requiredness agrees with existing cardinality.
+Property initializers must be compiler-evaluated primitive, enum, string, or
+nullable null constants; no initializer expression is executed by the
+generator. The constant becomes `DefaultValuePolicy.Constant` and invariant
+display text, including `null`. Flag, counting, collection and rest defaults
+remain prohibited. Missing optional nonnullable scalar bindings need a nonnull
+default; required defaults remain inert. The shared parser and help projection
+apply [FEAT-06](FEAT-06-Defaults-And-Validation.md) presence/default rules and
+[FEAT-08](FEAT-08-Help-And-Usage.md) sensitive/default suppression.
 
 Each valid root implements `IGeneratedCliCommand`; it also implements
 `ISynchronousGeneratedCliCommand` only if all handlers in its complete
@@ -108,24 +130,26 @@ error while remaining accepted by `RunAsync<Root>()`.
 `MCLI001` identifies invalid command declarations, `MCLI002` invalid members,
 and `MCLI003` hierarchy or visible-name conflicts. Unsupported shapes are
 compiler errors rather than runtime fallback. Option packs use the same
-property-based declaration model: `[CliOption]` marks partial option
+property-based declaration model: `[CliOption]` marks init-only option
 properties on `[CliOptionPack(Title = ..., Description = ...)]` partial
 classes. Command and pack constructors declare their nested pack dependencies;
 each generated command and pack has exactly one instance constructor, with
 parameterless constructors supported and parameters limited to declared pack
-dependencies. Unsupported parameter types or ambiguous multiple constructors
+dependencies. Required members must be directly declared CLI properties;
+inherited required members are unsupported. Unsupported parameter types or ambiguous multiple constructors
 produce MCLI002 and suppress root registration. The generator creates fresh
 pack instances for each invocation, constructing and binding nested packs
-before invoking their parent constructor. Each instance receives its own
-scoped context after construction. Pack type uniqueness and internal identity
+before invoking their parent constructor. A pack's own properties are
+initialized after its constructor returns; constructors must not rely on them.
+Pack type uniqueness and internal identity
 are specified by [FEAT-14](FEAT-14-OptionPacks.md). A root with an instance
-method directive still requires a parameterless constructor: directives can
-execute before command input is valid. Standalone directive declarations do
-not impose that restriction on the root.
+method directive still requires a parameterless constructor and cannot have
+C# required members: directives can execute before command input is valid.
+Standalone directive declarations do not impose that restriction on the root.
 
 Handlers may accept no parameter, a `CancellationToken`, or a
-`CommandInvocationContext`. Defaults inferred from source initializers and
-completion providers are not part of this surface. `CliConverter<TProvider>`
+`CommandInvocationContext`. Completion providers are not inferred.
+`CliConverter<TProvider>`
 on a custom value type automatically registers its static
 `ICliValueConverter<T>` provider in reachable roots. On an option, positional
 or standalone directive property it is an exact scalar/element override.
@@ -135,15 +159,21 @@ Roots emit ordinal enum maps, source-union case factories in declaration order,
 and typed nullable adapters. Unsupported automatic custom-union discovery and
 recursive union metadata suppress the affected root with MCLI002.
 Applications may still compose explicit host registries with either model
-path, rejecting exact-key conflicts. This approved
-OptionPack declaration replacement is a breaking API change; verification of
-the previous declaration shape is not evidence for the replacement. Observed
-verification for the replacement is recorded in the validation ledger.
+path, rejecting exact-key conflicts. Prior verification of partial-property
+binding is not evidence for the new property shape; observed verification is
+recorded in the validation ledger.
 
 ## Metrics Impact
 **Instruments:** none - source generation adds no runtime instrumentation.
 
 ## Verification
+`CliModelGeneratorTests.Generate_InfersRequiredAndConstantDefaultsForCommandsAndPacks`,
+`Generate_RequiresPositionalWithRequiredModifier`,
+`Generate_UsesTypedInvariantConstantDisplaysAndNullableDefaults`,
+`Generate_RejectsUnsupportedInitializersAndUnsafeRequiredMembers`, and
+`Generate_UpdatesInitializerAndRequiredAttributeEdits` cover FEAT-11-007.
+Observed results belong in the validation ledger.
+
 `CliModelGeneratorTests.Generate_CombinesParentAndChildEdgesInGlobalSourceOrder`,
 `Generate_UpdatesParentOnlyHierarchyWhenAnEdgeChanges`,
 `Generate_ReportsBothDeclarationsOfTheSameEdge`,

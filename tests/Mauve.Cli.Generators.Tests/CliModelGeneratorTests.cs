@@ -40,10 +40,10 @@ public sealed class CliModelGeneratorTests
         public partial class Child
         {
             [CliOption(IsRequired = true)]
-            public partial int Count { get; }
+            public int Count { get; init; }
 
             [CliArgument]
-            public partial string File { get; }
+            public string File { get; init; }
 
             [CliHandler]
             private int Run(CancellationToken cancellationToken) => Count + File.Length;
@@ -128,7 +128,7 @@ public sealed class CliModelGeneratorTests
             public partial class Leaf
             {
                 [CliArgument]
-                public partial string Value { get; }
+                public string Value { get; init; }
                 [CliHandler]
                 private int Run() => Value.Length;
             }
@@ -297,11 +297,11 @@ public sealed class CliModelGeneratorTests
             {
                 /// <summary>Task text.</summary>
                 [CliOption(IsRequired = true)]
-                public partial string Text { get; }
+                public string Text { get; init; }
 
                 /// <summary>Optional <see langword="string"/> label.</summary>
                 [CliArgument(MinimumValues = 0)]
-                public partial string? Label { get; }
+                public string? Label { get; init; }
             }
 
             /// <summary>Network</summary>
@@ -311,7 +311,7 @@ public sealed class CliModelGeneratorTests
             {
                 /// <summary>Endpoint address.</summary>
                 [CliOption(IsRequired = true)]
-                public partial string Endpoint { get; }
+                public string Endpoint { get; init; }
             }
             """;
         GeneratorResult generated = Generate(declaration);
@@ -369,19 +369,19 @@ public sealed class CliModelGeneratorTests
             {
                 /// <summary>Inferred option.</summary>
                 [CliOption(IsRequired = true, Description = "Attribute option")]
-                public partial string First { get; }
+                public string First { get; init; }
 
                 /// <summary>Inferred option.</summary>
                 [CliOption(IsRequired = true, Description = "")]
-                public partial string Second { get; }
+                public string Second { get; init; }
 
                 /// <summary>Inferred option.</summary>
                 [CliOption(IsRequired = true, Description = null)]
-                public partial string Third { get; }
+                public string Third { get; init; }
 
                 /// <summary>Inferred argument.</summary>
                 [CliArgument(Description = "")]
-                public partial string Argument { get; }
+                public string Argument { get; init; }
             }
 
             /// <summary>Inferred title.</summary>
@@ -391,7 +391,7 @@ public sealed class CliModelGeneratorTests
             {
                 /// <summary>Inferred pack option.</summary>
                 [CliOption(Description = "")]
-                public partial bool Flag { get; }
+                public bool Flag { get; init; }
             }
             """;
         GeneratorResult generated = Generate(declaration);
@@ -510,7 +510,7 @@ public sealed class CliModelGeneratorTests
             public partial class Root
             {
                 [CliOption(IsRequired = true)]
-                public partial string Name { get; }
+                public string Name { get; init; }
             }
 
             public static class Fixture
@@ -900,16 +900,16 @@ public sealed class CliModelGeneratorTests
             public partial class UploadFilesCommand
             {
                 [CliOption(IsRequired = true)]
-                public partial IReadOnlyList<int> ItemIds { get; }
+                public IReadOnlyList<int> ItemIds { get; init; }
 
                 [CliOption]
-                public partial bool DryRun { get; }
+                public bool DryRun { get; init; }
 
                 [CliArgument]
-                public partial string InputFile { get; }
+                public string InputFile { get; init; }
 
                 [CliArgument(MinimumValues = 0)]
-                public partial IReadOnlyList<string> ExtraPaths { get; }
+                public IReadOnlyList<string> ExtraPaths { get; init; }
             }
 
             [CliCommand(Description = "")]
@@ -970,10 +970,10 @@ public sealed class CliModelGeneratorTests
             public partial class RootCommand
             {
                 [CliOption(ShortName = 'v', Arity = OptionArity.Counting)]
-                public partial int Verbosity { get; }
+                public int Verbosity { get; init; }
 
                 [CliOption(ShortName = 'c', Arity = OptionArity.Counting)]
-                public partial int? NullableCount { get; }
+                public int? NullableCount { get; init; }
             }
             """;
 
@@ -1014,10 +1014,10 @@ public sealed class CliModelGeneratorTests
             public partial class RootCommand
             {
                 [CliOption(IsRequired = true)]
-                public partial string FirstTreeFirst { get; }
+                public string FirstTreeFirst { get; init; }
 
                 [CliOption(IsRequired = true)]
-                public partial string FirstTreeSecond { get; }
+                public string FirstTreeSecond { get; init; }
             }
             """;
         const string second = """
@@ -1028,7 +1028,7 @@ public sealed class CliModelGeneratorTests
             public partial class RootCommand
             {
                 [CliOption(IsRequired = true)]
-                public partial string SecondTree { get; }
+                public string SecondTree { get; init; }
             }
             """;
 
@@ -1056,10 +1056,10 @@ public sealed class CliModelGeneratorTests
             public partial class ToolCommand
             {
                 [CliOption("--numbers", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
-                public partial IReadOnlyList<int> Values { get; }
+                public IReadOnlyList<int> Values { get; init; }
 
                 [CliArgument(MinimumValues = 0, MaximumValues = -1)]
-                public partial IReadOnlyList<string> Paths { get; }
+                public IReadOnlyList<string> Paths { get; init; }
             }
             """;
         const string invalidDeclaration = """
@@ -1070,7 +1070,7 @@ public sealed class CliModelGeneratorTests
             public partial class ToolCommand
             {
                 [CliOption(Arity = OptionArity.BooleanFlag, IsRequired = true)]
-                public partial string Value { get; }
+                public string Value { get; init; }
             }
             """;
         const string invalidNameDeclaration = """
@@ -1171,9 +1171,9 @@ public sealed class CliModelGeneratorTests
                 [CliHandler]
                 private int Run()
                 {
-                    if (!network.TryGetEndpoint(out string address)
-                        || !network.Retry.TryGetRetries(out int count)
-                        || address != _endpointAtConstruction
+                    string address = network.Endpoint;
+                    int count = network.Retry.Retries;
+                    if (address != _endpointAtConstruction
                         || count != network.RetriesAtConstruction)
                     {
                         throw new System.InvalidOperationException("The generated pack values are unavailable.");
@@ -1190,14 +1190,14 @@ public sealed class CliModelGeneratorTests
                 public int RetriesAtConstruction { get; } = retry.Retries;
 
                 [CliOption(IsRequired = true)]
-                public partial string Endpoint { get; }
+                public string Endpoint { get; init; }
             }
 
             [CliOptionPack(Title = "Retry", Description = "Retry settings")]
             public partial class RetryPack
             {
                 [CliOption(IsRequired = true)]
-                public partial int Retries { get; }
+                public int Retries { get; init; }
             }
             """;
 
@@ -1283,8 +1283,10 @@ public sealed class CliModelGeneratorTests
             using System.Linq;
             using System.Threading;
             using System.Threading.Tasks;
+            using Mauve.Cli.Completion;
             using Mauve.Cli.Declarations;
             using Mauve.Cli.Definitions;
+            using Mauve.Cli.Help;
             using Mauve.Cli.Invocation;
             using Mauve.Cli.Parsing;
 
@@ -1302,17 +1304,16 @@ public sealed class CliModelGeneratorTests
                     string name = network.Name;
                     int retries = network.Retry.Retries;
                     IReadOnlyList<string> tags = network.Tags;
-                    bool hasLabel = network.TryGetLabel(out string? label);
+                    string? label = network.Label;
                     await Fixture.ArriveAsync();
                     if (network.Name != name || network.Retry.Retries != retries
                         || !network.Tags.SequenceEqual(tags)
-                        || network.TryGetLabel(out string? currentLabel) != hasLabel
-                        || (hasLabel && currentLabel != label))
+                        || network.Label != label)
                     {
                         throw new InvalidOperationException("Pack values changed across invocations.");
                     }
 
-                    Fixture.Results[name] = (_id, network.Id, network.Retry.Id, retries, hasLabel ? label : null, tags);
+                    Fixture.Results[name] = (_id, network.Id, network.Retry.Id, retries, label, tags);
                     return retries;
                 }
             }
@@ -1325,13 +1326,13 @@ public sealed class CliModelGeneratorTests
                 public Retry Retry { get; } = retry;
 
                 [CliOption(IsRequired = true)]
-                public partial string Name { get; }
+                public string Name { get; init; }
 
                 [CliOption]
-                public partial string? Label { get; }
+                public string? Label { get; init; }
 
                 [CliOption(IsRequired = true)]
-                public partial IReadOnlyList<string> Tags { get; }
+                public IReadOnlyList<string> Tags { get; init; }
             }
 
             [CliOptionPack]
@@ -1341,7 +1342,7 @@ public sealed class CliModelGeneratorTests
                 public int Id { get; } = Interlocked.Increment(ref Created);
 
                 [CliOption(IsRequired = true)]
-                public partial int Retries { get; }
+                public int Retries { get; init; }
             }
 
             public static class Fixture
@@ -1363,6 +1364,8 @@ public sealed class CliModelGeneratorTests
                 public static async Task<string> Run()
                 {
                     CommandModel model = Root.CreateModel();
+                    _ = HelpDocument.Create(model);
+                    _ = await new CompletionService().CompleteAsync(new CompletionRequest(model, ["--na"], 0, 4));
                     ParseResult valid = new CliParser().Parse(model, ["--name=parsed", "--retries=3", "--tags=parsed"]);
                     ParseResult invalid = new CliParser().Parse(model, ["--name=missing-retries", "--tags=parsed"]);
                     InvocationResult rejected = await new CliInvoker().InvokeAsync(model, ["--name=missing-retries", "--tags=parsed"]);
@@ -1424,14 +1427,14 @@ public sealed class CliModelGeneratorTests
             public partial class First
             {
                 [CliOption]
-                public partial bool Enabled { get; }
+                public bool Enabled { get; init; }
             }
 
             [CliOptionPack(Title = "Second")]
             public partial class Second
             {
                 [CliOption]
-                public partial bool Forced { get; }
+                public bool Forced { get; init; }
             }
             """;
 
@@ -1459,7 +1462,7 @@ public sealed class CliModelGeneratorTests
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
-    public async Task Generate_ReportsPackValueAccessBeforeOwnContextIsAttached()
+    public async Task Generate_InitializesPackPropertiesAfterItsConstructor()
     {
         const string declaration = """
             using Mauve.Cli.Declarations;
@@ -1479,7 +1482,7 @@ public sealed class CliModelGeneratorTests
                 public Network() => _ = Enabled;
 
                 [CliOption]
-                public partial bool Enabled { get; }
+                public bool Enabled { get; init; }
             }
             """;
 
@@ -1488,10 +1491,10 @@ public sealed class CliModelGeneratorTests
         Type root = EmitAndLoad(generated.OutputCompilation).GetType("PackConstructionFixture.Root", throwOnError: true)!;
         CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
 
-        InvalidOperationException error = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            async () => await new CliInvoker().InvokeAsync(model, ["--enabled"], TestContext.CancellationToken).ConfigureAwait(false))
+        InvocationResult result = await new CliInvoker().InvokeAsync(model, ["--enabled"], TestContext.CancellationToken)
             .ConfigureAwait(false);
-        Assert.AreEqual("Option-pack binding is not attached.", error.Message);
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(1, result.ExitCode);
     }
 
     [TestMethod]
@@ -1518,7 +1521,7 @@ public sealed class CliModelGeneratorTests
             public partial class Global
             {
                 [CliOption(IsRequired = true, Scope = OptionScope.Inherited)]
-                public partial string Environment { get; }
+                public string Environment { get; init; }
             }
 
             [CliCommand]
@@ -1568,14 +1571,14 @@ public sealed class CliModelGeneratorTests
             public partial class FirstPack
             {
                 [CliOption(IsRequired = true, Aliases = ["-x"])]
-                public partial string First { get; }
+                public string First { get; init; }
             }
 
             [CliOptionPack]
             public partial class SecondPack
             {
                 [CliOption(IsRequired = true, Aliases = ["-x"])]
-                public partial string Second { get; }
+                public string Second { get; init; }
             }
             """;
 
@@ -1658,7 +1661,7 @@ public sealed class CliModelGeneratorTests
             public partial class Shared
             {
                 [CliOption(IsRequired = true)]
-                public partial int Value { get; }
+                public int Value { get; init; }
             }
             """;
 
@@ -1769,7 +1772,7 @@ public sealed class CliModelGeneratorTests
                 public bool NotPartial { get; }
 
                 [CliArgument]
-                public partial string Positional { get; }
+                public string Positional { get; init; }
             }
             """;
 
@@ -1881,17 +1884,17 @@ public sealed class CliModelGeneratorTests
             [CliDirective<CodeDirective>]
             public partial class Root
             {
-                [CliOption(IsRequired = true)] public partial Code Code { get; }
-                [CliOption(IsRequired = true)] [CliConverter<HexConverter>] public partial int Hex { get; }
-                [CliOption(IsRequired = true)] public partial Mode? Mode { get; }
-                [CliOption(IsRequired = true)] public partial Choice Choice { get; }
-                [CliOption] public partial Token? Token { get; }
-                [CliOption] [CliConverter<NullableCodeConverter>] public partial IReadOnlyList<Code?> OptionalCodes { get; }
-                [CliArgument] public partial IReadOnlyList<Code?> Codes { get; }
+                [CliOption(IsRequired = true)] public Code Code { get; init; }
+                [CliOption(IsRequired = true)] [CliConverter<HexConverter>] public int Hex { get; init; }
+                [CliOption(IsRequired = true)] public Mode? Mode { get; init; }
+                [CliOption(IsRequired = true)] public Choice Choice { get; init; }
+                [CliOption] public Token? Token { get; init; }
+                [CliOption] [CliConverter<NullableCodeConverter>] public IReadOnlyList<Code?> OptionalCodes { get; init; }
+                [CliArgument] public IReadOnlyList<Code?> Codes { get; init; }
                 [CliHandler]
                 private int Run() => Code.Value + Hex + (int)Mode!.Value + Codes[0]!.Value.Value
                     + (Choice.Value is int number ? number : -1000)
-                    + (TryGetToken(out Token? token) ? token!.Value.Length : 0);
+                    + (Token?.Value.Length ?? 0);
             }
             [CliDirective]
             public partial class CodeDirective
@@ -1950,7 +1953,7 @@ public sealed class CliModelGeneratorTests
             using Mauve.Cli.Declarations;
             [CliCommand(IsRoot = true)] public partial class Root
             {
-                [CliOption(IsRequired = true)] [CliConverter<TextConverter>] public partial int Value { get; }
+                [CliOption(IsRequired = true)] [CliConverter<TextConverter>] public int Value { get; init; }
             }
             public sealed class TextConverter : ICliValueConverter<string>
             {
@@ -1969,7 +1972,7 @@ public sealed class CliModelGeneratorTests
             }
             [CliCommand(IsRoot = true)] public partial class Root
             {
-                [CliOption(IsRequired = true)] public partial Custom Value { get; }
+                [CliOption(IsRequired = true)] public Custom Value { get; init; }
             }
             """;
         foreach (string source in new[] { mismatched, customUnion })
@@ -1978,6 +1981,270 @@ public sealed class CliModelGeneratorTests
             Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
             Assert.IsEmpty(generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
         }
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-007")]
+    public async Task Generate_InfersRequiredAndConstantDefaultsForCommandsAndPacks()
+    {
+        const string declaration = """
+            using System;
+            using System.ComponentModel.DataAnnotations;
+            using System.Linq;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Definitions;
+            using Mauve.Cli.Invocation;
+
+            namespace DefaultFixture;
+            public enum Mode { Fast = 2, Slow = 3 }
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root(Pack pack)
+            {
+                public static string? Observed { get; private set; }
+
+                [Required]
+                [CliOption]
+                public string Name { get; init; }
+
+                [Required]
+                [CliOption(IsRequired = false)]
+                public required string? Override { get; init; }
+
+                [CliOption]
+                public string Title { get; init; } = "default value";
+
+                [CliOption]
+                public int Count { get; init; } = 42;
+
+                [CliOption]
+                public Mode Mode { get; init; } = Mode.Fast;
+
+                [CliOption(Arity = OptionArity.RequiredScalar)]
+                public bool Switch { get; init; } = true;
+
+                [CliOption(IsSensitive = true)]
+                public string Secret { get; init; } = "secret-default";
+
+                [CliOption(IsRequired = true)]
+                public string Inert { get; init; } = "inert-default";
+
+                [CliArgument(MinimumValues = 0)]
+                [Required]
+                public required string Path { get; init; } = "fallback";
+
+                [CliHandler]
+                private int Run(CommandInvocationContext context)
+                {
+                    var title = context.ParseResult.Values.Single(value => value.Option?.Name == "--title");
+                    Observed = $"{Name}|{Override ?? "(absent)"}|{Title}|{Count}|{Mode}|{Switch}|{Secret}|{Inert}|{Path}|{pack.Tenant}|{title.Origin}|{title.Presence}";
+                    return 0;
+                }
+            }
+
+            [CliOptionPack]
+            public partial class Pack
+            {
+                [CliOption]
+                public required string Tenant { get; init; }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type root = EmitAndLoad(generated.OutputCompilation).GetType("DefaultFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        OptionDefinition name = model.Root.Options.Single(static option => option.Name == "--name");
+        OptionDefinition tenant = model.Root.Options.Single(static option => option.Name == "--tenant");
+        OptionDefinition optional = model.Root.Options.Single(static option => option.Name == "--override");
+        OptionDefinition title = model.Root.Options.Single(static option => option.Name == "--title");
+        Assert.IsTrue(name.IsRequired);
+        Assert.IsTrue(tenant.IsRequired);
+        Assert.IsFalse(optional.IsRequired);
+        Assert.AreEqual(0, model.Root.Positionals[0].MinimumValues);
+        Assert.AreEqual(DefaultValuePolicy.Constant, title.DefaultValuePolicy);
+        Assert.AreEqual("default value", title.DefaultValue);
+        Assert.AreEqual("Fast", model.Root.Options.Single(static option => option.Name == "--mode").DefaultDisplay);
+        Assert.AreEqual("true", model.Root.Options.Single(static option => option.Name == "--switch").DefaultDisplay);
+
+        string help = HelpTextRenderer.Render(HelpDocument.Create(model));
+        Assert.Contains("default value", help);
+        Assert.DoesNotContain("secret-default", help);
+        Assert.DoesNotContain("inert-default", help);
+        Assert.AreNotEqual(ParseOutcome.Validated, new CliParser().Parse(model, []).Outcome);
+        Assert.AreNotEqual(ParseOutcome.Validated, new CliParser().Parse(model, ["--name=alice", "--tenant=west"]).Outcome);
+
+        InvocationResult result = await new CliInvoker().InvokeAsync(
+            model, ["--name=alice", "--tenant=west", "--inert=given"], TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual("alice|(absent)|default value|42|Fast|True|secret-default|given|fallback|west|Default|Absent",
+            root.GetProperty("Observed")!.GetValue(null));
+
+        result = await new CliInvoker().InvokeAsync(
+            model, ["--name=alice", "--tenant=west", "--inert=given", "--title=changed", "input"],
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual("alice|(absent)|changed|42|Fast|True|secret-default|given|input|west|Explicit|WithValue",
+            root.GetProperty("Observed")!.GetValue(null));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-007")]
+    public void Generate_RequiresPositionalWithRequiredModifier()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root {
+                [CliArgument] public required string Value { get; init; }
+            }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type root = EmitAndLoad(generated.OutputCompilation).GetType("Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        Assert.AreEqual(1, model.Root.Positionals[0].MinimumValues);
+        Assert.AreNotEqual(ParseOutcome.Validated, new CliParser().Parse(model, []).Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, new CliParser().Parse(model, ["value"]).Outcome);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-007")]
+    public void Generate_UsesTypedInvariantConstantDisplaysAndNullableDefaults()
+    {
+        const string declaration = """
+            using System;
+            using Mauve.Cli.Declarations;
+            namespace ConstantFixture;
+            public enum Level { Low = 1, High = 2 }
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root {
+                [CliOption] public char Letter { get; init; } = 'x';
+                [CliOption] public decimal Price { get; init; } = 0.1234567890123456789012345678m;
+                [CliOption] public double Number { get; init; } = 9007199254740993L;
+                [CliOption] public Level Level { get; init; } = (Level)5;
+                [CliOption] public Guid? Id { get; init; } = null;
+                [CliOption] public string? Text { get; init; } = null;
+                [CliOption] public decimal CharacterNumber { get; init; } = 'a';
+                [CliOption] public float Infinity { get; init; } = float.PositiveInfinity;
+            }
+            """;
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type root = EmitAndLoad(generated.OutputCompilation).GetType("ConstantFixture.Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        Assert.AreEqual('x', model.Root.Options[0].DefaultValue);
+        Assert.AreEqual("x", model.Root.Options[0].DefaultDisplay);
+        Assert.AreEqual(0.1234567890123456789012345678m, model.Root.Options[1].DefaultValue);
+        Assert.AreEqual("0.1234567890123456789012345678", model.Root.Options[1].DefaultDisplay);
+        Assert.AreEqual(9007199254740992d, model.Root.Options[2].DefaultValue);
+        Assert.AreEqual("9007199254740992", model.Root.Options[2].DefaultDisplay);
+        Assert.AreEqual("5", model.Root.Options[3].DefaultDisplay);
+        Assert.IsNull(model.Root.Options[4].DefaultValue);
+        Assert.AreEqual("null", model.Root.Options[4].DefaultDisplay);
+        Assert.AreEqual("null", model.Root.Options[5].DefaultDisplay);
+        Assert.AreEqual(97m, model.Root.Options[6].DefaultValue);
+        Assert.AreEqual("97", model.Root.Options[6].DefaultDisplay);
+        Assert.AreEqual(float.PositiveInfinity, model.Root.Options[7].DefaultValue);
+        Assert.AreEqual(ParseOutcome.Validated, new CliParser().Parse(model, []).Outcome);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-007")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsUnsupportedInitializersAndUnsafeRequiredMembers()
+    {
+        string[] declarations =
+        [
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root {
+                [CliOption] public string Value { get; init; } = System.Guid.NewGuid().ToString();
+            }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root {
+                [CliOption] public bool Flag { get; init; } = true;
+            }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root {
+                [CliOption] public string Value { get; init; } = null!;
+            }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root {
+                public required string Unbound { get; init; }
+            }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            public class Base { public required string Unbound { get; init; } }
+            [CliCommand(IsRoot = true)] public partial class Root : Base { }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root {
+                [CliOption] public required string Value { get; init; }
+                [CliDirective("version")] private int Version() => 0;
+            }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] [CliDirective<Directive>] public partial class Root { }
+            [CliDirective] public partial class Directive {
+                [CliOption(IsRequired = true)] public partial int Value { get; }
+                public bool TryGetValue(out int value) { value = 0; return true; }
+                [CliHandler] private int Run() => Value;
+            }
+            """
+        ];
+        foreach (string declaration in declarations)
+        {
+            GeneratorResult generated = Generate(declaration);
+            Assert.IsTrue(generated.GeneratorDiagnostics.Any(static diagnostic => diagnostic.Id == "MCLI002"));
+            Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+                generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-007")]
+    public void Generate_UpdatesInitializerAndRequiredAttributeEdits()
+    {
+        const string declaration = """
+            using System.ComponentModel.DataAnnotations;
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)] public partial class Root {
+                [CliOption] public string Value { get; init; } = "first";
+            }
+            """;
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
+        CSharpCompilation input = CreateCompilation(CSharpSyntaxTree.ParseText(declaration, parseOptions, cancellationToken: TestContext.CancellationToken));
+        GeneratorDriver driver = CreateDriver(parseOptions).RunGenerators(input, TestContext.CancellationToken);
+        string[] initial = GetGeneratedSources(driver);
+        driver = driver.RunGenerators(input, TestContext.CancellationToken);
+        Assert.AreSequenceEqual(initial, GetGeneratedSources(driver));
+
+        string edited = declaration.Replace("\"first\"", "\"second\"", StringComparison.Ordinal)
+            .Replace("[CliOption]", "[Required] [CliOption]", StringComparison.Ordinal);
+        CSharpCompilation changed = CreateCompilation(CSharpSyntaxTree.ParseText(edited, parseOptions, cancellationToken: TestContext.CancellationToken));
+        driver = driver.RunGeneratorsAndUpdateCompilation(changed, out Compilation output, out _, TestContext.CancellationToken);
+        Assert.IsEmpty(GetCompilerErrors(output));
+        Assert.AreNotEqual(string.Join("\n", initial), string.Join("\n", GetGeneratedSources(driver)));
+        Type root = EmitAndLoad(output).GetType("Root", throwOnError: true)!;
+        CommandModel model = (CommandModel)root.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
+        Assert.IsTrue(model.Root.Options[0].IsRequired);
+        Assert.AreEqual("second", model.Root.Options[0].DefaultValue);
     }
 
     private GeneratorResult Generate(params string[] sources)

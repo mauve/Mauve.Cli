@@ -15,10 +15,10 @@ internal sealed partial class CommandsCommand
 internal sealed partial class GreetCommand
 {
     [CliArgument(Description = "Person to greet.")]
-    public partial string Name { get; }
+    public required string Name { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine($"Hello, {Name}!");
         return 0;
@@ -30,10 +30,10 @@ internal sealed partial class GreetCommand
 internal sealed partial class GoodbyeCommand
 {
     [CliArgument(Description = "Person to address.")]
-    public partial string Name { get; }
+    public required string Name { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine($"Goodbye, {Name}!");
         return 0;

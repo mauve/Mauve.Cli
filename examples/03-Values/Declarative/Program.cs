@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Invocation;
 
@@ -13,17 +14,18 @@ internal sealed partial class ValuesCommand
 [CliCommand(Description = "Print a positional name, count, and optional flag.")]
 internal sealed partial class ShowCommand
 {
-    [CliOption("count", ShortName = 'c', IsRequired = true, Description = "A whole-number count.")]
-    public partial int Count { get; }
+    [Required]
+    [CliOption("count", ShortName = 'c', Description = "A whole-number count.")]
+    public int Count { get; init; }
 
     [CliOption("enabled", Description = "Mark the value as enabled.")]
-    public partial bool Enabled { get; }
+    public bool Enabled { get; init; }
 
     [CliArgument(Description = "Name to display.")]
-    public partial string Name { get; }
+    public required string Name { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine($"{Name}: count={Count}; enabled={Enabled}");
         return 0;

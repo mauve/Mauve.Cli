@@ -9,7 +9,7 @@ namespace HelpAndErrors.Declarative;
 internal sealed partial class InspectCommand
 {
     [CliOption("count", IsRequired = true, Description = "Item number.")]
-    public partial int Count { get; }
+    public int Count { get; init; }
 
     [CliHandler]
     internal int Run()

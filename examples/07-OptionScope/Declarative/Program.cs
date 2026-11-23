@@ -14,7 +14,7 @@ internal sealed partial class DeployCommand(GlobalOptions global)
     public GlobalOptions Global { get; } = global;
 
     [CliOption("root-only", Arity = OptionArity.BooleanFlag, Description = "Available only on the root.")]
-    public partial bool RootOnly { get; }
+    public bool RootOnly { get; init; }
 }
 
 [CliOptionPack(Title = "Global", Description = "Global deployment settings.")]
@@ -25,14 +25,14 @@ internal sealed partial class GlobalOptions
         IsRequired = true,
         Scope = Mauve.Cli.Definitions.OptionScope.Inherited,
         Description = "Deployment environment.")]
-    public partial string Environment { get; }
+    public required string Environment { get; init; }
 }
 
 [CliCommand("show", Description = "Show the selected environment.")]
 internal sealed partial class ShowCommand
 {
     [CliOption("brief", Arity = OptionArity.BooleanFlag, Description = "Use brief output.")]
-    public partial bool Brief { get; }
+    public bool Brief { get; init; }
 
     [CliHandler]
     internal int Run(CommandInvocationContext context)

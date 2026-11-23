@@ -8,7 +8,7 @@ namespace Hello.Declarative;
 internal sealed partial class HelloCommand
 {
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine("Hello, world!");
         return 0;

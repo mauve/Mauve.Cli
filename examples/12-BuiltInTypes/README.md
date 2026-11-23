@@ -66,8 +66,8 @@ done
 ```
 
 The first prints `maybe-date=(absent)` and the second prints
-`maybe-date=2026-11-22`. The generated `TryGetMaybeDate` and explicit
-`TryGetOptionValue` calls preserve this distinction.
+`maybe-date=2026-11-22`. Both handlers use `CommandInvocationContext` and
+`TryGetOptionValue` to preserve this distinction.
 
 ## Accepted formats
 

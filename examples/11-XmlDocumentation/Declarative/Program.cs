@@ -35,20 +35,20 @@ internal sealed partial class AddCommand
 {
     /// <summary>The text of the new item.</summary>
     [CliOption(IsRequired = true)]
-    public partial string Text { get; }
+    public required string Text { get; init; }
 
     /// <summary>This XML description is overridden.</summary>
     [CliOption(Description = "Attribute description wins.")]
-    public partial bool DryRun { get; }
+    public bool DryRun { get; init; }
 
     /// <summary>An optional category for the item.</summary>
     [CliArgument(MinimumValues = 0)]
-    public partial string? Category { get; }
+    public string? Category { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
-        string category = TryGetCategory(out string? value) ? value! : "(none)";
+        string category = Category ?? "(none)";
         Console.WriteLine($"Add: {Text}; category: {category}; dry run: {DryRun}");
         return 0;
     }
@@ -61,7 +61,7 @@ internal sealed partial class OutputPack
 {
     /// <summary>Enable verbose output.</summary>
     [CliOption(Scope = OptionScope.Inherited)]
-    public partial bool Verbose { get; }
+    public bool Verbose { get; init; }
 }
 
 internal static class Program

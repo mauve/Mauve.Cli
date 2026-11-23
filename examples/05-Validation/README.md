@@ -12,9 +12,9 @@ dotnet run --project examples/05-Validation/Declarative -- --limit=bad
 dotnet run --project examples/05-Validation/Manual -- --limit=99
 ```
 
-The declaration attributes currently have no model-level defaults or
-validators. Accordingly, the generated example applies its fallback and range
-check in the handler. Its range rejection is an application-level message, not
-model validation and not a parser diagnostic; the Manual project demonstrates
-actual model-level defaulting and validation. Their behavior intentionally
-differs for out-of-range values.
+The declarative property initializer supplies the model-level default and help
+display. Declarative validators are not inferred, so the generated example
+applies its range check in the handler. Its range rejection is an
+application-level message, not a parser diagnostic; the Manual project
+demonstrates model-level validation. Their behavior intentionally differs for
+out-of-range values.

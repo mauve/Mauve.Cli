@@ -31,7 +31,7 @@ Validate nested composition for cycles, duplicate inclusion keys in the explicit
 
 ### FEAT-14-003 - Generated and explicit parity
 Declare packs as `[CliOptionPack(Title = ..., Description = ...)]` partial
-classes whose `[CliOption]` partial properties declare options. Command and
+classes whose `[CliOption]` get/init auto-properties declare options. Command and
 pack constructors declare nested pack dependencies by pack type; a direct
 dependency type may occur only once for a given command or pack. Infer option
 order from source position and option arity from the property type. Generated
@@ -79,7 +79,7 @@ titled pack supplies its group.
 
 The generated declaration form replaces `CliPack<TPack>` and
 `CliPackOption<TValue>`: `[CliOptionPack(Title = ..., Description = ...)]`
-marks a partial pack class and `[CliOption]` marks its partial option
+marks a partial pack class and `[CliOption]` marks its get/init option
 properties. Command and pack constructors declare direct nested-pack
 dependencies by type. A parent cannot declare the same direct pack type more
 than once; reuse on separate branches remains valid. Generated declarations
@@ -90,8 +90,8 @@ contract remains unchanged.
 Generated pack options expose typed properties and use the shared immutable
 definitions and invocation-local parsed values. Every pack instance is fresh
 per invocation. Pack dependencies are constructed recursively and their
-values bound before the parent constructor runs; after each parent constructor,
-its own scoped context is attached. Constructor dependencies are limited to
+values bound before the parent constructor runs; each pack's own properties
+are initialized after its constructor. Constructor dependencies are limited to
 declared pack types; this is not general dependency injection. A generated
 root still exposes `CreateBuilder()` so callers can add explicit root-owned
 options before `CommandModel.Create` validates the combined model.

@@ -9,16 +9,16 @@ namespace ShortOptions.Declarative;
 internal sealed partial class ShortOptionsCommand
 {
     [CliOption("verbose", ShortName = 'v', Arity = OptionArity.Counting, Description = "Increase verbosity.")]
-    public partial int Verbosity { get; }
+    public int Verbosity { get; init; }
 
     [CliOption("all", ShortName = 'a', Description = "Include all items.")]
-    public partial bool All { get; }
+    public bool All { get; init; }
 
     [CliOption("force", ShortName = 'f', Description = "Apply changes without prompting.")]
-    public partial bool Force { get; }
+    public bool Force { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine($"verbosity={Verbosity}; all={All}; force={Force}");
         return 0;

@@ -72,23 +72,17 @@ internal static class AotScenario
             || !string.Equals(parsedText, generatedText, StringComparison.Ordinal)
             || !context.TryGetOptionValue(context.ParseResult.SelectedPath[0].Options[0], out string? workspace)
             || !context.TryGetOptionValue(context.ParseResult.SelectedPath[0].Options[1], out bool verbose)
-            || !network.TryGetTag(out string? tag)
-            || !network.TryGetPriority(out Priority priority)
-            || !network.TryGetBackupPriority(out Priority? backupPriority)
-            || !network.TryGetCode(out BuildCode code)
-            || !network.TryGetLimit(out int? limit)
-            || !network.Retry.TryGetRetries(out int retries)
             ? throw new InvalidOperationException("Generated typed binding differs from the parsed values.")
             : parsedCount
             + parsedText!.Length
             + workspace!.Length
-            + tag!.Length
+            + network.Tag.Length
             + (verbose ? 1 : 0)
-            + (int)priority
-            + (int)backupPriority!.Value
-            + code.Value
-            + limit!.Value
-            + retries;
+            + (int)network.Priority
+            + (int)network.BackupPriority!.Value
+            + network.Code.Value
+            + network.Limit!.Value
+            + network.Retry.Retries;
     }
 
     internal static CommandModel CreateExplicitModel(out ScenarioHandles handles)

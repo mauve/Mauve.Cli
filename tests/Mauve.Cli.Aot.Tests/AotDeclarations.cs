@@ -52,7 +52,7 @@ internal sealed partial class DebugDirective
     public partial string Text { get; }
 
     [CliHandler]
-    private int Run() => AotDirectiveState.RecordDebug(Text);
+    internal int Run() => AotDirectiveState.RecordDebug(Text);
 }
 
 /// <summary>Add an AOT scenario item.</summary>
@@ -67,14 +67,14 @@ internal sealed partial class DebugDirective
 internal sealed partial class AotAddCommand(NetworkPack network)
 {
     [CliOption(IsRequired = true)]
-    public partial int Count { get; }
+    public int Count { get; init; }
 
     /// <summary>The item text.</summary>
     [CliArgument]
-    public partial string Text { get; }
+    public required string Text { get; init; }
 
     [CliHandler]
-    private int Run(CommandInvocationContext context)
+    internal int Run(CommandInvocationContext context)
     {
         return AotScenario.HandleGenerated(
             context,
@@ -92,10 +92,10 @@ internal sealed partial class AotAddCommand(NetworkPack network)
 internal sealed partial class GlobalPack
 {
     [CliOption("--workspace", IsRequired = true, Scope = OptionScope.Inherited)]
-    public partial string Workspace { get; }
+    public required string Workspace { get; init; }
 
     [CliOption("--verbose", Scope = OptionScope.Inherited)]
-    public partial bool Verbose { get; }
+    public bool Verbose { get; init; }
 }
 
 [CliOptionPack(Title = "Network", Description = "Network AOT scenario options.")]
@@ -108,19 +108,19 @@ internal sealed partial class NetworkPack(RetryPack retry)
     public RetryPack Retry { get; } = retry;
 
     [CliOption("--tag", IsRequired = true)]
-    public partial string Tag { get; }
+    public required string Tag { get; init; }
 
     [CliOption("--priority", IsRequired = true)]
-    public partial Priority Priority { get; }
+    public Priority Priority { get; init; }
 
     [CliOption("--backup-priority", IsRequired = true)]
-    public partial Priority? BackupPriority { get; }
+    public Priority? BackupPriority { get; init; }
 
     [CliOption("--code", IsRequired = true)]
-    public partial BuildCode Code { get; }
+    public BuildCode Code { get; init; }
 
     [CliOption("--limit", IsRequired = true)]
-    public partial int? Limit { get; }
+    public int? Limit { get; init; }
 }
 
 [CliOptionPack(Title = "Retry", Description = "Retry AOT scenario options.")]
@@ -131,7 +131,7 @@ internal sealed partial class NetworkPack(RetryPack retry)
 internal sealed partial class RetryPack
 {
     [CliOption("--retries", IsRequired = true)]
-    public partial int Retries { get; }
+    public int Retries { get; init; }
 }
 
 internal static class AotDirectiveState

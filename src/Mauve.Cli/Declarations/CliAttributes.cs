@@ -95,7 +95,7 @@ public sealed class CliOptionAttribute(string? name = null) : Attribute
     /// <summary>Gets or sets additional short option characters.</summary>
     public char[] ShortAliases { get; set; } = [];
 
-    /// <summary>Gets or sets whether the option is required.</summary>
+    /// <summary>Gets or sets whether the option is required, overriding inferred requiredness when supplied.</summary>
     public bool IsRequired { get; set; }
 
     /// <summary>Gets or sets whether null values are allowed.</summary>
@@ -127,7 +127,7 @@ public sealed class CliArgumentAttribute(string? name = null) : Attribute
     /// <summary>Gets the explicit argument name, or <see langword="null"/> to infer it.</summary>
     public string? Name { get; } = name;
 
-    /// <summary>Gets or sets the minimum number of values accepted.</summary>
+    /// <summary>Gets or sets the minimum number of values accepted, overriding inferred cardinality when supplied.</summary>
     public int MinimumValues { get; set; } = 1;
 
     /// <summary>Gets or sets the maximum number of values accepted, or -1 for a rest argument.</summary>

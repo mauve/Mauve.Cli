@@ -16,7 +16,7 @@ internal sealed partial class OptionPacksCommand
 internal sealed partial class FetchCommand(NetworkPack network)
 {
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine($"Fetch {network.Endpoint} with {network.Retry.Retries} retries.");
         return 0;
@@ -28,7 +28,7 @@ internal sealed partial class FetchCommand(NetworkPack network)
 internal sealed partial class InspectCommand(NetworkPack network)
 {
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine($"Inspect {network.Endpoint} with {network.Retry.Retries} retries.");
         return 0;
@@ -42,14 +42,14 @@ internal sealed partial class NetworkPack(RetryPack retry)
     public RetryPack Retry { get; } = retry;
 
     [CliOption("endpoint", IsRequired = true, Description = "Resource address.")]
-    public partial string Endpoint { get; }
+    public required string Endpoint { get; init; }
 }
 
 [CliOptionPack(Title = "Retry", Description = "Retry options.")]
 internal sealed partial class RetryPack
 {
     [CliOption("retries", IsRequired = true, Description = "Maximum retry count.")]
-    public partial int Retries { get; }
+    public int Retries { get; init; }
 }
 
 internal static class Program

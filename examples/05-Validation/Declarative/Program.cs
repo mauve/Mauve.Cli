@@ -13,14 +13,12 @@ internal sealed partial class ValidateCommand
         "--limit",
         Arity = OptionArity.RequiredScalar,
         Description = "Limit from 1 through 50.")]
-    public partial int? Limit { get; }
+    public int Limit { get; init; } = 10;
 
     [CliHandler]
     internal int Run()
     {
-        int limit = TryGetLimit(out int? suppliedLimit) && suppliedLimit is int parsedLimit
-            ? parsedLimit
-            : 10;
+        int limit = Limit;
         if (limit is < 1 or > 50)
         {
             Console.Error.WriteLine("Limit must be between 1 and 50.");

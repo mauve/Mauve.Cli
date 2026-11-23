@@ -16,10 +16,10 @@ internal sealed partial class ShapesCommand
 internal sealed partial class InspectCommand
 {
     [CliOption("tag", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true, Description = "A repeatable tag.")]
-    public partial IReadOnlyList<string> Tags { get; }
+    public required IReadOnlyList<string> Tags { get; init; }
 
     [CliOption("verbose", Description = "Show the verbose mode.")]
-    public partial bool Verbose { get; }
+    public bool Verbose { get; init; }
 
     [CliOption(
         "--filter",
@@ -27,19 +27,16 @@ internal sealed partial class InspectCommand
         AllowsNull = true,
         BareValuePolicy = BareValuePolicy.Null,
         Description = "An optional filter; bare means no filter.")]
-    public partial string? Filter { get; }
+    public string? Filter { get; init; }
 
     [CliArgument("paths", MinimumValues = 0, MaximumValues = -1, Description = "Remaining paths.")]
-    public partial IReadOnlyList<string> Paths { get; }
+    public required IReadOnlyList<string> Paths { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
-        // The Filter property throws when --filter is absent; TryGetFilter distinguishes
-        // "absent" from an explicit bare --filter (which binds null).
-        string? filter = TryGetFilter(out string? value) ? value : null;
         Console.WriteLine(
-            $"verbose={Verbose}; filter={filter ?? "(null)"}; tags=[{string.Join(", ", Tags)}]; paths=[{string.Join(", ", Paths)}]");
+            $"verbose={Verbose}; filter={Filter ?? "(null)"}; tags=[{string.Join(", ", Tags)}]; paths=[{string.Join(", ", Paths)}]");
         return 0;
     }
 }

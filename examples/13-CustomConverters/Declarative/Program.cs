@@ -38,20 +38,20 @@ internal readonly struct HexIntConverter : ICliValueConverter<int>
 internal sealed partial class ConvertersCommand
 {
     [CliOption(IsRequired = true, Description = "Build code in B-positiveInteger format.")]
-    public partial BuildCode Code { get; }
+    public BuildCode Code { get; init; }
 
     [CliOption(IsRequired = true, Description = "Nonnegative hexadecimal int with a lowercase 0x prefix.")]
     [CliConverter<HexIntConverter>(CompletionSafe = true)]
-    public partial int Mask { get; }
+    public int Mask { get; init; }
 
     [CliOption(IsRequired = true, Description = "Ordinary decimal int; the mask override does not affect it.")]
-    public partial int Count { get; }
+    public int Count { get; init; }
 
     [CliArgument(Description = "Another build code using the type-level converter.")]
-    public partial BuildCode Input { get; }
+    public BuildCode Input { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"code={Code.Value}; mask={Mask}; count={Count}; input={Input.Value}"));
@@ -70,7 +70,7 @@ internal sealed partial class AuditDirective
     public partial int Mask { get; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"audit: code={Code.Value}; mask={Mask}"));
         return 0;

@@ -12,7 +12,7 @@ dotnet run --project examples/08-OptionPacks/Manual -- inspect --endpoint https:
 `Declarative` uses generated declarations; `Manual` builds the equivalent
 model directly and has no generator reference.
 
-Declarative packs define options as `[CliOption]` partial properties. A pack
+Declarative packs define options as `[CliOption]` get/init properties. A pack
 constructor parameter includes and injects another pack; command constructors
 include and receive packs in the same way. Optional help-group title and
 description belong to `[CliOptionPack]`. Each owner can include a pack type

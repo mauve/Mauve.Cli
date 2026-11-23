@@ -24,7 +24,7 @@ internal sealed partial class DirectivesCommand
 internal sealed partial class RunCommand
 {
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Console.WriteLine("Command ran.");
         return 0;

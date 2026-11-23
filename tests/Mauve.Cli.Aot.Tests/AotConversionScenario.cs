@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
@@ -23,29 +25,39 @@ internal readonly record struct AotHexConverter : ICliValueConverter<int>
 }
 
 [CliCommand(IsRoot = true)]
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated dispatcher instantiates this command at invocation.")]
 internal sealed partial class AotConversionCommand
 {
-    [CliOption(IsRequired = true)]
-    public partial AotChoice Choice { get; }
+    [Required]
+    [CliOption]
+    public AotChoice Choice { get; init; }
+
+    [CliOption]
+    public string Flavor { get; init; } = "classic";
 
     [CliOption(IsRequired = true)]
     [CliConverter<AotHexConverter>]
-    public partial int Hex { get; }
+    public int Hex { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial DateOnly Date { get; }
+    public DateOnly Date { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial FileInfo File { get; }
+    public required FileInfo File { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial Half Ratio { get; }
+    public Half Ratio { get; init; }
 
     [CliArgument]
-    public partial IReadOnlyList<BuildCode?> Codes { get; }
+    public required IReadOnlyList<BuildCode?> Codes { get; init; }
 
     [CliHandler]
-    private int Run() => AotConversionScenario.Score(Choice, Hex, Date, File, Ratio, Codes);
+    internal int Run() => Flavor == "classic"
+        ? AotConversionScenario.Score(Choice, Hex, Date, File, Ratio, Codes)
+        : throw new InvalidOperationException("The generated constant default was not bound.");
 }
 
 internal static class AotConversionScenario

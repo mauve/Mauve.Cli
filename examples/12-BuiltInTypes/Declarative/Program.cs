@@ -22,46 +22,46 @@ internal sealed partial class BuiltInsCommand
 internal sealed partial class NumbersCommand
 {
     [CliOption(IsRequired = true)]
-    public partial sbyte SignedByte { get; }
+    public sbyte SignedByte { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial byte UnsignedByte { get; }
+    public byte UnsignedByte { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial short SignedShort { get; }
+    public short SignedShort { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial ushort UnsignedShort { get; }
+    public ushort UnsignedShort { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial int SignedInt { get; }
+    public int SignedInt { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial uint UnsignedInt { get; }
+    public uint UnsignedInt { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial long SignedLong { get; }
+    public long SignedLong { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial ulong UnsignedLong { get; }
+    public ulong UnsignedLong { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial Half Half { get; }
+    public Half Half { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial float Single { get; }
+    public float Single { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial double Double { get; }
+    public double Double { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial decimal Decimal { get; }
+    public decimal Decimal { get; init; }
 
     [CliOption]
-    public partial bool Enabled { get; }
+    public bool Enabled { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Output.Print("signed-byte", SignedByte);
         Output.Print("unsigned-byte", UnsignedByte);
@@ -84,34 +84,34 @@ internal sealed partial class NumbersCommand
 internal sealed partial class IdentityCommand
 {
     [CliOption(IsRequired = true)]
-    public partial string Text { get; }
+    public required string Text { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial char Letter { get; }
+    public char Letter { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial Guid Id { get; }
+    public Guid Id { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial Uri Uri { get; }
+    public required Uri Uri { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial Version Version { get; }
+    public required Version Version { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial IPAddress Address { get; }
+    public required IPAddress Address { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial FileInfo File { get; }
+    public required FileInfo File { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial DirectoryInfo Directory { get; }
+    public required DirectoryInfo Directory { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial DisplayMode Mode { get; }
+    public DisplayMode Mode { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Output.Print("text", Text);
         Output.Print("letter", Letter);
@@ -130,19 +130,19 @@ internal sealed partial class IdentityCommand
 internal sealed partial class TimeCommand
 {
     [CliOption(IsRequired = true)]
-    public partial DateOnly Date { get; }
+    public DateOnly Date { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial TimeOnly Time { get; }
+    public TimeOnly Time { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial DateTimeOffset Timestamp { get; }
+    public DateTimeOffset Timestamp { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial TimeSpan Duration { get; }
+    public TimeSpan Duration { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
         Output.Print("date", Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         Output.Print("time", Time.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture));
@@ -159,21 +159,21 @@ internal sealed partial class ShapesCommand
         Arity = OptionArity.OptionalScalar,
         AllowsNull = true,
         BareValuePolicy = BareValuePolicy.Null)]
-    public partial DateOnly? MaybeDate { get; }
+    public DateOnly? MaybeDate { get; init; }
 
     [CliOption("sample", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
-    public partial IReadOnlyList<Half> Samples { get; }
+    public required IReadOnlyList<Half> Samples { get; init; }
 
     [CliOption(IsRequired = true)]
-    public partial PortOrName Target { get; }
+    public PortOrName Target { get; init; }
 
     [CliOption("route", Arity = OptionArity.RepeatedSingleCollection, IsRequired = true)]
-    public partial IReadOnlyList<PortOrName> Routes { get; }
+    public required IReadOnlyList<PortOrName> Routes { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run(CommandInvocationContext context)
     {
-        string date = TryGetMaybeDate(out DateOnly? value)
+        string date = context.TryGetOptionValue(context.Command.Options[0], out DateOnly? value)
             ? value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "(null)"
             : "(absent)";
         Output.Print("maybe-date", date);

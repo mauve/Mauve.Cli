@@ -21,17 +21,12 @@ internal sealed partial class CompletionCommand
 internal sealed partial class SearchCommand(ColorPack filters)
 {
     [CliArgument(Description = "Search text.")]
-    public partial string Query { get; }
+    public required string Query { get; init; }
 
     [CliHandler]
-    private int Run()
+    internal int Run()
     {
-        if (!filters.TryGetColor(out string? color))
-        {
-            throw new InvalidOperationException("The generated color option is unavailable.");
-        }
-
-        Console.WriteLine($"Search {Query} using {color}.");
+        Console.WriteLine($"Search {Query} using {filters.Color}.");
         return 0;
     }
 
@@ -41,7 +36,7 @@ internal sealed partial class SearchCommand(ColorPack filters)
 internal sealed partial class ColorPack
 {
     [CliOption("color", IsRequired = true, Description = "Search result color.")]
-    public partial string Color { get; }
+    public required string Color { get; init; }
 }
 
 internal static class Program
