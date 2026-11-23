@@ -18,6 +18,35 @@ public sealed class AotAcceptanceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-006")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-007")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-008")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Usage", "CA1849:Call async methods when in an async method",
+        Justification = "Exercises synchronous and asynchronous hosts after native publication.")]
+    public async Task VerifyExceptionHosting()
+    {
+        using StringWriter errors = new();
+        CliHostOptions options = new CliHostOptionsBuilder()
+            .WithStandardError(errors)
+            .WithExecutableName("native-cli")
+            .MapException<Exception>(1, "General native failure.")
+            .MapException<IOException>(74, "Native file unavailable.")
+            .MapException<CliExitCodeException>(75, static exception => exception.SafeMessage)
+            .WithExceptionRenderer(static context => context.ExecutableName + ": " + context.Result.SafeMessage)
+            .Build();
+        CommandModel explicitModel = CommandModel.Create(new CommandBuilder("explicit-exception")
+            .SetHandler(static (_, _) => throw new FileNotFoundException("Private file context.")));
+        Assert.AreEqual(74, CliInvoker.Run(explicitModel, [], options, TestContext.CancellationToken));
+        Assert.AreEqual(74, await CliInvoker.RunAsync(explicitModel, [], options, TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual(74, CliInvoker.Run<AotExceptionCommand>([], options, TestContext.CancellationToken));
+        Assert.AreEqual(75, await CliInvoker.RunAsync<AotExceptionCommand>(["--direct"], options, TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual(string.Concat(Enumerable.Repeat("native-cli: Native file unavailable." + Environment.NewLine, 3))
+            + "native-cli: Direct native failure." + Environment.NewLine, errors.ToString());
+    }
+
     /// <summary>Exercises generated and explicit validation after native publication.</summary>
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-13")]

@@ -8,6 +8,71 @@ and the installed [policy](../governance.md).
 
 ## Current baseline
 
+After correcting the validation-example smoke expectation to match the
+existing public message, the final `bash scripts/verify.sh` gate passed:
+197 Release tests, strict build and formatting, tooling probes, Governance
+validation and no-op update checks, and trimmed/NativeAOT publication and
+execution. The final log is `artifacts/verification-exception-hosting-final.log`;
+native evidence is under
+`artifacts/aot-verification/linux-x64/20261123T191322Z/`.
+The earlier interrupted runs below remain historical observations; the wording
+mismatch no longer blocks the gate.
+
+The simplified `examples/16-ExceptionHandling/` pair uses independent
+entry points with no shared runner or host-mode dispatch. Both passed strict
+Release builds and repository-wide format verification. Twelve managed
+example smoke checks covered default/success output, direct exceptions,
+mapped exceptions, unknown scenarios and help across both APIs. These are
+example smoke checks, not product test acceptance. Earlier publication
+observations below apply to the previous, more extensive demo, not these
+simplified sources.
+The required gate rerun is logged at
+`artifacts/verification-simple-exception-examples.log`. It passed the 197-test
+solution suite and product NativeAOT acceptance, then stopped at the same
+pre-existing validation-example wording mismatch described below. The full
+gate was incomplete for that earlier run.
+
+The previous dedicated `examples/16-ExceptionHandling/` declarative/manual pair passed
+144 example process checks: 48 each against managed, trimmed and NativeAOT
+outputs, with exact exit-code/stdout/stderr parity across both APIs. The
+checks cover the README's host modes, direct/mapped failures, renderer
+replacement/suppression, builder snapshots, low-level propagation, cancellation,
+help and invalid configuration. Published outputs are under
+`artifacts/exception-examples/`. These are example smoke observations, not
+new product MSTest or imported requirement acceptance evidence.
+Both projects passed strict Release builds, locked solution restore and
+format verification. The rerun of `bash scripts/verify.sh`, logged at
+`artifacts/verification-exception-examples.log`, passed the 197-test solution
+suite and managed/NativeAOT product acceptance, then hit the same pre-existing
+validation-example wording mismatch described below. The final example-only
+low-level outcome clarification was independently rebuilt, format-checked,
+republished and checked across all three publication modes; the interrupted
+full gate is not claimed as passing.
+
+Exception hosting passed the 197-test Release solution run: 147 runtime,
+45 generator and 5 managed AOT tests without skips. The eight focused
+exception-hosting runtime tests have metadata-bearing TRX and imported
+requirement evidence under `artifacts/test-results/exception-hosting/runtime/`.
+All five managed and NativeAOT acceptance tests passed with imported evidence
+under `artifacts/aot-verification/linux-x64/20261123T153827Z/`, including
+`VerifyExceptionHosting` for FEAT-09-006, FEAT-09-007 and FEAT-09-008.
+Both Help-and-Errors examples also returned the expected safe output and
+process codes for success, direct exceptions and mapped exceptions.
+
+The full `bash scripts/verify.sh` gate did **not** pass. It completed strict
+build, formatting, the solution suite, tooling probes, trimmed command
+examples and managed/NativeAOT product acceptance, then stopped in the
+unchanged validation-example smoke assertion at
+`scripts/verify-conversion-examples.sh:206`. That assertion expects
+`String length in UTF-16 code units must be between 2 and 12 (inclusive).`,
+while the unchanged `CliValidators.LengthMessage` emits
+`String length must be between 2 and 12 (inclusive).`. The mismatch exists in
+HEAD and reproduces in the managed validation example as well; no unrelated
+validation implementation or smoke expectation was changed. The gate log is
+`artifacts/verification-exception-hosting.log`. The final no-op Governance
+update check, strict validation and diff check passed independently after
+the interrupted gate; this does not turn the incomplete gate into a pass.
+
 Actionable validation reasons passed 139 runtime and 45 generator Release
 tests without skips. Metadata-bearing TRX and imported evidence are under
 `artifacts/test-results/validation-reasons/`. The added
@@ -192,6 +257,12 @@ is claimed.
 | FEAT-09-003 | portable automated | `CliInvokerTests.InvokeAsync_HonorsPreCancellationAndStopsBetweenParserCallbacks` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. The test also passed in the strict 83-test MTP suite. |
 | FEAT-09-003 | portable automated | `CliInvokerTests.InvokeAsync_ReportsCooperativeCancellationButPreservesCompletedExitCode` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. The test also passed in the strict 83-test MTP suite. |
 | FEAT-09-004 | portable automated | `CliInvokerTests.InvokeAsync_PropagatesHandlerFaultsAndIsolatesInvocations` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. The test also passed in the strict 83-test MTP suite. |
+| FEAT-09-006 | portable automated | `ExceptionHostingTests.Run_HandlesDirectExceptionsAcrossGeneratedAndExplicitHosts`; `ExceptionHostingTests.Run_ChoosesMostSpecificMappingAndExplicitOverrides`; `ExceptionHostingTests.InvokeAsync_PreservesFaultsAndCancellationDespiteHostMappings`; `ExceptionHostingTests.Run_MapsInvocationCallbacksButDoesNotRemapMappingFaults`; `ExceptionHostingTests.Run_MapsAdditionalDirectivesWithoutDispatchingCommandsOrCatchingSetupFaults`; `ExceptionHostingTests.Builder_RejectsInvalidMappingsAndKeepsCompositionAtomic` | Mauve.Cli maintainers | .NET 11 | Passed in the 197-test Release suite and focused metadata-bearing runtime TRX; imported evidence under `artifacts/test-results/exception-hosting/runtime/`. Full-gate limitation described above. |
+| FEAT-09-007 | portable automated | `ExceptionHostingTests.Run_HandlesDirectExceptionsAcrossGeneratedAndExplicitHosts`; `ExceptionHostingTests.Run_UsesRenderingContextAndRejectsBrokenRenderersWithoutRemapping` | Mauve.Cli maintainers | .NET 11 | Passed in the 197-test Release suite and focused metadata-bearing runtime TRX; imported evidence under `artifacts/test-results/exception-hosting/runtime/`. |
+| FEAT-09-008 | portable automated | `ExceptionHostingTests.Builder_RejectsInvalidMappingsAndKeepsCompositionAtomic`; `ExceptionHostingTests.Builder_PreservesSnapshotsAndConstructorBehavior` | Mauve.Cli maintainers | .NET 11 | Passed in the 197-test Release suite and focused metadata-bearing runtime TRX; imported evidence under `artifacts/test-results/exception-hosting/runtime/`. |
+| FEAT-09-006 | environment-gated automated | `AotAcceptanceTests.VerifyExceptionHosting` | Mauve.Cli maintainers | Linux x64, .NET 11, native compiler/linker; `bash scripts/verify-aot.sh` | Managed and NativeAOT execution passed with imported metadata-bearing evidence under `artifacts/aot-verification/linux-x64/20261123T153827Z/`. Later unrelated validation-example smoke failed; the complete script is not claimed as passing. |
+| FEAT-09-007 | environment-gated automated | `AotAcceptanceTests.VerifyExceptionHosting` | Mauve.Cli maintainers | Linux x64, .NET 11, native compiler/linker; `bash scripts/verify-aot.sh` | Managed and NativeAOT execution passed with imported metadata-bearing evidence under `artifacts/aot-verification/linux-x64/20261123T153827Z/`. |
+| FEAT-09-008 | environment-gated automated | `AotAcceptanceTests.VerifyExceptionHosting` | Mauve.Cli maintainers | Linux x64, .NET 11, native compiler/linker; `bash scripts/verify-aot.sh` | Managed and NativeAOT execution passed with imported metadata-bearing evidence under `artifacts/aot-verification/linux-x64/20261123T153827Z/`. |
 | FEAT-09-005 | portable automated | `CliInvokerTests.Run_UsesConfiguredHostOutputAndExitCodes`; `CliInvokerTests.RunAsync_MapsPreCancellationToConfiguredExitCode`; published Todo CLI process-argument invocation in `scripts/verify-aot.sh` | Mauve.Cli maintainers | .NET 11; Linux x64 for trimmed/NativeAOT example acceptance | Both product tests passed in the 90-test strict MTP suite. The Todo process-argument invocation passed for trimmed and NativeAOT publications on Linux x64 in `bash scripts/verify.sh`. |
 | FEAT-09-005 | portable automated | `CliInvokerTests.RunAsync_RegistersDirectivesAndUsesInvocationWriters`; `CliInvokerTests.Run_RejectsAsynchronousOrDuplicateAdditionalDirectives` | Mauve.Cli maintainers | .NET 11 | Passed in the 111-test strict MTP suite and full repository gate. |
 | FEAT-01-003 | portable automated | `CliParserTests.Parse_SelectsCanonicalCommandPathsAndHonorsAliasesAndPositionals` | Mauve.Cli maintainers | .NET 11; no privileged environment | Package-free harness passed; not product MSTest or Governance acceptance evidence. The test also passed in the strict 83-test MTP suite. |

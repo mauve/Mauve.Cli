@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
@@ -25,12 +26,28 @@ internal static class Program
             {
                 if (!context.TryGetOptionValue(count, out int value))
                 {
-                    return 2;
+                    throw new InvalidOperationException("Validated input has no item number.");
+                }
+
+                if (value < 0)
+                {
+                    throw new CliExitCodeException(65, "The item number must not be negative.");
+                }
+
+                if (value == 0)
+                {
+                    throw new FileNotFoundException("Internal lookup details, not safe for public output.");
                 }
 
                 Console.WriteLine($"Item: {value}");
                 return 0;
             }), includeStandardHelp: true);
-        return CliInvoker.RunAsync(model, args);
+        ExceptionMappingRegistry mappings = new ExceptionMappingRegistryBuilder()
+            .Map<IOException>(74, "The requested item is unavailable.")
+            .Build();
+        CliHostOptions options = new(
+            exceptionMappings: mappings,
+            exceptionRenderer: static context => "inspect: " + context.Result.SafeMessage);
+        return CliInvoker.RunAsync(model, args, options);
     }
 }

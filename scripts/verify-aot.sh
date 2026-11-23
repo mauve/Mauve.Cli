@@ -53,6 +53,11 @@ command -v jq >/dev/null
         src/Mauve.Cli/Completion/CompletionCommandLine.cs \
         src/Mauve.Cli/Completion/ShellCompletion.cs \
         src/Mauve.Cli/Invocation/CliHostOptions.cs \
+        src/Mauve.Cli/Invocation/CliHostOptionsBuilder.cs \
+        src/Mauve.Cli/Invocation/CliExceptionResult.cs \
+        src/Mauve.Cli/Invocation/CliExitCodeException.cs \
+        src/Mauve.Cli/Invocation/CliExceptionRenderingContext.cs \
+        src/Mauve.Cli/Invocation/ExceptionMappingRegistry.cs \
         src/Mauve.Cli/Invocation/IGeneratedCliCommand.cs \
         src/Mauve.Cli/Parsing/CliParser.cs \
         src/Mauve.Cli/Parsing/ValueOrigin.cs \
@@ -79,6 +84,7 @@ command -v jq >/dev/null
         src/Mauve.Cli/Completion/CompletionService.cs \
         src/Mauve.Cli.Generators/CliModelGenerator.cs \
         tests/Mauve.Cli.Tests/Invocation/CliInvokerTests.cs \
+        tests/Mauve.Cli.Tests/Invocation/ExceptionHostingTests.cs \
         tests/Mauve.Cli.Generators.Tests/CliModelGeneratorTests.cs \
         tests/Mauve.Cli.Aot.Tests/AotScenario.cs \
         tests/Mauve.Cli.Aot.Tests/AotConversionScenario.cs \
@@ -304,8 +310,12 @@ for mode in managed native; do
     dotnet tool run governance -- test-results --trx "${reports[0]}" \
         --output "$evidence/$test_name-$mode-evidence.json"
     jq -e '
-        (.Tests | length == 4)
+        (.Tests | length == 5)
         and (.Tests | all(.Status == "Passed" and .Passed == 1))
+        and (.Features | any(.Id == "FEAT-09" and .Status == "Passed" and .Passed == 1))
+        and ([.Requirements[]
+            | select(.Id == "FEAT-09-006" or .Id == "FEAT-09-007" or .Id == "FEAT-09-008")
+            | select(.Status == "Passed" and .Passed == 1)] | length == 3)
         and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 2))
         and (.Features | any(.Id == "FEAT-15" and .Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-16" and .Status == "Passed" and .Passed == 1))

@@ -21,6 +21,7 @@ commands to run both versions.
 | [Custom converters](13-CustomConverters/) | Type-level providers, definition-local overrides, custom positionals and directive values |
 | [Short options](14-ShortOptions/) | Combined short options and explicitly counting options |
 | [Option sources](15-OptionSources/) | Inspect whether each option came from a default, environment variable or argv |
+| [Exception handling](16-ExceptionHandling/) | Direct exceptions, central mappings and a custom renderer with fluent host options |
 
 These applications print results without changing files or contacting
 services. The Commands pair also serves as a representative trimmed and

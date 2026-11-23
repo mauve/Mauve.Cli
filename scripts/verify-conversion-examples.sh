@@ -203,7 +203,7 @@ verify_validation() {
     grep -Fq 'Argument 2:' "$evidence/$label-validation-cross.stderr"
     grep -Fq 'Value must be between 1 and 50 (inclusive).' "$evidence/$label-validation-range.stderr"
     grep -Fq 'Collection count must be between 1 and 4 (inclusive).' "$evidence/$label-validation-count.stderr"
-    grep -Fq 'Item 2: String length in UTF-16 code units must be between 2 and 12 (inclusive).' "$evidence/$label-validation-item-length.stderr"
+    grep -Fq 'Item 2: String length must be between 2 and 12 (inclusive).' "$evidence/$label-validation-item-length.stderr"
     grep -Fq "Item 2: Tags starting with 'x' are reserved." "$evidence/$label-validation-item-exception.stderr"
     grep -Fq 'Fast mode requires --limit to be at most 20.' "$evidence/$label-validation-cross.stderr"
     if ! "$@" --help | grep -Fq 'allowed: safe, fast'; then

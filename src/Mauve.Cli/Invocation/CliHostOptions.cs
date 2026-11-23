@@ -7,7 +7,7 @@ using Mauve.Cli.Help;
 
 namespace Mauve.Cli.Invocation;
 
-/// <summary>Configures output and exit-code policy for high-level CLI entry points.</summary>
+/// <summary>Configures host output, parsing and high-level exception/exit-code policy.</summary>
 public sealed class CliHostOptions
 {
     /// <summary>Creates host settings, defaulting to console output and conventional exit codes.</summary>
@@ -28,6 +28,8 @@ public sealed class CliHostOptions
     /// <param name="environmentVariableLookup">An optional environment-variable lookup; defaults to the process environment.</param>
     /// <param name="environmentVariableDelimiter">The delimiter used by CSV-encoded collection values.</param>
     /// <param name="environmentVariablesEnabledByDefault">Whether options inheriting host policy are eligible for environment binding.</param>
+    /// <param name="exceptionMappings">High-level host exception mappings; unmatched faults propagate unchanged.</param>
+    /// <param name="exceptionRenderer">A custom mapped-exception renderer that owns redaction; defaults to the safe mapped message.</param>
     public CliHostOptions(
         TextWriter? standardOutput = null,
         TextWriter? standardError = null,
@@ -45,7 +47,9 @@ public sealed class CliHostOptions
         string? environmentVariablePrefix = null,
         Func<string, string?>? environmentVariableLookup = null,
         char environmentVariableDelimiter = ',',
-        bool environmentVariablesEnabledByDefault = true)
+        bool environmentVariablesEnabledByDefault = true,
+        ExceptionMappingRegistry? exceptionMappings = null,
+        Func<CliExceptionRenderingContext, string>? exceptionRenderer = null)
     {
         HelpTextRenderer.ValidateWidth(helpWidth);
         if (executableName is not null)
@@ -85,6 +89,8 @@ public sealed class CliHostOptions
         EnvironmentVariablePrefix = environmentVariablePrefix;
         EnvironmentVariableLookup = environmentVariableLookup ?? Environment.GetEnvironmentVariable;
         EnvironmentVariableDelimiter = environmentVariableDelimiter;
+        ExceptionMappings = exceptionMappings ?? ExceptionMappingRegistry.Empty();
+        ExceptionRenderer = exceptionRenderer ?? (static context => context.Result.SafeMessage);
     }
 
     /// <summary>Gets the sink for rendered help.</summary>
@@ -137,4 +143,11 @@ public sealed class CliHostOptions
 
     /// <summary>Gets the delimiter used by CSV-encoded collection values.</summary>
     public char EnvironmentVariableDelimiter { get; }
+
+    /// <summary>Gets the exception mappings applied only by high-level Run and RunAsync hosts.</summary>
+    public ExceptionMappingRegistry ExceptionMappings { get; }
+
+    /// <summary>Gets the mapped-exception renderer; custom renderers own redaction of original exception details.</summary>
+    /// <remarks>An empty result suppresses output. Null results and renderer faults propagate without remapping.</remarks>
+    public Func<CliExceptionRenderingContext, string> ExceptionRenderer { get; }
 }

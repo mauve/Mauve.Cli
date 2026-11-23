@@ -1,12 +1,25 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Aot.Tests;
+
+[CliCommand("exception-aot", IsRoot = true)]
+internal sealed partial class AotExceptionCommand
+{
+    [CliOption]
+    public bool Direct { get; init; }
+
+    [CliHandler]
+    internal int Run() => Direct
+        ? throw new CliExitCodeException(75, "Direct native failure.")
+        : throw new FileNotFoundException("Private file context.");
+}
 
 [CliCommand("validation-aot", IsRoot = true)]
 [SuppressMessage(

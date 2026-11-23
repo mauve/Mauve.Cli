@@ -36,7 +36,21 @@ the library.
 - Configure help/diagnostic sinks, help rendering and non-handler exit codes
   through `CliHostOptions`; keep standard console output and conventional
   exit-code behavior as defaults. Preserve completed handler codes and
-  propagate unexpected faults.
+  propagate unexpected faults unless explicitly mapped by high-level host
+  exception policy.
+- Extend only `Run`/`RunAsync` with typed immutable exception mappings and a
+  self-describing `CliExitCodeException`. Resolve the most-specific assignable
+  class independently of registration order; explicit mappings override the
+  self-describing fallback. Preserve `InvokeAsync` exception identity and
+  cancellation semantics even when options include mappings.
+- Default exception rendering to the explicitly safe mapped message. A
+  replacement renderer receives the original exception, safe result and
+  executable display name, but owns redaction. Mapping, renderer and writer
+  faults propagate without recursive remapping. Do not catch setup faults or
+  convert handled exceptions into successful public invocation outcomes.
+- Provide a separate reusable `CliHostOptionsBuilder` with immutable Build
+  snapshots and constructor-equivalent defaults and validation. Keep the
+  constructor supported; preserve caller ownership of writers and callbacks.
 - Permit opt-in environment option binding through `CliHostOptions` and the
   shared parser pipeline under
   [ADR-016](ADR-016-Environment-Option-Binding.md); do not introduce
@@ -47,7 +61,7 @@ the library.
 
 ## Consequences
 
-Hosts own exception presentation, cancellation-source lifetime and process
+Hosts own exception redaction, cancellation-source lifetime and process
 exit mapping; the high-level convenience options provide configurable output
 and default mappings without taking process ownership. Parsing remains
 separately usable without invocation. Generated method binding and
@@ -57,4 +71,5 @@ compile-time synchronous-root classification remain owned by
 Affected requirements:
 [FEAT-09](../Requirements/FEAT-09-Invocation-Lifecycle.md),
 including FEAT-09-005, and
+[FEAT-09-006, FEAT-09-007 and FEAT-09-008](../Requirements/FEAT-09-Invocation-Lifecycle.md), and
 [FEAT-16](../Requirements/FEAT-16-Environment-Option-Binding.md).

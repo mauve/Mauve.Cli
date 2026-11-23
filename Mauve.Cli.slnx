@@ -28,6 +28,8 @@
     <Project Path="examples/13-CustomConverters/Manual/CustomConverters.Manual.csproj" />
     <Project Path="examples/14-ShortOptions/Declarative/ShortOptions.Declarative.csproj" />
     <Project Path="examples/14-ShortOptions/Manual/ShortOptions.Manual.csproj" />
+    <Project Path="examples/16-ExceptionHandling/Declarative/ExceptionHandling.Declarative.csproj" />
+    <Project Path="examples/16-ExceptionHandling/Manual/ExceptionHandling.Manual.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj" />

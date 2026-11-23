@@ -13,6 +13,8 @@ generator. Both approaches use the same parser.
 - Statically referenced custom converter providers with model-wide registration
   and definition-local overrides.
 - Built-in help, Unicode command-tree help, and asynchronous command handlers.
+- Fluent host configuration, central typed exception mappings and replaceable
+  safe-default exception rendering.
 - Root directives that run before command dispatch.
 - Opt-in debugger-wait and shell-completion directives.
 - Reusable nested option packs.
@@ -47,6 +49,40 @@ scalar and its strict input format, plus nullable, collection and union shapes.
 The [custom converters example](examples/13-CustomConverters/) shows automatic
 type annotations, property overrides and their explicit registration
 counterparts, including custom positional and directive values.
+
+## Configure exception handling
+
+Both generated and explicit high-level hosts accept the same immutable options:
+
+```csharp
+CliHostOptions options = new CliHostOptionsBuilder()
+    .MapException<IOException>(74, "The requested file is unavailable.")
+    .WithExceptionRenderer(static context =>
+        $"{context.ExecutableName}: {context.Result.SafeMessage}")
+    .Build();
+
+return await CliInvoker.RunAsync<MyCommand>(args, options);
+// Or: return await CliInvoker.RunAsync(model, args, options);
+```
+
+Handlers may instead throw
+`new CliExitCodeException(65, "An explicitly safe public message.", innerException)`.
+Central mappings use the most-specific registered exception class and override
+the exception's own result. Unmapped faults propagate unchanged; zero is not a
+valid exception exit code.
+
+The default renderer prints only the safe mapped message. Custom renderers
+receive the original exception and own redaction of its sensitive details.
+`new CliHostOptions(exceptionMappings: mappings, exceptionRenderer: renderer)`
+remains equally supported. Builders can compose immutable registries with
+`AddExceptionMappings`; every `Build()` snapshots the configuration without
+consuming the builder. Writers and callback state remain caller-owned.
+
+Mappings apply only to `Run`/`RunAsync`, not low-level `InvokeAsync` or direct
+parsing. See the [Help and Errors example](examples/06-HelpAndErrors/) for
+executable examples using both APIs and both configuration styles.
+The [exception-handling pair](examples/16-ExceptionHandling/) shows a minimal
+setup with direct exceptions, central mappings and a custom renderer.
 
 ## Define a command directly
 

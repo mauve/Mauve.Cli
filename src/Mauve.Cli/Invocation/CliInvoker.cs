@@ -55,14 +55,14 @@ public sealed class CliInvoker(CliParser? parser = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
-        ValueTask<InvocationResult> invocation = new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
-            .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken);
+        ValueTask<HostInvocationResult> invocation = new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
+            .InvokeForHostAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken);
         if (!invocation.IsCompleted)
         {
             throw new InvalidOperationException("A synchronous generated command did not complete synchronously.");
         }
 
-        InvocationResult result = invocation.GetAwaiter().GetResult();
+        HostInvocationResult result = invocation.GetAwaiter().GetResult();
         return WriteHostResult(model, result, hostOptions);
     }
 
@@ -108,11 +108,60 @@ public sealed class CliInvoker(CliParser? parser = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         CliHostOptions hostOptions = options ?? new CliHostOptions();
-        InvocationResult result = await new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
-            .InvokeCoreAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken)
+        HostInvocationResult result = await new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
+            .InvokeForHostAsync(model, ResolveArguments(arguments), hostOptions, cancellationToken)
             .ConfigureAwait(false);
         return WriteHostResult(model, result, hostOptions);
     }
+
+    private async ValueTask<HostInvocationResult> InvokeForHostAsync(
+        CommandModel model,
+        IReadOnlyList<string> arguments,
+        CliHostOptions hostOptions,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            InvocationResult result = await InvokeCoreAsync(model, arguments, hostOptions, cancellationToken).ConfigureAwait(false);
+            return new HostInvocationResult(result, null, null);
+        }
+        catch (Exception exception)
+        {
+            CliExceptionResult? mapped = hostOptions.ExceptionMappings.Resolve(exception)
+                ?? (exception as CliExitCodeException)?.Result;
+            if (mapped is null)
+            {
+                throw;
+            }
+
+            return new HostInvocationResult(null, exception, mapped);
+        }
+    }
+
+    private static int WriteHostResult(CommandModel model, HostInvocationResult result, CliHostOptions options)
+    {
+        if (result.Invocation is not null)
+        {
+            return WriteHostResult(model, result.Invocation, options);
+        }
+
+        CliExceptionResult failure = result.Failure
+            ?? throw new InvalidOperationException("The host failure has no exception mapping.");
+        CliExceptionRenderingContext context = new(
+            result.Exception ?? throw new InvalidOperationException("The host failure has no original exception."),
+            failure,
+            options.ExecutableName);
+        string rendered = options.ExceptionRenderer(context)
+            ?? throw new InvalidOperationException("The exception renderer returned null.");
+        if (rendered.Length > 0)
+        {
+            options.StandardError.WriteLine(rendered);
+        }
+
+        return failure.ExitCode;
+    }
+
+    private sealed record HostInvocationResult(InvocationResult? Invocation, Exception? Exception, CliExceptionResult? Failure);
 
     /// <summary>Parses and invokes one command, awaiting its handler to completion.</summary>
     /// <param name="model">The validated command model.</param>
