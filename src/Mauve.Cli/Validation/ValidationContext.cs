@@ -54,7 +54,7 @@ public sealed class ValidationContext
     public bool TryGetOptionValue<T>(OptionDefinition option, out T? value)
     {
         ArgumentNullException.ThrowIfNull(option);
-        return TryGet(GetValue(_options, option), out value);
+        return GetValue(_options, option).TryGetValue(out value);
     }
 
     /// <summary>Gets whether a positional argument was explicitly supplied.</summary>
@@ -75,7 +75,7 @@ public sealed class ValidationContext
     public bool TryGetPositionalValue<T>(PositionalDefinition positional, out T? value)
     {
         ArgumentNullException.ThrowIfNull(positional);
-        return TryGet(GetValue(_positionals, positional), out value);
+        return GetValue(_positionals, positional).TryGetValue(out value);
     }
 
     private static ParsedValue GetValue<TDefinition>(
@@ -88,26 +88,4 @@ public sealed class ValidationContext
             : throw new ArgumentException("The definition does not belong to the selected command.", nameof(definition));
     }
 
-    private static bool TryGet<T>(ParsedValue entry, out T? value)
-    {
-        if (!entry.IsAvailable)
-        {
-            value = default;
-            return false;
-        }
-
-        if (entry.Value is T typedValue)
-        {
-            value = typedValue;
-            return true;
-        }
-
-        if (entry.Value is null && default(T) is null)
-        {
-            value = default;
-            return true;
-        }
-
-        throw new InvalidOperationException("The requested value type does not match the definition.");
-    }
 }

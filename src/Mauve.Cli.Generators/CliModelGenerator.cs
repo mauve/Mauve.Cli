@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
@@ -2976,7 +2977,7 @@ public sealed class CliModelGenerator : IIncrementalGenerator
 
     private static bool IsAsciiLetter(char character) => character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z');
 
-    private static bool TryGetCollectionElementType(ITypeSymbol type, out ITypeSymbol? elementType)
+    private static bool TryGetCollectionElementType(ITypeSymbol type, [NotNullWhen(true)] out ITypeSymbol? elementType)
     {
         if (type is INamedTypeSymbol named
             && named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IReadOnlyList<T>")

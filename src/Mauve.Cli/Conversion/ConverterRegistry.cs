@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Mauve.Cli.Conversion;
@@ -230,7 +231,7 @@ public sealed class ConverterRegistry
     internal bool TryCreateReadOnlyCollection(
         Type elementType,
         IReadOnlyList<object?> values,
-        out object? collection)
+        [NotNullWhen(true)] out object? collection)
     {
         bool useNullableElement = false;
         Type registeredType = elementType;

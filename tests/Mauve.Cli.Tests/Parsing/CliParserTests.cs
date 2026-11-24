@@ -781,6 +781,36 @@ public sealed class CliParserTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-07")]
     [TestProperty(Metadata.Requirement, "FEAT-07-001")]
+    public void ParsedValue_TryGetValueDistinguishesUnavailableNullAndIncompatibleValues()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("count", typeof(int), OptionArity.RequiredScalar))
+            .AddOption(new OptionDefinition(
+                "filter",
+                typeof(string),
+                OptionArity.OptionalScalar,
+                allowsNull: true,
+                bareValuePolicy: BareValuePolicy.Null)));
+        CliParser parser = new();
+
+        ParseResult present = parser.Parse(model, ["--count=7", "--filter"]);
+        ParseResult absent = parser.Parse(model, []);
+        ParsedValue count = present.Values[0];
+        ParsedValue filter = present.Values[1];
+
+        Assert.IsTrue(count.TryGetValue(out int number));
+        Assert.AreEqual(7, number);
+        Assert.IsTrue(filter.TryGetValue(out string? nullValue));
+        Assert.IsNull(nullValue);
+        Assert.IsFalse(absent.Values[0].TryGetValue(out int missing));
+        Assert.AreEqual(0, missing);
+        Assert.ThrowsExactly<InvalidOperationException>(() => count.TryGetValue<string>(out _));
+        Assert.ThrowsExactly<InvalidOperationException>(() => filter.TryGetValue<int>(out _));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-001")]
     public void Parse_PreservesProvenanceAndIsolatesResultsAcrossParses()
     {
         CommandModel model = CommandModel.Create(new CommandBuilder("tool")

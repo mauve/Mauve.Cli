@@ -30,6 +30,82 @@ public sealed class CommandModelTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-01")]
+    [TestProperty(Metadata.Requirement, "FEAT-01-003")]
+    public void TryGetChild_FindsDirectChildrenByOrdinalNameOrAlias()
+    {
+        CommandBuilder hidden = new("copy") { IsHidden = true };
+        hidden.AddAlias("cp").AddChild(new CommandBuilder("nested"));
+        CommandDefinition root = CommandModel.Create(new CommandBuilder("tool").AddChild(hidden)).Root;
+        CommandDefinition expected = root.Children[0];
+
+        Assert.IsTrue(root.TryGetChild("copy", out CommandDefinition? canonical));
+        Assert.AreSame(expected, canonical);
+        Assert.IsTrue(root.TryGetChild("cp", out CommandDefinition? alias));
+        Assert.AreSame(expected, alias);
+        Assert.IsFalse(root.TryGetChild("COPY", out _));
+        Assert.IsFalse(root.TryGetChild("CP", out _));
+        Assert.IsFalse(root.TryGetChild("nested", out _));
+        Assert.IsFalse(root.TryGetChild(string.Empty, out CommandDefinition? missing));
+        Assert.IsNull(missing);
+        Assert.IsFalse(expected.TryGetChild("missing", out _));
+        Assert.ThrowsExactly<ArgumentNullException>(() => root.TryGetChild(null!, out _));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-01")]
+    [TestProperty(Metadata.Requirement, "FEAT-01-001")]
+    public void GetPath_ReturnsModelDefinitionsAndRejectsForeignCommands()
+    {
+        CommandBuilder builder = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("file").AddChild(new CommandBuilder("copy")));
+        CommandModel model = CommandModel.Create(builder);
+        CommandModel foreign = CommandModel.Create(builder);
+        CommandDefinition file = model.Root.Children[0];
+        CommandDefinition copy = file.Children[0];
+
+        Assert.AreSequenceEqual([model.Root], model.GetPath(model.Root));
+        Assert.AreSequenceEqual([model.Root, file, copy], model.GetPath(copy));
+        Assert.ThrowsExactly<ArgumentNullException>(() => model.GetPath(null!));
+        Assert.ThrowsExactly<ArgumentException>(() => model.GetPath(foreign.Root));
+        Assert.ThrowsExactly<ArgumentException>(() => model.GetPath(foreign.Root.Children[0].Children[0]));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-01")]
+    [TestProperty(Metadata.Requirement, "FEAT-01-001")]
+    public void Contains_UsesSnapshotIdentityForRootAndDescendants()
+    {
+        CommandBuilder builder = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("file").AddChild(new CommandBuilder("copy")));
+        CommandModel model = CommandModel.Create(builder);
+        CommandModel sameNames = CommandModel.Create(builder);
+        CommandModel otherNames = CommandModel.Create(new CommandBuilder("tool").AddChild(new CommandBuilder("other")));
+
+        Assert.IsTrue(model.Contains(model.Root));
+        Assert.IsTrue(model.Contains(model.Root.Children[0].Children[0]));
+        Assert.IsFalse(model.Contains(sameNames.Root));
+        Assert.IsFalse(model.Contains(sameNames.Root.Children[0].Children[0]));
+        Assert.IsFalse(model.Contains(otherNames.Root.Children[0]));
+        Assert.ThrowsExactly<ArgumentNullException>(() => model.Contains(null!));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-03")]
+    [TestProperty(Metadata.Requirement, "FEAT-03-002")]
+    public void FormatOptionNames_UsesConfiguredPrefixesWithoutNormalizing()
+    {
+        CliSyntaxOptions custom = new("++", "+");
+
+        Assert.AreEqual("--output", CliSyntaxOptions.Default.FormatLong("output"));
+        Assert.AreEqual("-o", CliSyntaxOptions.Default.FormatShort('o'));
+        Assert.AreEqual("++output", custom.FormatLong("output"));
+        Assert.AreEqual("+o", custom.FormatShort('o'));
+        Assert.AreEqual("++--output", custom.FormatLong("--output"));
+        Assert.AreEqual("++", custom.FormatLong(string.Empty));
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-006")]
     public void Create_InstallsHelpTreeAndAccountsForItsLimitsAndCollisions()
@@ -92,6 +168,24 @@ public sealed class CommandModelTests
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
 
         Assert.IsEmpty(model.Root.Children);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-001")]
+    public void TryGetDirective_UsesOrdinalNamesIncludingHiddenDirectives()
+    {
+        DirectiveBuilder hidden = new("debug") { IsHidden = true };
+        hidden.SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddDirective(hidden));
+
+        Assert.IsTrue(model.TryGetDirective("debug", out DirectiveDefinition? found));
+        Assert.AreSame(model.Directives[0], found);
+        Assert.IsFalse(model.TryGetDirective("DEBUG", out _));
+        Assert.IsFalse(model.TryGetDirective("missing", out _));
+        Assert.IsFalse(model.TryGetDirective(string.Empty, out DirectiveDefinition? missing));
+        Assert.IsNull(missing);
+        Assert.ThrowsExactly<ArgumentNullException>(() => model.TryGetDirective(null!, out _));
     }
 
     [TestMethod]

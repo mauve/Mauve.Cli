@@ -87,7 +87,7 @@ public sealed class ParseResult
         }
 
         ParsedValue entry = _values.Single(parsed => ReferenceEquals(parsed.Owner, owner) && ReferenceEquals(parsed.Option, option));
-        return TryGet(entry, out value);
+        return entry.TryGetValue(out value);
     }
 
     /// <summary>Attempts to get a typed option value by its definition handle.</summary>
@@ -102,7 +102,7 @@ public sealed class ParseResult
         ParsedValue? entry = _values.FirstOrDefault(parsed => ReferenceEquals(parsed.Option, option));
         return entry is null
             ? throw new ArgumentException("The option handle is not part of this selected model path.", nameof(option))
-            : TryGet(entry, out value);
+            : entry.TryGetValue(out value);
     }
 
     /// <summary>Attempts to get a parsed positional value by its owning command and definition.</summary>
@@ -122,7 +122,7 @@ public sealed class ParseResult
         }
 
         ParsedValue entry = _values.Single(parsed => ReferenceEquals(parsed.Owner, owner) && ReferenceEquals(parsed.Positional, positional));
-        return TryGet(entry, out value);
+        return entry.TryGetValue(out value);
     }
 
     private void EnsureValidated()
@@ -133,26 +133,4 @@ public sealed class ParseResult
         }
     }
 
-    private static bool TryGet<T>(ParsedValue entry, out T? value)
-    {
-        if (!entry.IsAvailable)
-        {
-            value = default;
-            return false;
-        }
-
-        if (entry.Value is T typedValue)
-        {
-            value = typedValue;
-            return true;
-        }
-
-        if (entry.Value is null && default(T) is null)
-        {
-            value = default;
-            return true;
-        }
-
-        throw new InvalidOperationException("The requested value type does not match the definition.");
-    }
 }

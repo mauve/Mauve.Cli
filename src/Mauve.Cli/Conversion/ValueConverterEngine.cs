@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -87,7 +88,7 @@ internal static class ValueConverterEngine
             && IsBuiltIn(underlying)
             ? CreateBuiltInReadOnlyCollection(elementType, values)
             : registry.TryCreateReadOnlyCollection(elementType, values, out object? registeredCollection)
-            ? registeredCollection!
+            ? registeredCollection
             : CreateBuiltInReadOnlyCollection(elementType, values);
     }
 
@@ -160,7 +161,7 @@ internal static class ValueConverterEngine
         string raw,
         Type targetType,
         CultureInfo culture,
-        out object? value,
+        [NotNullWhen(true)] out object? value,
         out string failureCode)
     {
         value = null;
@@ -439,7 +440,7 @@ internal static class ValueConverterEngine
         return index == value.Length;
     }
 
-    private static bool TryAbsoluteUri(string value, out Uri? uri)
+    private static bool TryAbsoluteUri(string value, [NotNullWhen(true)] out Uri? uri)
     {
         uri = null;
         return HasScheme(value)
@@ -450,7 +451,7 @@ internal static class ValueConverterEngine
             && Uri.IsWellFormedUriString(value, UriKind.Absolute);
     }
 
-    private static bool TryTime(ReadOnlySpan<char> value, out string? format)
+    private static bool TryTime(ReadOnlySpan<char> value, [NotNullWhen(true)] out string? format)
     {
         format = null;
         if (value.Length < 5 || value[2] != ':' || !AreAsciiDigits(value[..2]) || !AreAsciiDigits(value.Slice(3, 2))
@@ -544,7 +545,7 @@ internal static class ValueConverterEngine
         return componentCount is >= 2 and <= 4;
     }
 
-    private static bool TryAddress(string raw, out IPAddress? address)
+    private static bool TryAddress(string raw, [NotNullWhen(true)] out IPAddress? address)
     {
         address = null;
         if (raw.AsSpan().ContainsAny(_addressInvalidCharacters))
@@ -578,7 +579,7 @@ internal static class ValueConverterEngine
         return count == 4;
     }
 
-    private static bool TryPath(string raw, bool file, out object? result)
+    private static bool TryPath(string raw, bool file, [NotNullWhen(true)] out object? result)
     {
         result = null;
         if (raw.Length == 0)

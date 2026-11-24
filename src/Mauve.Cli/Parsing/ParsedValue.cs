@@ -56,6 +56,34 @@ public sealed class ParsedValue
     /// <summary>Gets the original argv indices that supplied the value.</summary>
     public IReadOnlyList<int> TokenIndices => _tokenIndices;
 
+    /// <summary>Attempts to get this entry's available value as the requested type.</summary>
+    /// <typeparam name="T">The expected value type.</typeparam>
+    /// <param name="value">The value when available, which may be null.</param>
+    /// <returns>True when the value is available, including an available null.</returns>
+    /// <exception cref="InvalidOperationException">The available value is incompatible with the requested type.</exception>
+    public bool TryGetValue<T>(out T? value)
+    {
+        if (!IsAvailable)
+        {
+            value = default;
+            return false;
+        }
+
+        if (Value is T typedValue)
+        {
+            value = typedValue;
+            return true;
+        }
+
+        if (Value is null && default(T) is null)
+        {
+            value = default;
+            return true;
+        }
+
+        throw new InvalidOperationException("The requested value type does not match the definition.");
+    }
+
     internal IReadOnlyList<ValueCoordinate> ValueCoordinates { get; }
 }
 

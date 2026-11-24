@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using Mauve.Cli.Conversion;
@@ -39,6 +40,27 @@ public sealed class CommandModel
 
     /// <summary>Gets the immutable model-wide converter registry.</summary>
     public ConverterRegistry Converters { get; }
+
+    /// <summary>Finds a root directive by its ordinal case-sensitive name, including hidden directives.</summary>
+    /// <param name="name">The directive name without brackets.</param>
+    /// <param name="directive">The matching directive, if found.</param>
+    /// <returns>True when a matching directive exists.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+    public bool TryGetDirective(string name, [NotNullWhen(true)] out DirectiveDefinition? directive)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        foreach (DirectiveDefinition candidate in Directives)
+        {
+            if (string.Equals(candidate.Name, name, StringComparison.Ordinal))
+            {
+                directive = candidate;
+                return true;
+            }
+        }
+
+        directive = null;
+        return false;
+    }
 
     /// <summary>Creates and validates an immutable snapshot from a command graph.</summary>
     /// <param name="root">The root command builder.</param>
@@ -406,23 +428,50 @@ public sealed class CommandModel
         }
     }
 
-    internal IReadOnlyList<CommandDefinition> GetPath(CommandDefinition command)
+    /// <summary>Gets the root-to-command definition path for a command belonging to this model.</summary>
+    /// <param name="command">A command from this model's snapshot.</param>
+    /// <returns>The root and each descendant through the specified command, in order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="command"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="command"/> does not belong to this model by identity.</exception>
+    public IReadOnlyList<CommandDefinition> GetPath(CommandDefinition command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        List<CommandDefinition> path = [Root];
+        return TryGetPath(command, out List<CommandDefinition>? path)
+            ? path
+            : throw new ArgumentException("The command does not belong to this model.", nameof(command));
+    }
+
+    /// <summary>Checks whether a command belongs to this model by identity.</summary>
+    /// <param name="command">The command to check.</param>
+    /// <returns>True when the command is the root or a descendant in this model's snapshot.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="command"/> is null.</exception>
+    public bool Contains(CommandDefinition command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return TryGetPath(command, out _);
+    }
+
+    private bool TryGetPath(CommandDefinition command, [NotNullWhen(true)] out List<CommandDefinition>? path)
+    {
+        List<CommandDefinition> found = [Root];
         CommandDefinition current = Root;
         for (int index = 1; index < command.Path.Count; index++)
         {
             string component = command.Path[index];
             CommandDefinition? child = current.Children.FirstOrDefault(candidate =>
-                string.Equals(candidate.Name, component, StringComparison.Ordinal)) ?? throw new ArgumentException("The command does not belong to this model.", nameof(command));
-            path.Add(child);
+                string.Equals(candidate.Name, component, StringComparison.Ordinal));
+            if (child is null)
+            {
+                path = null;
+                return false;
+            }
+
+            found.Add(child);
             current = child;
         }
 
-        return !ReferenceEquals(current, command)
-            ? throw new ArgumentException("The command does not belong to this model.", nameof(command))
-            : path;
+        path = ReferenceEquals(current, command) ? found : null;
+        return path is not null;
     }
 
     private static void ValidateEffectiveOptions(CommandDefinition root, CliLimits limits)

@@ -943,8 +943,7 @@ public sealed class CompletionService(
                 continue;
             }
 
-            CommandDefinition? child = scan.CommandSelectionOpen ? FindChild(scan.Command, token) : null;
-            if (child is not null)
+            if (scan.CommandSelectionOpen && scan.Command.TryGetChild(token, out CommandDefinition? child))
             {
                 scan.Path.Add(child);
                 scan.Command = child;
@@ -996,10 +995,10 @@ public sealed class CompletionService(
         {
             int closing = activeToken.IndexOf(']', StringComparison.Ordinal);
             string name = activeToken[1..(closing >= 0 && closing < colonIndex ? closing : colonIndex)];
-            activeDirective = scan.Command is not null
-                ? scan.RootModel.Directives.FirstOrDefault(directive =>
-                    string.Equals(directive.Name, name, StringComparison.Ordinal))
-                : null;
+            if (scan.Command is not null)
+            {
+                _ = scan.RootModel.TryGetDirective(name, out activeDirective);
+            }
             valueIndex = 0;
         }
 
@@ -1095,9 +1094,8 @@ public sealed class CompletionService(
         bool hasColon = colon >= 0 && (close < 0 || colon < close);
         int nameLength = hasColon ? colon : close >= 0 ? close : header.Length;
         string name = header[..nameLength];
-        DirectiveDefinition? directive = model.Directives.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, name, StringComparison.Ordinal));
-        if (directive is null || name.Length == 0 || (close >= 0 && close != header.Length - 1))
+        if (!model.TryGetDirective(name, out DirectiveDefinition? directive)
+            || name.Length == 0 || (close >= 0 && close != header.Length - 1))
         {
             return false;
         }
@@ -1428,9 +1426,6 @@ public sealed class CompletionService(
             alias.Kind == OptionAliasKind.Negating
             && string.Equals(alias.Name, longName, StringComparison.Ordinal));
     }
-
-    private static CommandDefinition? FindChild(CommandDefinition command, string name)
-        => command.Children.FirstOrDefault(child => child.MatchesName(name));
 
     private static PositionalDefinition? GetNextPositional(CommandDefinition command, int tokenCount)
     {

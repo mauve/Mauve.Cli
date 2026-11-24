@@ -21,6 +21,59 @@ public sealed class ExceptionHostingTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-09")]
     [TestProperty(Metadata.Requirement, "FEAT-09-006")]
+    public void ExceptionMappings_TryResolveSelectsExactAndMostSpecificAssignableTypeRegardlessOfOrder()
+    {
+        foreach (bool specificFirst in new[] { false, true })
+        {
+            ExceptionMappingRegistryBuilder builder = new();
+            if (specificFirst)
+            {
+                builder.Map<FileNotFoundException>(74, "Exact.");
+                builder.Map<IOException>(2, "I/O.");
+                builder.Map<Exception>(1, "General.");
+            }
+            else
+            {
+                builder.Map<Exception>(1, "General.");
+                builder.Map<IOException>(2, "I/O.");
+                builder.Map<FileNotFoundException>(74, "Exact.");
+            }
+
+            ExceptionMappingRegistry registry = builder.Build();
+            Assert.IsTrue(registry.TryResolve(new FileNotFoundException("secret"), out CliExceptionResult? exact));
+            Assert.AreEqual(74, exact.ExitCode);
+            Assert.AreEqual("Exact.", exact.SafeMessage);
+            Assert.IsTrue(registry.TryResolve(new DirectoryNotFoundException("secret"), out CliExceptionResult? derived));
+            Assert.AreEqual(2, derived.ExitCode);
+            Assert.AreEqual("I/O.", derived.SafeMessage);
+            Assert.IsTrue(registry.TryResolve(new InvalidOperationException("secret"), out CliExceptionResult? baseMapping));
+            Assert.AreEqual(1, baseMapping.ExitCode);
+            Assert.AreEqual("General.", baseMapping.SafeMessage);
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-006")]
+    public void ExceptionMappings_TryResolveReportsUnmatchedAndPropagatesNullAndMapperFaults()
+    {
+        Assert.IsFalse(ExceptionMappingRegistry.Empty().TryResolve(new CliExitCodeException(74, "Safe."), out CliExceptionResult? unmatched));
+        Assert.IsNull(unmatched);
+        Assert.ThrowsExactly<ArgumentNullException>(() =>
+            ExceptionMappingRegistry.Empty().TryResolve(null!, out _));
+
+        InvalidOperationException mapperFailure = new("Mapper failure.");
+        ExceptionMappingRegistry registry = new ExceptionMappingRegistryBuilder()
+            .Map<Exception>(1, _ => throw mapperFailure)
+            .Build();
+        InvalidOperationException actual = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            registry.TryResolve(new IOException("secret"), out _));
+        Assert.AreSame(mapperFailure, actual);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-006")]
     [TestProperty(Metadata.Requirement, "FEAT-09-007")]
     [SuppressMessage("Usage", "CA1849:Call async methods when in an async method", Justification = "Verifies synchronous and asynchronous host parity.")]
     public async Task Run_HandlesDirectExceptionsAcrossGeneratedAndExplicitHosts()

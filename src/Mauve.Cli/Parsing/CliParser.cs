@@ -118,8 +118,7 @@ public sealed class CliParser(
                 continue;
             }
 
-            CommandDefinition? child = commandSelectionOpen ? FindChild(current, token) : null;
-            if (child is not null)
+            if (commandSelectionOpen && current.TryGetChild(token, out CommandDefinition? child))
             {
                 current = child;
                 selectedPath.Add(current);
@@ -358,17 +357,7 @@ public sealed class CliParser(
             return false;
         }
 
-        DirectiveDefinition? definition = null;
-        foreach (DirectiveDefinition candidate in model.Directives)
-        {
-            if (string.Equals(candidate.Name, name, StringComparison.Ordinal))
-            {
-                definition = candidate;
-                break;
-            }
-        }
-
-        if (definition is null)
+        if (!model.TryGetDirective(name, out DirectiveDefinition? definition))
         {
             AddDiagnostic(diagnostics, ParseDiagnostic.ForInput(
                 ParseDiagnosticCode.UnknownDirective,
@@ -2076,19 +2065,6 @@ public sealed class CliParser(
         }
 
         return OptionAliasKind.Normal;
-    }
-
-    private static CommandDefinition? FindChild(CommandDefinition command, string name)
-    {
-        foreach (CommandDefinition candidate in command.Children)
-        {
-            if (candidate.MatchesName(name))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
     }
 
     private static string[] SuggestCommands(CommandDefinition command, string input)

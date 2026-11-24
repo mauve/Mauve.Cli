@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Mauve.Cli.Invocation;
 
@@ -86,8 +87,15 @@ public sealed class ExceptionMappingRegistry
     /// <returns>An empty registry.</returns>
     public static ExceptionMappingRegistry Empty() => new([]);
 
-    internal CliExceptionResult? Resolve(Exception exception)
+    /// <summary>Resolves an exception using the most-specific assignable registered type.</summary>
+    /// <param name="exception">The exception to resolve.</param>
+    /// <param name="result">The mapped result when a mapping matches; otherwise, <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a registered mapping matches.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="exception"/> is <see langword="null"/>.</exception>
+    /// <remarks>Mapping callback exceptions propagate unchanged. This method does not apply the host's <see cref="CliExitCodeException"/> fallback.</remarks>
+    public bool TryResolve(Exception exception, [NotNullWhen(true)] out CliExceptionResult? result)
     {
+        ArgumentNullException.ThrowIfNull(exception);
         ExceptionMapping? selected = null;
         foreach (ExceptionMapping mapping in Mappings)
         {
@@ -98,7 +106,14 @@ public sealed class ExceptionMappingRegistry
             }
         }
 
-        return selected?.Map(exception);
+        if (selected is null)
+        {
+            result = null;
+            return false;
+        }
+
+        result = selected.Map(exception);
+        return true;
     }
 }
 

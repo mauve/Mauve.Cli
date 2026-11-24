@@ -12,16 +12,16 @@ public sealed class CompletionCommandLineTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-005")]
-    public void CreateRequest_MapsQuotedEscapedAndWhitespacePositions()
+    public void ParseCommandLine_MapsQuotedEscapedAndWhitespacePositions()
     {
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
         string payload = "tool copy \"hello world\" a\\ b '' tail";
 
-        CompletionRequest quoted = CompletionCommandLine.CreateRequest(model, payload, 17);
-        CompletionRequest escaped = CompletionCommandLine.CreateRequest(model, payload, 27);
-        CompletionRequest empty = CompletionCommandLine.CreateRequest(model, payload, 30);
-        CompletionRequest between = CompletionCommandLine.CreateRequest(model, payload, 24);
-        CompletionRequest append = CompletionCommandLine.CreateRequest(model, "tool ", 5);
+        CompletionRequest quoted = CompletionRequest.ParseCommandLine(model, payload, 17);
+        CompletionRequest escaped = CompletionRequest.ParseCommandLine(model, payload, 27);
+        CompletionRequest empty = CompletionRequest.ParseCommandLine(model, payload, 30);
+        CompletionRequest between = CompletionRequest.ParseCommandLine(model, payload, 24);
+        CompletionRequest append = CompletionRequest.ParseCommandLine(model, "tool ", 5);
 
         Assert.AreSequenceEqual(["copy", "hello world", "a b", string.Empty, "tail"], quoted.Arguments);
         Assert.AreEqual(1, quoted.CursorTokenIndex);
@@ -39,18 +39,51 @@ public sealed class CompletionCommandLineTests
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-005")]
-    public void CreateRequest_TreatsPayloadAsTextAndRejectsInvalidCoordinates()
+    public void ParseCommandLine_TreatsPayloadAsTextAndRejectsInvalidCoordinates()
     {
         CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
         string payload = "tool '$(echo x)' \"unfinished";
-        CompletionRequest request = CompletionCommandLine.CreateRequest(model, payload, payload.Length);
+        CompletionRequest request = CompletionRequest.ParseCommandLine(model, payload, payload.Length);
 
         Assert.AreSequenceEqual(["$(echo x)", "unfinished"], request.Arguments);
         Assert.AreEqual(1, request.CursorTokenIndex);
         Assert.AreEqual("unfinished".Length, request.CursorCharacterOffset);
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CompletionCommandLine.CreateRequest(model, payload, -1));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CompletionCommandLine.CreateRequest(model, payload, payload.Length + 1));
-        Assert.ThrowsExactly<ArgumentException>(() => CompletionCommandLine.CreateRequest(model, payload, 2));
-        Assert.ThrowsExactly<ArgumentException>(() => CompletionCommandLine.CreateRequest(model, string.Empty, 0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CompletionRequest.ParseCommandLine(model, payload, -1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CompletionRequest.ParseCommandLine(model, payload, payload.Length + 1));
+        Assert.ThrowsExactly<ArgumentException>(() => CompletionRequest.ParseCommandLine(model, payload, 2));
+        Assert.ThrowsExactly<ArgumentException>(() => CompletionRequest.ParseCommandLine(model, string.Empty, 0));
+        Assert.ThrowsExactly<ArgumentException>(() => CompletionRequest.ParseCommandLine(model, "tool", 4));
+        Assert.ThrowsExactly<ArgumentNullException>(() => CompletionRequest.ParseCommandLine(null!, payload, 0));
+        Assert.ThrowsExactly<ArgumentNullException>(() => CompletionRequest.ParseCommandLine(model, null!, 0));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-005")]
+    public void ParseCommandLine_UsesUtf16OffsetsAndModelLimits()
+    {
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool"));
+        CompletionRequest request = CompletionRequest.ParseCommandLine(model, "tool 😀value", 7);
+
+        Assert.AreEqual(0, request.CursorTokenIndex);
+        Assert.AreEqual(2, request.CursorCharacterOffset);
+
+        CommandModel totalLimitModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumTotalCodeUnits: 5));
+        Assert.ThrowsExactly<ArgumentException>(
+            () => CompletionRequest.ParseCommandLine(totalLimitModel, "tool x", 6));
+
+        CommandModel tokenLimitModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumTokenLength: 3));
+        Assert.ThrowsExactly<ArgumentException>(
+            () => CompletionRequest.ParseCommandLine(tokenLimitModel, "t long", 6));
+
+        CommandModel argumentLimitModel = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumArgumentCount: 1));
+        Assert.ThrowsExactly<ArgumentException>(
+            () => CompletionRequest.ParseCommandLine(argumentLimitModel, "tool one two", 12));
     }
 }

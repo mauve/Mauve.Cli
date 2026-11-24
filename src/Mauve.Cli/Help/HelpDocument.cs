@@ -99,7 +99,7 @@ public sealed class HelpDocument
         CommandDefinition selected = command ?? model.Root;
         syntax ??= CliSyntaxOptions.Default;
         hostOptions ??= new CliHostOptions();
-        if (!Contains(model.Root, selected))
+        if (!model.Contains(selected))
         {
             throw new ArgumentException("The command does not belong to this model.", nameof(command));
         }
@@ -222,27 +222,6 @@ public sealed class HelpDocument
         return new HelpDirectiveItem(
             syntax,
             HelpTextSanitizer.Description(directive.Description));
-    }
-
-    private static bool Contains(CommandDefinition root, CommandDefinition target)
-    {
-        Stack<CommandDefinition> commands = new();
-        commands.Push(root);
-        while (commands.Count > 0)
-        {
-            CommandDefinition current = commands.Pop();
-            if (ReferenceEquals(current, target))
-            {
-                return true;
-            }
-
-            foreach (CommandDefinition child in current.Children)
-            {
-                commands.Push(child);
-            }
-        }
-
-        return false;
     }
 
     private static HelpPositionalItem CreatePositionalItem(PositionalDefinition positional)

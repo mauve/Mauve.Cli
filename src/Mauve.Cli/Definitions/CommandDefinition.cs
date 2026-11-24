@@ -137,6 +137,27 @@ public sealed class CommandDefinition
         return false;
     }
 
+    /// <summary>Finds a direct child by its canonical name or alias using ordinal case-sensitive comparison.</summary>
+    /// <param name="name">The child command spelling.</param>
+    /// <param name="child">The matching child, if found.</param>
+    /// <returns><see langword="true"/> when a matching child exists.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+    public bool TryGetChild(string name, [NotNullWhen(true)] out CommandDefinition? child)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        foreach (CommandDefinition candidate in _children)
+        {
+            if (candidate.MatchesName(name))
+            {
+                child = candidate;
+                return true;
+            }
+        }
+
+        child = null;
+        return false;
+    }
+
     /// <summary>Finds a local option by its canonical name or alias.</summary>
     /// <param name="name">The exact option spelling.</param>
     /// <param name="option">The matching option, if found.</param>

@@ -36,7 +36,13 @@ public sealed class CliSyntaxOptions
     /// <summary>Gets the default option syntax.</summary>
     public static CliSyntaxOptions Default { get; } = new();
 
-    internal string FormatLong(string name) => string.Concat(LongOptionPrefix, name);
+    /// <summary>Prepends the configured long option prefix to a name.</summary>
+    /// <param name="name">The name to append; it is not validated or normalized.</param>
+    /// <returns>The configured prefix followed by the name.</returns>
+    public string FormatLong(string name) => string.Concat(LongOptionPrefix, name);
 
-    internal string FormatShort(char name) => string.Concat(ShortOptionPrefix, name);
+    /// <summary>Prepends the configured short option prefix to a character.</summary>
+    /// <param name="name">The character to append; it is not validated or normalized.</param>
+    /// <returns>The configured prefix followed by the character.</returns>
+    public string FormatShort(char name) => string.Concat(ShortOptionPrefix, name);
 }

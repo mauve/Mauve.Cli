@@ -226,17 +226,7 @@ public sealed class CliInvoker(CliParser? parser = null)
         List<CommandDefinition> path = [selectedModel.Root];
         for (int index = 1; index < route.CommandPath.Count; index++)
         {
-            CommandDefinition? next = null;
-            foreach (CommandDefinition child in path[^1].Children)
-            {
-                if (child.MatchesName(route.CommandPath[index]))
-                {
-                    next = child;
-                    break;
-                }
-            }
-
-            if (next is null)
+            if (!path[^1].TryGetChild(route.CommandPath[index], out CommandDefinition? next))
             {
                 throw new ArgumentException("The multicall command path does not identify a command in its model.", nameof(route));
             }
@@ -263,8 +253,11 @@ public sealed class CliInvoker(CliParser? parser = null)
         }
         catch (Exception exception)
         {
-            CliExceptionResult? mapped = hostOptions.ExceptionMappings.Resolve(exception)
-                ?? (exception as CliExitCodeException)?.Result;
+            if (!hostOptions.ExceptionMappings.TryResolve(exception, out CliExceptionResult? mapped))
+            {
+                mapped = (exception as CliExitCodeException)?.Result;
+            }
+
             if (mapped is null)
             {
                 throw;

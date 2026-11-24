@@ -123,7 +123,7 @@ internal static class ShellCompletion
             ValidateBashActiveWord(prefix, shell == "bash-full");
         }
 
-        CompletionRequest request = CompletionCommandLine.CreateRequest(model, line, prefix.Length);
+        CompletionRequest request = CompletionRequest.ParseCommandLine(model, line, prefix.Length);
         return shell != "powershell" && request.CursorTokenIndex < request.Arguments.Count
             && request.CursorCharacterOffset != request.Arguments[request.CursorTokenIndex].Length
             ? throw new ArgumentException("The shell cannot replace a suffix after the completion cursor.", nameof(prefix))
