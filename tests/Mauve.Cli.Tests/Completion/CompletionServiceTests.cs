@@ -263,6 +263,33 @@ public sealed class CompletionServiceTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-001")]
+    public async Task CompleteAsync_ConvertsCompletedPositionalValuesBeforeCompletingTheActiveToken()
+    {
+        PositionalDefinition count = new("count", typeof(int), minimumValues: 1, maximumValues: 1);
+        PositionalDefinition paths = new("paths", typeof(IReadOnlyList<string>), minimumValues: 0,
+            maximumValues: null, elementType: typeof(string));
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddPositional(count)
+            .AddPositional(paths));
+        CompletionProviderRegistry providers = new CompletionProviderRegistryBuilder()
+            .Register(paths, static (_, _) => SingleValue("path-value"))
+            .Build();
+        CompletionService service = new();
+
+        CompletionResult completed = await service.CompleteAsync(
+            new CompletionRequest(model, ["5", "a", ""], 2, 0), providers, TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult invalid = await service.CompleteAsync(
+            new CompletionRequest(model, ["x", ""], 1, 0), providers, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(CompletionOutcome.Completed, completed.Outcome);
+        Assert.AreEqual("path-value", completed.Candidates.Single().InsertionText);
+        Assert.AreEqual(CompletionOutcome.ContextFailed, invalid.Outcome);
+        Assert.AreEqual(0, invalid.TokenIndex);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
     [TestProperty(Metadata.Requirement, "FEAT-10-003")]
     public async Task CompleteAsync_ReportsProviderFaultsAndBoundsCandidateWork()
     {
@@ -398,6 +425,27 @@ public sealed class CompletionServiceTests
         Assert.AreEqual("[format:pretty]", values.Candidates.Single().InsertionText);
         Assert.AreEqual(CompletionCandidateKind.Value, values.Candidates[0].Kind);
         Assert.IsEmpty(afterCommand.Candidates);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-005")]
+    public async Task CompleteAsync_HandlesCursorAtStartOfDirectiveToken()
+    {
+        DirectiveBuilder debug = new DirectiveBuilder("debug")
+            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddDirective(debug));
+        CompletionService service = new();
+
+        foreach (string token in new[] { "[de", "[debug:x]", "[" })
+        {
+            CompletionResult result = await service.CompleteAsync(
+                new CompletionRequest(model, [token], 0, 0),
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(CompletionOutcome.Completed, result.Outcome, token);
+            Assert.AreEqual("[debug]", result.Candidates.Single().InsertionText, token);
+        }
     }
 
     private static async IAsyncEnumerable<CompletionValue> SuggestResources(

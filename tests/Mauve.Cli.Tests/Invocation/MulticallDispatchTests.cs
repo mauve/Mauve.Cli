@@ -135,7 +135,7 @@ public sealed class MulticallDispatchTests
         Assert.AreEqual(2, await CliInvoker.DispatchMulticallAsync([model], routes, ["--root-only"], options,
             TestContext.CancellationToken).ConfigureAwait(false));
         Assert.IsEmpty(calls);
-        StringAssert.Contains(errors.ToString(), "Argument 1:", StringComparison.Ordinal);
+        Assert.Contains("Argument 1:", errors.ToString(), StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -185,7 +185,7 @@ public sealed class MulticallDispatchTests
         IReadOnlyList<CliMulticallRoute> routes = [new("smurf", ["tool", "copy"])];
         Assert.AreEqual(2, await CliInvoker.DispatchMulticallAsync([model], routes, ["--count", "invalid"], options,
             TestContext.CancellationToken).ConfigureAwait(false));
-        StringAssert.StartsWith(errors.ToString(), "Argument 2:", StringComparison.Ordinal);
+        Assert.StartsWith("Argument 2:", errors.ToString(), StringComparison.Ordinal);
         Assert.AreEqual(0, calls);
         errors.GetStringBuilder().Clear();
         Assert.AreEqual(74, await CliInvoker.DispatchMulticallAsync([model], routes, ["--count", "3"], options,

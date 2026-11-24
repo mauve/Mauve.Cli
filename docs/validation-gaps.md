@@ -371,3 +371,72 @@ the ledger but does not merge it with manual or TRX run reports.
 For a waiver, record `approver: Name; reason: Explanation; expiry: YYYY-MM-DD`
 in Gap or waiver details, and an Owner in its own column. A missing-only
 row fails the declaration gate.
+
+## Untrusted-input testing evidence (2026-11-24)
+
+Separate from the ledger above; see `docs/untrusted-input-testing-audit.md`.
+
+- Runtime Release suite: 182 passed, 0 failed/skipped; metadata-bearing TRX
+  imported with `governance test-results` (`artifacts/test-results/untrusted-input/`).
+- `bash scripts/verify.sh`: 233 tests passed (182 runtime, 45 generator, 6 AOT),
+  all 30 fuzz seeds replayed, Governance checks and Linux x64 NativeAOT passed.
+- Live fuzzing: 10-second smoke runs of `completion`, `shell`, `csv` and `argv`
+  finished with no findings. A first run that instrumented the harness assembly
+  too crashed at startup (`AccessViolationException`); `scripts/fuzz.sh` now
+  instruments only `Mauve.Cli.dll`. These are smoke runs, not campaigns.
+- Not run: real Bash/Zsh/Fish/PowerShell integration and Windows multicall
+  normalization.
+- Fuzz campaigns (300 seconds each, sequential, local bridge, default 4096-byte
+  inputs) completed with no findings: `completion` 5,716,367 runs; `shell`
+  1,827,556; `csv` 2,782,950; `argv` 1,676,014. Outputs are under the ignored
+  `artifacts/fuzzing/campaign-<target>-300s/`. This is bounded evidence, not
+  proof of absence of defects. (An earlier note called libFuzzer's `cov: 3`
+  "coarse feedback"; that figure counts only the bridge's own counters. The
+  `ft:` value reflects real SharpFuzz feedback.)
+
+### Fuzz coverage expansion (2026-11-24)
+
+Those campaigns exercised the original, narrower harness (about 45% of the
+`Mauve.Cli` assembly's lines were executed when its generated corpus was
+replayed). The harness was then extended with a rich public-API model (enum,
+numeric, default, validator and collection options; directives; nested child
+with positionals; providers), completion-service checks, and a typed
+environment binding.
+
+- Smoke runs of the extended harness found two real defects in
+  `CompletionService`: `AddDirectiveCandidates` threw
+  `ArgumentOutOfRangeException` for a cursor at offset 0 of a `[`-prefixed
+  token, and `ConvertPositionals` threw `InvalidCastException` whenever a
+  completed positional value preceded the active token. Both are fixed with
+  regression tests (`CompleteAsync_HandlesCursorAtStartOfDirectiveToken`,
+  `CompleteAsync_ConvertsCompletedPositionalValuesBeforeCompletingTheActiveToken`;
+  each verified to fail without the fix) and regression seeds. Three further
+  smoke failures were harness oracle false positives (round-trip and relaxed
+  limit checks) and were corrected in the harness.
+- Extended-harness campaigns (300 seconds each, run in parallel, same bridge,
+  4096-byte inputs) completed with no findings: `completion` 3,256,192 runs;
+  `shell` 1,795,435; `csv` 1,596,603; `argv` 1,190,039
+  (`artifacts/fuzzing/campaign2-<target>-300s/`).
+- Corpora were minimized with `libFuzzer -merge=1` and promoted as `gen-*`
+  files: 1,123 committed inputs in total (completion 298, shell 297, csv 226,
+  argv 302; about 37 KB). `bash scripts/replay-fuzz-corpus.sh all` replays all
+  of them clean in one process per target.
+- `scripts/fuzz-coverage.sh` (committed corpus, Release, `dotnet-coverage`
+  18.12.0, ReportGenerator 5.6.1; whole `Mauve.Cli` assembly):
+
+  | Corpus replayed | Line coverage | Branch coverage |
+  | --- | --- | --- |
+  | Original 30 seeds, old harness | 38.2% | 23.3% |
+  | Original 30 seeds + old generated corpus (728), old harness | 45.2% | 33.3% |
+  | Original 30 seeds, extended harness | 48.1% | 28.7% |
+  | Committed corpus (1,123), extended harness | 65.9% | 63.2% |
+
+  `CliParser` 61% to 87%, `CompletionService` 45% to 87%, `ShellCompletion`
+  49%, `CliInvoker` 17% to 33%. Coverage is a reporting measure, not evidence
+  of absence of defects; most remaining uncovered code is outside the fuzzed
+  boundaries (declaration attributes, union converters, option packs and help
+  rendering).
+- Runtime Release suite after the fixes: 184 passed, 0 failed/skipped;
+  metadata-bearing TRX imported with `governance test-results`
+  (`artifacts/test-results/fuzz-coverage/`, FEAT-10 and FEAT-15 Passed).
+  `bash scripts/verify.sh` passed with 235 tests.

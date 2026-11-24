@@ -78,3 +78,6 @@ dotnet_diagnostic.MSTEST0037.severity = error
 
 # MSTEST0068: Use 'Assert' instead of 'CollectionAssert'
 dotnet_diagnostic.MSTEST0068.severity = error
+
+# MSTEST0046: Use 'Assert' instead of 'StringAssert'
+dotnet_diagnostic.MSTEST0046.severity = error

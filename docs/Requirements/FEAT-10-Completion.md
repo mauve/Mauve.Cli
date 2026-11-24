@@ -233,8 +233,10 @@ inline and pending values, optional/boolean/end-marker behavior, explicit enum
 maps, negative numeric values, negating aliases, dependency isolation,
 sensitive-target suppression, provider faults, cancellation, candidate bounds
 and unsupported shells. `CompletionCommandLineTests` cover raw cursor mapping
-and malformed coordinates. These tests passed in the 109-test strict MTP
-suite; see the [validation ledger](../validation-gaps.md). The published
+and malformed coordinates, including generated bounded input and UTF-16
+offsets. In-process protocol tests exercise the supported shell modes and
+failure atomicity; they do not execute shell scripts. Observed outcomes are
+recorded in the [validation ledger](../validation-gaps.md). The published
 examples also produced suggestions in trimmed and NativeAOT execution.
 The shell adapter methods and actual shell executions are tracked separately in
 the [validation ledger](../validation-gaps.md).

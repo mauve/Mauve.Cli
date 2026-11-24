@@ -196,8 +196,9 @@ fallback.
 ## Verification
 Portable behavior tests are declared for provenance, independent and
 concurrent parses, categories and coordinates, input/diagnostic bounds,
-unmatched input, model limits and hidden/bounded suggestions. No product
-test-run evidence has been recorded yet; see the [validation ledger](../validation-gaps.md).
+unmatched input, model limits and hidden/bounded suggestions. Boundary and
+arbitrary UTF-16 cases exercise preservation and result isolation; observed
+outcomes are recorded in the [validation ledger](../validation-gaps.md).
 
 ## Diagrams
 

@@ -126,7 +126,9 @@ reused. FEAT-15-008 owns the current shell integration.
 ## Verification
 Focused model, invocation, generator, help, completion and AOT scenarios are
 declared in the test projects and indexed in the
-[validation ledger](../validation-gaps.md). Run `bash scripts/verify.sh` to
+[validation ledger](../validation-gaps.md). Portable cases include malformed
+directive spans, bounded diagnostics and shell protocol failure atomicity.
+Run `bash scripts/verify.sh` to
 validate requirement metadata, build and test the solution, and publish/run
 the trimmed and NativeAOT acceptance scenarios. NativeAOT support is claimed
 only after that gate records successful generated and explicit directive

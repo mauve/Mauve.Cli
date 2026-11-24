@@ -550,6 +550,139 @@ public sealed class CliInvokerTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-003")]
+    public async Task InvokeAsync_ParsesEnvironmentCsvStateTransitionsAndFieldLimits()
+    {
+        OptionDefinition items = new(
+            "--items",
+            typeof(IReadOnlyList<string>),
+            OptionArity.GreedyCollection,
+            elementType: typeof(string));
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool").AddOption(items),
+            limits: new CliLimits(maximumArgumentCount: 3));
+        int handlerCalls = 0;
+        CommandModel handlerModel = CommandModel.Create(
+            new CommandBuilder("tool")
+                .AddOption(items)
+                .SetHandler((_, _) =>
+                {
+                    handlerCalls++;
+                    return 0;
+                }),
+            limits: new CliLimits(maximumArgumentCount: 3));
+        (string Raw, string[] Expected)[] validInputs =
+        [
+            (string.Empty, [string.Empty]),
+            (",leading", [string.Empty, "leading"]),
+            ("trailing,", ["trailing", string.Empty]),
+            ("first,,third", ["first", string.Empty, "third"]),
+            ("\"left,right\",plain", ["left,right", "plain"]),
+            ("\"a\"\"\"\"b\",end", ["a\"\"b", "end"]),
+            ("one,two,three", ["one", "two", "three"])
+        ];
+
+        foreach ((string raw, string[] expected) in validInputs)
+        {
+            InvocationResult result = await new CliInvoker().InvokeAsync(
+                model,
+                [],
+                new CliHostOptions(
+                    enableEnvironmentVariables: true,
+                    environmentVariableLookup: _ => raw),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(InvocationOutcome.NoHandler, result.Outcome, $"Valid CSV: {raw}");
+            Assert.IsTrue(result.ParseResult!.TryGetOptionValue(items, out IReadOnlyList<string>? values), $"Valid CSV: {raw}");
+            Assert.AreSequenceEqual(expected, values!, $"Valid CSV: {raw}");
+            Assert.IsEmpty(result.ParseResult.Values.Single().TokenIndices, $"Valid CSV: {raw}");
+        }
+
+        InvocationResult alternateDelimiter = await new CliInvoker().InvokeAsync(
+            model,
+            [],
+            new CliHostOptions(
+                enableEnvironmentVariables: true,
+                environmentVariableDelimiter: '|',
+                environmentVariableLookup: static _ => "|left|right"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.NoHandler, alternateDelimiter.Outcome);
+        Assert.IsTrue(alternateDelimiter.ParseResult!.TryGetOptionValue(items, out IReadOnlyList<string>? alternateValues));
+        Assert.AreSequenceEqual([string.Empty, "left", "right"], alternateValues!);
+
+        (string Raw, string FailureCode)[] malformedInputs =
+        [
+            ("private-mid-quote\"field\"", "environment.csv.invalid"),
+            ("\"private-closed\"suffix", "environment.csv.invalid"),
+            ("\"private-unterminated", "environment.csv.invalid"),
+            ("private-one,private-two,private-three,private-four", "environment.csv.limit")
+        ];
+        foreach ((string raw, string failureCode) in malformedInputs)
+        {
+            InvocationResult result = await new CliInvoker().InvokeAsync(
+                handlerModel,
+                [],
+                new CliHostOptions(
+                    enableEnvironmentVariables: true,
+                    environmentVariableLookup: _ => raw),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome, failureCode);
+            Assert.AreEqual(0, handlerCalls, failureCode);
+            Assert.IsNotEmpty(result.ParseResult!.Diagnostics);
+            foreach (ParseDiagnostic diagnostic in result.ParseResult.Diagnostics)
+            {
+                Assert.AreEqual(ParseDiagnosticCode.InvalidValue, diagnostic.Code);
+                Assert.AreEqual(failureCode, diagnostic.FailureCode);
+                Assert.IsNull(diagnostic.TokenIndex);
+                Assert.IsNull(diagnostic.ValueTokenIndex);
+                Assert.IsNull(diagnostic.ValueOffset);
+                Assert.IsFalse(diagnostic.Message.Contains("private-", StringComparison.Ordinal));
+                Assert.IsFalse(diagnostic.ToString().Contains("private-", StringComparison.Ordinal));
+            }
+
+            Assert.IsFalse(
+                string.Join(Environment.NewLine, result.FormatDiagnostics()).Contains("private-", StringComparison.Ordinal));
+        }
+
+        Assert.AreEqual(0, handlerCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
+    [TestProperty(Metadata.Requirement, "FEAT-16-003")]
+    public async Task InvokeAsync_RoundTripsGeneratedEnvironmentCsvWithIndependentEncoder()
+    {
+        OptionDefinition items = new(
+            "--items",
+            typeof(IReadOnlyList<string>),
+            OptionArity.GreedyCollection,
+            elementType: typeof(string));
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool").AddOption(items),
+            limits: new CliLimits(maximumArgumentCount: 8));
+
+        foreach (PropertyInputs.GeneratedCase<PropertyInputs.CsvInput> generated in PropertyInputs.EnvironmentCsvValues())
+        {
+            InvocationResult result = await new CliInvoker().InvokeAsync(
+                model,
+                [],
+                new CliHostOptions(
+                    enableEnvironmentVariables: true,
+                    environmentVariableLookup: name => name == "TOOL_ITEMS" ? generated.Value.EncodedValue : null),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(InvocationOutcome.NoHandler, result.Outcome, generated.AssertionMessage);
+            Assert.IsTrue(
+                result.ParseResult!.TryGetOptionValue(items, out IReadOnlyList<string>? actual),
+                generated.AssertionMessage);
+            Assert.AreSequenceEqual(generated.Value.Fields, actual!, generated.AssertionMessage);
+            Assert.IsEmpty(result.ParseResult.Values.Single().TokenIndices, generated.AssertionMessage);
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-16")]
     [TestProperty(Metadata.Requirement, "FEAT-16-001")]
     public async Task InvokeAsync_UsesOptionEligibilityDefaultAndRejectsEnvironmentNameCollisions()
     {
@@ -916,6 +1049,179 @@ public sealed class CliInvokerTests
     }
 
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-002")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-003")]
+    public async Task InvokeAsync_AcceptsEmptyDirectiveValuesBeforeOrdinaryInvalidInput()
+    {
+        int directiveCalls = 0;
+        int commandCalls = 0;
+        DirectiveValueDefinition text = new("text", typeof(string));
+        DirectiveBuilder capture = new DirectiveBuilder("capture")
+            .AddValue(text)
+            .SetHandler((context, _) =>
+            {
+                Assert.IsTrue(context.TryGetValue(text, out string? value));
+                Assert.AreEqual(string.Empty, value);
+                directiveCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddDirective(capture)
+            .AddChild(new CommandBuilder("run")
+                .SetHandler((_, _) =>
+                {
+                    commandCalls++;
+                    return 0;
+                })));
+
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(model, ["[capture:]", "run", "--unknown"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+        Assert.IsTrue(result.ParseResult!.DirectiveInputValid);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, result.ParseResult.Diagnostics[0].Code);
+        Assert.HasCount(1, result.ParseResult.Directives);
+        Assert.AreEqual(1, directiveCalls);
+        Assert.AreEqual(0, commandCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-002")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-003")]
+    public async Task InvokeAsync_MalformedDirectiveSpansClearPlanAndDispatchNothing()
+    {
+        const string privateText = "PRIVATE-DIRECTIVE-CONTENT";
+        string[][] malformedSpans =
+        [
+            [$"[:{privateText}]"],
+            [$"[trace]:{privateText}]"],
+            [$"[trace]{privateText}"],
+            [$"[trace]]{privateText}"],
+            [$"[trace:{privateText}"],
+            [$"[trace:{privateText}", $"{privateText}-tail"]
+        ];
+        int directiveCalls = 0;
+        int commandCalls = 0;
+        DirectiveBuilder trace = new DirectiveBuilder("trace")
+            .SetHandler((_, _) =>
+            {
+                directiveCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .AddDirective(trace)
+            .SetHandler((_, _) =>
+            {
+                commandCalls++;
+                return 0;
+            }));
+
+        foreach (string[] malformedSpan in malformedSpans)
+        {
+            List<string> arguments = ["[trace]", .. malformedSpan];
+            InvocationResult result = await new CliInvoker()
+                .InvokeAsync(model, arguments, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+            Assert.IsFalse(result.ParseResult!.DirectiveInputValid);
+            Assert.IsEmpty(result.ParseResult.Directives);
+            Assert.AreEqual(ParseDiagnosticCode.MalformedDirective, result.ParseResult.Diagnostics[0].Code);
+            Assert.AreEqual("Malformed directive bracket span.", result.ParseResult.Diagnostics[0].Message);
+            foreach (ParseDiagnostic diagnostic in result.ParseResult.Diagnostics)
+            {
+                Assert.IsFalse(diagnostic.Message.Contains(privateText, StringComparison.Ordinal));
+                Assert.IsFalse(diagnostic.ToString().Contains(privateText, StringComparison.Ordinal));
+            }
+
+            string formattedDiagnostics = string.Join(Environment.NewLine, result.FormatDiagnostics());
+            Assert.IsFalse(formattedDiagnostics.Contains(privateText, StringComparison.Ordinal));
+        }
+
+        Assert.AreEqual(0, directiveCalls);
+        Assert.AreEqual(0, commandCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-15")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-002")]
+    [TestProperty(Metadata.Requirement, "FEAT-15-003")]
+    public async Task InvokeAsync_EnforcesDirectiveSpanAndDiagnosticLimitsBeforeDispatch()
+    {
+        const string privateText = "PRIVATE-DIRECTIVE-CONTENT";
+        (CliLimits Limits, string[] Arguments, ParseDiagnosticCode[] ExpectedCodes, bool DirectiveInputValid)[] cases =
+        [
+            (
+                new CliLimits(maximumArgumentCount: 3),
+                ["[trace]", $"[trace:{privateText}", $"{privateText}-tail"],
+                [ParseDiagnosticCode.MalformedDirective],
+                false),
+            (
+                new CliLimits(maximumArgumentCount: 2),
+                ["[trace]", "[trace]", privateText],
+                [ParseDiagnosticCode.InputLimitExceeded],
+                true),
+            (
+                new CliLimits(maximumTokenLength: 7),
+                ["[trace]", $"[trace]{privateText}"],
+                [ParseDiagnosticCode.InputLimitExceeded],
+                true),
+            (
+                new CliLimits(maximumTotalCodeUnits: 7),
+                ["[trace]", privateText],
+                [ParseDiagnosticCode.InputLimitExceeded],
+                true),
+            (
+                new CliLimits(maximumDiagnostics: 2),
+                [$"[trace]]{privateText}-one", $"[trace]]{privateText}-two", $"[trace]]{privateText}-three"],
+                [ParseDiagnosticCode.MalformedDirective, ParseDiagnosticCode.DiagnosticLimitExceeded],
+                false)
+        ];
+        int directiveCalls = 0;
+        int commandCalls = 0;
+        DirectiveBuilder trace = new DirectiveBuilder("trace")
+            .SetHandler((_, _) =>
+            {
+                directiveCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+
+        foreach ((CliLimits limits, string[] arguments, ParseDiagnosticCode[] expectedCodes, bool directiveInputValid) in cases)
+        {
+            CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+                .AddDirective(trace)
+                .SetHandler((_, _) =>
+                {
+                    commandCalls++;
+                    return 0;
+                }), limits);
+            InvocationResult result = await new CliInvoker()
+                .InvokeAsync(model, arguments, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+            Assert.AreEqual(directiveInputValid, result.ParseResult!.DirectiveInputValid);
+            Assert.IsEmpty(result.ParseResult.Directives);
+            Assert.AreSequenceEqual(expectedCodes, [.. result.ParseResult.Diagnostics.Select(static diagnostic => diagnostic.Code)]);
+            Assert.IsLessThanOrEqualTo(limits.MaximumDiagnostics, result.ParseResult.Diagnostics.Count);
+            foreach (ParseDiagnostic diagnostic in result.ParseResult.Diagnostics)
+            {
+                Assert.IsFalse(diagnostic.Message.Contains(privateText, StringComparison.Ordinal));
+                Assert.IsFalse(diagnostic.ToString().Contains(privateText, StringComparison.Ordinal));
+            }
+
+            string formattedDiagnostics = string.Join(Environment.NewLine, result.FormatDiagnostics());
+            Assert.IsFalse(formattedDiagnostics.Contains(privateText, StringComparison.Ordinal));
+        }
+
+        Assert.AreEqual(0, directiveCalls);
+        Assert.AreEqual(0, commandCalls);
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-005")]
     public void Run_PassesExecutableExamplesToDefaultHelpRenderer()
@@ -928,7 +1234,7 @@ public sealed class CliInvokerTests
         CliHostOptions options = new(output, errors, executableName: "actual-binary");
 
         int synchronous = CliInvoker.Run(model, ["add", "--help"], options, TestContext.CancellationToken);
-        StringAssert.Contains(output.ToString(), "actual-binary add --text AAA", StringComparison.Ordinal);
+        Assert.Contains("actual-binary add --text AAA", output.ToString(), StringComparison.Ordinal);
         Assert.AreEqual(0, synchronous);
         Assert.AreEqual(Environment.GetCommandLineArgs()[0], new CliHostOptions().ExecutableName);
         Assert.AreEqual(string.Empty, errors.ToString());
@@ -949,7 +1255,7 @@ public sealed class CliInvokerTests
             executableName: "custom-binary");
         int asynchronous = await CliInvoker.RunAsync(model, ["add", "--help"], custom, TestContext.CancellationToken)
             .ConfigureAwait(false);
-        StringAssert.Contains(output.ToString(), "custom-binary add --text AAA", StringComparison.Ordinal);
+        Assert.Contains("custom-binary add --text AAA", output.ToString(), StringComparison.Ordinal);
         Assert.AreEqual(0, asynchronous);
         Assert.AreEqual(string.Empty, errors.ToString());
     }

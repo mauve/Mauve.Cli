@@ -45,16 +45,16 @@ public sealed class CliParserTests
         Assert.AreEqual("range.invalid", scalar.Diagnostics[0].FailureCode);
         Assert.AreEqual(0, scalar.Diagnostics[0].TokenIndex);
         Assert.AreEqual(1, scalar.Diagnostics[0].ValueTokenIndex);
-        StringAssert.Contains(scalar.Diagnostics[0].ToString(), "Value must be between 1 and 10 (inclusive).", StringComparison.Ordinal);
+        Assert.Contains("Value must be between 1 and 10 (inclusive).", scalar.Diagnostics[0].ToString(), StringComparison.Ordinal);
         Assert.AreEqual("tag.bad", item.Diagnostics[0].FailureCode);
         Assert.AreEqual(1, item.Diagnostics[0].TokenIndex);
         Assert.AreEqual(2, item.Diagnostics[0].ValueTokenIndex);
         Assert.AreEqual(1, item.Diagnostics[0].ValueOffset);
-        StringAssert.Contains(item.Diagnostics[0].ToString(), "Item 2: This tag is reserved.", StringComparison.Ordinal);
+        Assert.Contains("Item 2: This tag is reserved.", item.Diagnostics[0].ToString(), StringComparison.Ordinal);
         Assert.AreEqual("length.invalid", inline.Diagnostics[0].FailureCode);
         Assert.AreEqual(1, inline.Diagnostics[0].ValueTokenIndex);
         Assert.AreEqual(6, inline.Diagnostics[0].ValueOffset);
-        StringAssert.Contains(inline.Diagnostics[0].ToString(), "Item 2: String length must be between 2 and 8 (inclusive).", StringComparison.Ordinal);
+        Assert.Contains("Item 2: String length must be between 2 and 8 (inclusive).", inline.Diagnostics[0].ToString(), StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -66,12 +66,12 @@ public sealed class CliParserTests
         OptionDefinition tags = new("tag", typeof(IReadOnlyList<string>), OptionArity.RepeatedSingleCollection,
             elementType: typeof(string), validators: [CliValidators.CollectionLength<string>(2, 4)]);
         ParseResult collection = new CliParser().Parse(CommandModel.Create(new CommandBuilder("tool").AddOption(tags)), ["--tag=a"]);
-        StringAssert.Contains(collection.Diagnostics[0].ToString(), "Collection count must be between 2 and 4 (inclusive).", StringComparison.Ordinal);
+        Assert.Contains("Collection count must be between 2 and 4 (inclusive).", collection.Diagnostics[0].ToString(), StringComparison.Ordinal);
 
         ValueValidationOutcome rejection = ValueValidationOutcome.Failure("cross.bad", "Use a different combination.\n\u001b\u202e" + new string('a', 600));
         CommandModel cross = CommandModel.Create(new CommandBuilder("tool").AddCrossValidator(_ => rejection));
         ParseResult result = new CliParser().Parse(cross, []);
-        StringAssert.Contains(result.Diagnostics[0].ToString(), "Use a different combination.", StringComparison.Ordinal);
+        Assert.Contains("Use a different combination.", result.Diagnostics[0].ToString(), StringComparison.Ordinal);
         Assert.IsLessThanOrEqualTo(512, rejection.Message!.Length);
         Assert.IsFalse(result.Diagnostics[0].Message.Contains('\n', StringComparison.Ordinal));
         Assert.IsFalse(result.Diagnostics[0].Message.Contains('\u001b', StringComparison.Ordinal));
@@ -103,7 +103,7 @@ public sealed class CliParserTests
         Assert.AreEqual("cross.bad", result.Diagnostics[0].FailureCode);
         Assert.AreEqual(0, result.Diagnostics[0].ValueTokenIndex);
         Assert.AreEqual(8, result.Diagnostics[0].ValueOffset);
-        StringAssert.Contains(result.Diagnostics[0].ToString(), "Choose a smaller count.", StringComparison.Ordinal);
+        Assert.Contains("Choose a smaller count.", result.Diagnostics[0].ToString(), StringComparison.Ordinal);
 
         OptionDefinition foreign = new("other", typeof(int), OptionArity.RequiredScalar);
         CommandModel invalid = CommandModel.Create(new CommandBuilder("tool").AddOption(count)
@@ -967,6 +967,126 @@ public sealed class CliParserTests
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, manyErrors.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.DiagnosticLimitExceeded, manyErrors.Diagnostics[1].Code);
         Assert.AreEqual("Too many errors; further diagnostics were omitted.", manyErrors.Diagnostics[1].ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Parse_AcceptsExactArgvLimitsAndRejectsEachOneOverBoundary()
+    {
+        CommandModel positionalModel = CommandModel.Create(
+            new CommandBuilder("tool").AddPositional(new PositionalDefinition(
+                "values",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string))));
+
+        CliParser countParser = new();
+        CommandModel countAtLimit = CommandModel.Create(
+            new CommandBuilder("tool").AddPositional(new PositionalDefinition(
+                "values",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string))),
+            new CliLimits(maximumArgumentCount: 2));
+        ParseResult countExact = countParser.Parse(countAtLimit, ["one", "two"]);
+        ParseResult countOver = countParser.Parse(countAtLimit, ["one", "two", "three"]);
+
+        CommandModel tokenAtLimit = CommandModel.Create(
+            new CommandBuilder("tool").AddPositional(new PositionalDefinition(
+                "values",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string))),
+            new CliLimits(maximumTokenLength: 3));
+        ParseResult tokenExact = new CliParser().Parse(tokenAtLimit, ["abc"]);
+        ParseResult tokenOver = new CliParser().Parse(tokenAtLimit, ["abcd"]);
+
+        CommandModel aggregateAtLimit = CommandModel.Create(
+            new CommandBuilder("tool").AddPositional(new PositionalDefinition(
+                "values",
+                typeof(IReadOnlyList<string>),
+                minimumValues: 0,
+                maximumValues: null,
+                elementType: typeof(string))),
+            new CliLimits(maximumTotalCodeUnits: 5));
+        ParseResult aggregateExact = new CliParser().Parse(aggregateAtLimit, ["ab", "cde"]);
+        ParseResult aggregateOver = new CliParser().Parse(aggregateAtLimit, ["ab", "cdef"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, countExact.Outcome);
+        Assert.AreEqual(ParseOutcome.Invalid, countOver.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, countOver.Diagnostics[0].Code);
+        Assert.AreEqual(2, countOver.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(ParseOutcome.Validated, tokenExact.Outcome);
+        Assert.AreEqual(ParseOutcome.Invalid, tokenOver.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, tokenOver.Diagnostics[0].Code);
+        Assert.AreEqual(ParseOutcome.Validated, aggregateExact.Outcome);
+        Assert.AreEqual(ParseOutcome.Invalid, aggregateOver.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InputLimitExceeded, aggregateOver.Diagnostics[0].Code);
+        Assert.AreEqual(1, aggregateOver.Diagnostics[0].TokenIndex);
+
+        ParseResult invalid = new CliParser().Parse(positionalModel, ["--unknown"]);
+        Assert.AreEqual(ParseOutcome.Invalid, invalid.Outcome);
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => invalid.TryGetPositionalValue(
+                positionalModel.Root,
+                positionalModel.Root.Positionals[0],
+                out IReadOnlyList<string>? _));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-002")]
+    public void Parse_BoundsDiagnosticsAtConfiguredCapacity()
+    {
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool"),
+            new CliLimits(maximumDiagnostics: 1));
+
+        ParseResult result = new CliParser().Parse(model, ["--one", "--two", "--three"]);
+
+        Assert.HasCount(1, result.Diagnostics);
+        Assert.AreEqual(ParseDiagnosticCode.DiagnosticLimitExceeded, result.Diagnostics[0].Code);
+        Assert.AreEqual("Too many errors; further diagnostics were omitted.", result.Diagnostics[0].ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-07")]
+    [TestProperty(Metadata.Requirement, "FEAT-07-001")]
+    public void Parse_PreservesArbitraryUtf16StringsAndPriorResults()
+    {
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool").AddPositional(new PositionalDefinition("value", typeof(string))));
+        CliParser parser = new();
+
+        foreach (PropertyInputs.GeneratedCase<string> generated in PropertyInputs.ArbitraryUtf16Strings())
+        {
+            string[] arguments = ["--", generated.Value];
+            ParseResult result = parser.Parse(model, arguments);
+
+            Assert.AreEqual(ParseOutcome.Validated, result.Outcome, generated.AssertionMessage);
+            Assert.IsTrue(result.TryGetPositionalValue(model.Root, model.Root.Positionals[0], out string? value),
+                generated.AssertionMessage);
+            Assert.AreEqual(generated.Value, value, generated.AssertionMessage);
+            Assert.AreEqual(generated.Value, result.Arguments[1], generated.AssertionMessage);
+
+            arguments[1] = "mutated";
+            Assert.AreEqual(generated.Value, result.Arguments[1], generated.AssertionMessage);
+            Assert.IsTrue(result.TryGetPositionalValue(model.Root, model.Root.Positionals[0], out string? priorValue),
+                generated.AssertionMessage);
+            Assert.AreEqual(generated.Value, priorValue, generated.AssertionMessage);
+
+            ParseResult next = parser.Parse(model, ["--", "next"]);
+            Assert.IsTrue(next.TryGetPositionalValue(model.Root, model.Root.Positionals[0], out string? nextValue),
+                generated.AssertionMessage);
+            Assert.AreEqual("next", nextValue, generated.AssertionMessage);
+            Assert.IsTrue(result.TryGetPositionalValue(model.Root, model.Root.Positionals[0], out string? unchanged),
+                generated.AssertionMessage);
+            Assert.AreEqual(generated.Value, unchanged, generated.AssertionMessage);
+        }
     }
 
     [TestMethod]

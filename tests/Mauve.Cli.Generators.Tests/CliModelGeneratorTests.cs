@@ -114,10 +114,10 @@ public sealed class CliModelGeneratorTests
 
         Assert.AreEqual("tag.bad", item.Diagnostics[0].FailureCode);
         Assert.AreEqual(2, item.Diagnostics[0].ValueTokenIndex);
-        StringAssert.Contains(item.Diagnostics[0].ToString(), "Item 2: This tag is reserved.", StringComparison.Ordinal);
+        Assert.Contains("Item 2: This tag is reserved.", item.Diagnostics[0].ToString(), StringComparison.Ordinal);
         Assert.AreEqual("cross.invalid", cross.Diagnostics[0].FailureCode);
         Assert.AreEqual(2, cross.Diagnostics[0].ValueTokenIndex);
-        StringAssert.Contains(cross.Diagnostics[0].ToString(), "Fast mode requires a count of at most 5.", StringComparison.Ordinal);
+        Assert.Contains("Fast mode requires a count of at most 5.", cross.Diagnostics[0].ToString(), StringComparison.Ordinal);
         Assert.AreEqual("range.invalid", fractional.Diagnostics[0].FailureCode);
         Assert.AreEqual("minimum.invalid", below.Diagnostics[0].FailureCode);
         Assert.AreEqual("maximum.invalid", above.Diagnostics[0].FailureCode);

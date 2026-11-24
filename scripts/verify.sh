@@ -10,6 +10,7 @@ dotnet tool run governance -- validate --root . --strict-planned
 dotnet tool run governance -- generate --root . --output artifacts/traceability.json
 dotnet restore Mauve.Cli.slnx --locked-mode
 dotnet build Mauve.Cli.slnx -c Release --no-restore
+bash scripts/replay-fuzz-corpus.sh all
 dotnet format Mauve.Cli.slnx --verify-no-changes --no-restore
 dotnet test Mauve.Cli.slnx -c Release --no-build
 bash scripts/verify-tooling.sh

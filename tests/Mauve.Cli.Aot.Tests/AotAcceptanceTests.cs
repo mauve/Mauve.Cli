@@ -50,7 +50,7 @@ public sealed class AotAcceptanceTests
             Assert.AreEqual(0, await CliInvoker.DispatchMulticallAsync([model, other], routes, ["--help"],
                 new CliHostOptions(output, errors, executableName: "smurf"),
                 TestContext.CancellationToken).ConfigureAwait(false));
-            StringAssert.Contains(output.ToString(), "Usage: smurf [OPTIONS] <name>", StringComparison.Ordinal);
+            Assert.Contains("Usage: smurf [OPTIONS] <name>", output.ToString(), StringComparison.Ordinal);
             Assert.AreEqual(string.Empty, errors.ToString());
         }
     }
@@ -133,7 +133,7 @@ public sealed class AotAcceptanceTests
         CommandModel defaults = AotConversionCommand.CreateModel();
         Assert.IsTrue(defaults.Root.Options.Single(static option => option.Name == "--choice").IsRequired);
         Assert.AreEqual("classic", defaults.Root.Options.Single(static option => option.Name == "--flavor").DefaultValue);
-        StringAssert.Contains(HelpTextRenderer.Render(HelpDocument.Create(defaults)), "default: classic", StringComparison.Ordinal);
+        Assert.Contains("default: classic", HelpTextRenderer.Render(HelpDocument.Create(defaults)), StringComparison.Ordinal);
         CommandModel explicitModel = AotScenario.CreateExplicitModel(out ScenarioHandles explicitHandles);
         await AotScenario.VerifyAsync(explicitModel, explicitHandles).ConfigureAwait(false);
         await AotConversionScenario.VerifyAsync().ConfigureAwait(false);
@@ -155,7 +155,7 @@ public sealed class AotAcceptanceTests
             [PredefinedDirectives.CreateCompletion("directive")],
             new CliHostOptions(output, errors), TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(0, exitCode, errors.ToString());
-        StringAssert.Contains(output.ToString(), "xW3ZlcnNpb25d", StringComparison.Ordinal);
+        Assert.Contains("xW3ZlcnNpb25d", output.ToString(), StringComparison.Ordinal);
         Assert.AreEqual(string.Empty, errors.ToString());
     }
 

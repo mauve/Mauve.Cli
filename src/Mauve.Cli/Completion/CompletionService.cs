@@ -1048,7 +1048,7 @@ public sealed class CompletionService(
         }
 
         string directivePrefix = activeToken.StartsWith('[', StringComparison.Ordinal)
-            ? activeToken[1..Math.Min(cursor, activeToken.Length)]
+            ? activeToken[1..Math.Clamp(cursor, 1, activeToken.Length)]
             : prefix;
         int nameEnd = directivePrefix.IndexOfAny([':', ']']);
         if (nameEnd >= 0)
@@ -1152,8 +1152,9 @@ public sealed class CompletionService(
         CompletionScan scan,
         List<(PositionalDefinition Definition, string Token, int Index)> values)
     {
+        IEqualityComparer<PositionalDefinition> comparer = ReferenceEqualityComparer.Instance;
         foreach (IGrouping<PositionalDefinition, (PositionalDefinition Definition, string Token, int Index)> group
-            in values.GroupBy(static value => value.Definition, ReferenceEqualityComparer.Instance).Cast<IGrouping<PositionalDefinition, (PositionalDefinition Definition, string Token, int Index)>>())
+            in values.GroupBy(static value => value.Definition, comparer))
         {
             PositionalDefinition definition = group.Key;
             if (definition.IsHidden || definition.IsSensitive)

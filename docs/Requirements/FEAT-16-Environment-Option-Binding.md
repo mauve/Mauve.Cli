@@ -128,6 +128,8 @@ input bounds, and `InvokeAsync_PropagatesEnvironmentLookupFaults` covers
 lookup fault propagation. `HelpDocumentTests.Run_HelpPrintsEnvironmentNamesInlineOnlyWhenEnabled`
 covers inline help metadata, host prefix projection, disabled-host omission,
 and lookup isolation.
+Additional portable cases exercise CSV state transitions, configured bounds
+and deterministic generated field round-trips.
 `CliModelGeneratorTests.Generate_LowersEnvironmentMetadataForCommandsAndOptionPacks`
 and
 `AotAcceptanceTests.VerifyGeneratedAndExplicitEnvironmentBinding` cover

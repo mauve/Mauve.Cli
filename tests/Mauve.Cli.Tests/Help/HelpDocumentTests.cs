@@ -38,12 +38,12 @@ public sealed class HelpDocumentTests
 
         string rendered = HelpTextRenderer.Render(help);
 
-        StringAssert.StartsWith(rendered, "Usage: runner [DIRECTIVES] [OPTIONS]\n\n  Summary.\n\n  Details.\n", StringComparison.Ordinal);
-        StringAssert.Contains(rendered, "\n\nCommands:\n  show", StringComparison.Ordinal);
-        StringAssert.Contains(rendered, "\n\nOptions:\n  --tag <value>  Tags. (repeatable)\n", StringComparison.Ordinal);
-        StringAssert.Contains(rendered, "\n\nSettings options:\n  Settings description.\n\n  --mode <value>", StringComparison.Ordinal);
+        Assert.StartsWith("Usage: runner [DIRECTIVES] [OPTIONS]\n\n  Summary.\n\n  Details.\n", rendered, StringComparison.Ordinal);
+        Assert.Contains("\n\nCommands:\n  show", rendered, StringComparison.Ordinal);
+        Assert.Contains("\n\nOptions:\n  --tag <value>  Tags. (repeatable)\n", rendered, StringComparison.Ordinal);
+        Assert.Contains("\n\nSettings options:\n  Settings description.\n\n  --mode <value>", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("Hidden pack", rendered);
-        StringAssert.Contains(rendered, "\n\nHelp options:\n  --help", StringComparison.Ordinal);
+        Assert.Contains("\n\nHelp options:\n  --help", rendered, StringComparison.Ordinal);
         Assert.IsGreaterThan(rendered.IndexOf("Help options:", StringComparison.Ordinal),
             rendered.IndexOf("Directives:", StringComparison.Ordinal));
         Assert.IsTrue(rendered.Split('\n').All(static line => line.Length <= 80));
@@ -86,7 +86,7 @@ public sealed class HelpDocumentTests
 
         string output = HelpTextRenderer.Render(HelpDocument.Create(model));
 
-        StringAssert.Contains(output, "allowed: safe, fast mode", StringComparison.Ordinal);
+        Assert.Contains("allowed: safe, fast mode", output, StringComparison.Ordinal);
         Assert.DoesNotContain("private-choice", output);
     }
 
@@ -127,7 +127,7 @@ public sealed class HelpDocumentTests
         Assert.AreEqual("todo --help", HelpDocument.Create(model).Examples[0]);
         Assert.AreEqual("runner --help", HelpDocument.Create(model, executableName: "runner").Examples[0]);
         string output = HelpTextRenderer.Render(help);
-        StringAssert.Contains(output, "Examples:\n  todo item add --text \"A  A\"\n", StringComparison.Ordinal);
+        Assert.Contains("Examples:\n  todo item add --text \"A  A\"\n", output, StringComparison.Ordinal);
         Assert.IsTrue(HelpTextRenderer.Render(help, 20).Split('\n').All(static line => line.Length <= 20));
     }
 
@@ -272,9 +272,9 @@ public sealed class HelpDocumentTests
         Assert.AreEqual(0, exitCode);
         Assert.AreEqual(0, lookups);
         Assert.IsFalse(defaultHostHelp.Contains("env:", StringComparison.Ordinal));
-        StringAssert.Contains(output.ToString(), "--log-level <value>", StringComparison.Ordinal);
-        StringAssert.Contains(output.ToString(), "env: MY_APP_LOG_LEVEL", StringComparison.Ordinal);
-        StringAssert.Contains(output.ToString(), "env: CUSTOM_REGION", StringComparison.Ordinal);
+        Assert.Contains("--log-level <value>", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("env: MY_APP_LOG_LEVEL", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("env: CUSTOM_REGION", output.ToString(), StringComparison.Ordinal);
         Assert.IsFalse(output.ToString().Contains("env: MY_APP_SECRET", StringComparison.Ordinal));
         Assert.IsFalse(output.ToString().Contains("Environment variables:", StringComparison.Ordinal));
     }
