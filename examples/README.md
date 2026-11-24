@@ -22,6 +22,7 @@ commands to run both versions.
 | [Short options](14-ShortOptions/) | Combined short options and explicitly counting options |
 | [Option sources](15-OptionSources/) | Inspect whether each option came from a default, environment variable or argv |
 | [Exception handling](16-ExceptionHandling/) | Direct exceptions, central mappings and a custom renderer with fluent host options |
+| [Multicall binary](17-Multicall/) | Symlink-name dispatch to separate roots or an explicitly mapped child command |
 
 These applications print results without changing files or contacting
 services. The Commands pair also serves as a representative trimmed and

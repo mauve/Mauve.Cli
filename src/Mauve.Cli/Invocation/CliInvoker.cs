@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Mauve.Cli.Definitions;
@@ -114,15 +115,150 @@ public sealed class CliInvoker(CliParser? parser = null)
         return WriteHostResult(model, result, hostOptions);
     }
 
+    /// <summary>Dispatches a multicall executable to a model root or an explicitly mapped command path.</summary>
+    /// <param name="models">Validated models whose root names and aliases are implicit executable routes.</param>
+    /// <param name="routes">Additional executable names mapped to full command paths.</param>
+    /// <param name="arguments">Optional command-line tokens, excluding the executable name.</param>
+    /// <param name="options">Host settings whose executable name defaults to process argv zero.</param>
+    /// <param name="cancellationToken">The caller-owned cancellation token.</param>
+    /// <returns>The selected handler's exit code or configured host outcome code.</returns>
+    /// <remarks>
+    /// Windows ignores executable-name casing and a trailing .exe; other platforms use exact ordinal names.
+    /// Command path segments always use ordinal names or aliases. The mapped path is not inserted into argv.
+    /// All routes must be valid and have unique normalized executable names before any invocation begins.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">A required collection or collection item is null.</exception>
+    /// <exception cref="ArgumentException">Models are empty, a route path is invalid, or executable routes collide.</exception>
+    /// <exception cref="InvalidOperationException">The executable name does not match a route.</exception>
+    public static async Task<int> DispatchMulticallAsync(
+        IReadOnlyList<CommandModel> models,
+        IReadOnlyList<CliMulticallRoute>? routes = null,
+        IReadOnlyList<string>? arguments = null,
+        CliHostOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(models);
+        if (models.Count == 0)
+        {
+            throw new ArgumentException("Multicall dispatch requires at least one command model.", nameof(models));
+        }
+
+        CliHostOptions hostOptions = options ?? new CliHostOptions();
+        Dictionary<string, MulticallTarget> targets =
+            [with(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)];
+        foreach (CommandModel model in models)
+        {
+            ArgumentNullException.ThrowIfNull(model);
+            MulticallTarget root = new(model, [model.Root]);
+            AddMulticallTarget(targets, model.Root.Name, root);
+            foreach (string alias in model.Root.Aliases)
+            {
+                AddMulticallTarget(targets, alias, root);
+            }
+        }
+
+        if (routes is not null)
+        {
+            foreach (CliMulticallRoute route in routes)
+            {
+                ArgumentNullException.ThrowIfNull(route);
+                AddMulticallTarget(targets, route.ExecutableName, ResolveMulticallPath(models, route));
+            }
+        }
+
+        string executable = NormalizeMulticallName(Path.GetFileName(hostOptions.ExecutableName));
+        if (!targets.TryGetValue(executable, out MulticallTarget? target))
+        {
+            throw new InvalidOperationException("The executable name does not match any configured multicall route.");
+        }
+
+        HostInvocationResult result = await new CliInvoker(new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax))
+            .InvokeForHostAsync(target.Model, ResolveArguments(arguments), hostOptions, cancellationToken, target.Path)
+            .ConfigureAwait(false);
+        return WriteHostResult(target.Model, result, hostOptions, target.Path.Count);
+    }
+
+    private static void AddMulticallTarget(
+        Dictionary<string, MulticallTarget> targets,
+        string name,
+        MulticallTarget target)
+    {
+        if (name is "." or ".." || name.IndexOfAny(['/', '\\']) >= 0 || string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("A multicall executable route must identify a single filename.");
+        }
+
+        string normalized = NormalizeMulticallName(name);
+        if (normalized.Length == 0 || !targets.TryAdd(normalized, target))
+        {
+            throw new ArgumentException("Multicall routes must have nonempty, unique platform-normalized executable names.");
+        }
+    }
+
+    private static string NormalizeMulticallName(string name)
+        => OperatingSystem.IsWindows() && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? name[..^4]
+            : name;
+
+    private static MulticallTarget ResolveMulticallPath(
+        IReadOnlyList<CommandModel> models,
+        CliMulticallRoute route)
+    {
+        CommandModel? selectedModel = null;
+        foreach (CommandModel model in models)
+        {
+            if (model.Root.MatchesName(route.CommandPath[0]))
+            {
+                if (selectedModel is not null)
+                {
+                    throw new ArgumentException("A multicall command path must identify exactly one model root.", nameof(route));
+                }
+
+                selectedModel = model;
+            }
+        }
+
+        if (selectedModel is null)
+        {
+            throw new ArgumentException("The multicall command path does not identify a supplied model root.", nameof(route));
+        }
+
+        List<CommandDefinition> path = [selectedModel.Root];
+        for (int index = 1; index < route.CommandPath.Count; index++)
+        {
+            CommandDefinition? next = null;
+            foreach (CommandDefinition child in path[^1].Children)
+            {
+                if (child.MatchesName(route.CommandPath[index]))
+                {
+                    next = child;
+                    break;
+                }
+            }
+
+            if (next is null)
+            {
+                throw new ArgumentException("The multicall command path does not identify a command in its model.", nameof(route));
+            }
+
+            path.Add(next);
+        }
+
+        return new MulticallTarget(selectedModel, path);
+    }
+
+    private sealed record MulticallTarget(CommandModel Model, IReadOnlyList<CommandDefinition> Path);
+
     private async ValueTask<HostInvocationResult> InvokeForHostAsync(
         CommandModel model,
         IReadOnlyList<string> arguments,
         CliHostOptions hostOptions,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<CommandDefinition>? initialPath = null)
     {
         try
         {
-            InvocationResult result = await InvokeCoreAsync(model, arguments, hostOptions, cancellationToken).ConfigureAwait(false);
+            InvocationResult result = await InvokeCoreAsync(model, arguments, hostOptions, cancellationToken, initialPath).ConfigureAwait(false);
             return new HostInvocationResult(result, null, null);
         }
         catch (Exception exception)
@@ -138,11 +274,11 @@ public sealed class CliInvoker(CliParser? parser = null)
         }
     }
 
-    private static int WriteHostResult(CommandModel model, HostInvocationResult result, CliHostOptions options)
+    private static int WriteHostResult(CommandModel model, HostInvocationResult result, CliHostOptions options, int initialPathLength = 1)
     {
         if (result.Invocation is not null)
         {
-            return WriteHostResult(model, result.Invocation, options);
+            return WriteHostResult(model, result.Invocation, options, initialPathLength);
         }
 
         CliExceptionResult failure = result.Failure
@@ -194,7 +330,8 @@ public sealed class CliInvoker(CliParser? parser = null)
         CommandModel model,
         IReadOnlyList<string> arguments,
         CliHostOptions hostOptions,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<CommandDefinition>? initialPath = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
@@ -206,7 +343,7 @@ public sealed class CliInvoker(CliParser? parser = null)
         ParseResult parseResult;
         try
         {
-            parseResult = _parser.ParseForInvocation(model, arguments, cancellationToken, hostOptions);
+            parseResult = _parser.ParseForInvocation(model, arguments, cancellationToken, hostOptions, initialPath);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -321,7 +458,8 @@ public sealed class CliInvoker(CliParser? parser = null)
     private static int WriteHostResult(
         CommandModel model,
         InvocationResult result,
-        CliHostOptions options)
+        CliHostOptions options,
+        int initialPathLength = 1)
     {
         switch (result.Outcome)
         {
@@ -332,7 +470,7 @@ public sealed class CliInvoker(CliParser? parser = null)
                 CommandDefinition selectedCommand = result.SelectedCommand
                     ?? throw new InvalidOperationException("A help request has no selected command.");
                 HelpOutput.Write(
-                    HelpDocument.Create(model, selectedCommand, options.ExecutableName, options.Syntax, options),
+                    HelpDocument.CreateForInvocation(model, selectedCommand, options, initialPathLength),
                     options.StandardOutput.WriteLine,
                     options.HelpWidth,
                     options.HelpRenderer);

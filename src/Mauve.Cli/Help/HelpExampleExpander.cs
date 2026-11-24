@@ -7,7 +7,7 @@ namespace Mauve.Cli.Help;
 
 internal static class HelpExampleExpander
 {
-    public static string Expand(string example, IReadOnlyList<string> path, string executableName)
+    public static string Expand(string example, IReadOnlyList<string> path, string executableName, int initialPathLength = 1)
     {
         string text = HelpTextSanitizer.SingleLine(example).Trim();
         bool hasExecutable = StartsWithToken(text, "$0");
@@ -21,6 +21,15 @@ internal static class HelpExampleExpander
             if (ancestors.Length > 0)
             {
                 commandText = string.Concat(ancestors, " ", commandText);
+            }
+        }
+
+        if (hasExecutable && initialPathLength > 1)
+        {
+            string mappedPrefix = string.Join(' ', path.Skip(1).Take(initialPathLength - 1));
+            if (StartsWithToken(commandText, mappedPrefix))
+            {
+                commandText = commandText[mappedPrefix.Length..].TrimStart();
             }
         }
 

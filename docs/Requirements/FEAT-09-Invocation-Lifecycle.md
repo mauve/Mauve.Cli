@@ -14,6 +14,8 @@ Depends on [FEAT-06](FEAT-06-Defaults-And-Validation.md),
 [FEAT-15](FEAT-15-Directives.md). The implementation decision is recorded
 in [ADR-008](../Architecture/ADR-008-Invocation-Lifecycle.md).
 Application-specific confirmation remains outside the reusable CLI library.
+Executable-name routing into this lifecycle is owned by
+[FEAT-17](FEAT-17-Multicall-Dispatch.md).
 High-level hosts optionally map exceptions and delegate their presentation to
 a replaceable renderer; low-level invocation remains transparent.
 

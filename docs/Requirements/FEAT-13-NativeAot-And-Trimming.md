@@ -18,6 +18,8 @@ scope [FEAT-12](FEAT-12-Inherited-And-Global-Options.md) and
 packs [FEAT-14](FEAT-14-OptionPacks.md), and directives
 [FEAT-15](FEAT-15-Directives.md). The verified support matrix currently
 contains Linux x64 only; see [ADR-013](../Architecture/ADR-013-NativeAot-Support-Matrix.md).
+Multicall invocation and real-symlink acceptance are owned separately by
+[FEAT-17](FEAT-17-Multicall-Dispatch.md).
 
 ## Requirements
 ### FEAT-13-001 - Runtime and generator boundary

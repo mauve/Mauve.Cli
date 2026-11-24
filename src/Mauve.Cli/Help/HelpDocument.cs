@@ -74,6 +74,22 @@ public sealed class HelpDocument
         string? executableName = null,
         CliSyntaxOptions? syntax = null,
         CliHostOptions? hostOptions = null)
+        => CreateCore(model, command, executableName, syntax, hostOptions, 1);
+
+    internal static HelpDocument CreateForInvocation(
+        CommandModel model,
+        CommandDefinition command,
+        CliHostOptions options,
+        int initialPathLength)
+        => CreateCore(model, command, options.ExecutableName, options.Syntax, options, initialPathLength);
+
+    private static HelpDocument CreateCore(
+        CommandModel model,
+        CommandDefinition? command,
+        string? executableName,
+        CliSyntaxOptions? syntax,
+        CliHostOptions? hostOptions,
+        int initialPathLength)
     {
         ArgumentNullException.ThrowIfNull(model);
         if (executableName is not null)
@@ -171,7 +187,7 @@ public sealed class HelpDocument
         [
             HelpTextSanitizer.SingleLine(executableName ?? model.Root.Name),
             .. directiveUsage,
-            .. selected.Path.Skip(1).Select(HelpTextSanitizer.SingleLine),
+            .. selected.Path.Skip(initialPathLength).Select(HelpTextSanitizer.SingleLine),
             .. optionUsage,
             .. visiblePositionals
         ];
@@ -186,7 +202,7 @@ public sealed class HelpDocument
             [.. groups.Select(static group => group.Build())],
             directives,
             [.. selected.Examples.Select(example => HelpExampleExpander.Expand(
-                example, selected.Path, executableName ?? model.Root.Name))]);
+                example, selected.Path, executableName ?? model.Root.Name, initialPathLength))]);
     }
 
     private static string NormalizeEnvironmentName(string value)

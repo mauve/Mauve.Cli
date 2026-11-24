@@ -1430,11 +1430,7 @@ public sealed class CompletionService(
     }
 
     private static CommandDefinition? FindChild(CommandDefinition command, string name)
-    {
-        return command.Children.FirstOrDefault(child =>
-            string.Equals(child.Name, name, StringComparison.Ordinal)
-            || child.Aliases.Contains(name, StringComparer.Ordinal));
-    }
+        => command.Children.FirstOrDefault(child => child.MatchesName(name));
 
     private static PositionalDefinition? GetNextPositional(CommandDefinition command, int tokenCount)
     {

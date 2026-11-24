@@ -61,6 +61,9 @@ the library.
 
 ## Consequences
 
+Multicall executable-name selection reuses this lifecycle under
+[ADR-018](ADR-018-Multicall-Dispatch.md); its behavior is owned by FEAT-17.
+
 Hosts own exception redaction, cancellation-source lifetime and process
 exit mapping; the high-level convenience options provide configurable output
 and default mappings without taking process ownership. Parsing remains

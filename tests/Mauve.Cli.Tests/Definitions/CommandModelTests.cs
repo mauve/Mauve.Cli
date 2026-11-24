@@ -12,6 +12,24 @@ namespace Mauve.Cli.Tests.Definitions;
 public sealed class CommandModelTests
 {
     [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-01")]
+    [TestProperty(Metadata.Requirement, "FEAT-01-003")]
+    public void MatchesName_UsesOrdinalCanonicalNamesAndAliases()
+    {
+        CommandDefinition command = CommandModel.Create(new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("copy").AddAlias("cp").AddAlias("duplicate"))).Root.Children[0];
+
+        Assert.IsTrue(command.MatchesName("copy"));
+        Assert.IsTrue(command.MatchesName("cp"));
+        Assert.IsTrue(command.MatchesName("duplicate"));
+        Assert.IsFalse(command.MatchesName("COPY"));
+        Assert.IsFalse(command.MatchesName("CP"));
+        Assert.IsFalse(command.MatchesName("move"));
+        Assert.IsFalse(command.MatchesName(string.Empty));
+        Assert.ThrowsExactly<ArgumentNullException>(() => command.MatchesName(null!));
+    }
+
+    [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-006")]
     public void Create_InstallsHelpTreeAndAccountsForItsLimitsAndCollisions()

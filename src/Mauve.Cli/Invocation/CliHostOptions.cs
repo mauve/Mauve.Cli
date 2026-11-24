@@ -18,7 +18,7 @@ public sealed class CliHostOptions
     /// <param name="invalidInputExitCode">The returned code for malformed command input.</param>
     /// <param name="noHandlerExitCode">The returned code when the selected command has no handler.</param>
     /// <param name="cancelledExitCode">The returned code for caller cancellation.</param>
-    /// <param name="executableName">The executable display name used for help examples, defaulting to process argv zero.</param>
+    /// <param name="executableName">The executable name used for help and multicall route selection, defaulting to process argv zero.</param>
     /// <param name="helpTreeRenderer">An optional custom renderer for sanitized help trees.</param>
     /// <param name="converters">Additional host converters; exact model/host conflicts are rejected.</param>
     /// <param name="numericCulture">The optional explicit numeric decimal-separator culture.</param>
@@ -117,7 +117,7 @@ public sealed class CliHostOptions
     /// <summary>Gets the exit code for caller cancellation.</summary>
     public int CancelledExitCode { get; }
 
-    /// <summary>Gets the executable display name substituted for <c>$0</c> in help examples.</summary>
+    /// <summary>Gets the executable name used for multicall route selection and substituted for <c>$0</c> in help examples.</summary>
     public string ExecutableName { get; }
 
     /// <summary>Gets additional host-level converter registrations.</summary>

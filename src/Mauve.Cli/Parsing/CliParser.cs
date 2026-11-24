@@ -37,21 +37,24 @@ public sealed class CliParser(
         CommandModel model,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken,
-        CliHostOptions? hostOptions = null) => ParseCore(model, arguments, cancellationToken, hostOptions: hostOptions);
+        CliHostOptions? hostOptions = null,
+        IReadOnlyList<CommandDefinition>? initialPath = null)
+        => ParseCore(model, arguments, cancellationToken, hostOptions: hostOptions, initialPath: initialPath);
 
     private ParseResult ParseCore(
         CommandModel model,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken,
         bool includeModelConverters = true,
-        CliHostOptions? hostOptions = null)
+        CliHostOptions? hostOptions = null,
+        IReadOnlyList<CommandDefinition>? initialPath = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(arguments);
         if (includeModelConverters && !model.Converters.IsEmpty)
         {
             CliParser configured = new(ConverterRegistry.Combine(model.Converters, _converters), _numericCulture, _syntax);
-            return configured.ParseCore(model, arguments, cancellationToken, includeModelConverters: false, hostOptions);
+            return configured.ParseCore(model, arguments, cancellationToken, includeModelConverters: false, hostOptions, initialPath);
         }
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -69,13 +72,13 @@ public sealed class CliParser(
 
         DiagnosticBuffer diagnostics = new(model.Limits.MaximumDiagnostics);
         List<UnmatchedToken> unmatched = [];
-        List<CommandDefinition> selectedPath = [model.Root];
+        List<CommandDefinition> selectedPath = initialPath is null ? [model.Root] : [.. initialPath];
         List<OptionOccurrence> optionOccurrences = [];
         List<PositionalOccurrence> positionalOccurrences = [];
         List<RawDirective> rawDirectives = [];
         bool directiveInputValid = true;
 
-        CommandDefinition current = model.Root;
+        CommandDefinition current = selectedPath[^1];
         bool commandSelectionOpen = true;
         bool directiveSelectionOpen = true;
         bool endOfOptions = false;
@@ -2079,7 +2082,7 @@ public sealed class CliParser(
     {
         foreach (CommandDefinition candidate in command.Children)
         {
-            if (candidate.Name == name || candidate.Aliases.Contains(name, StringComparer.Ordinal))
+            if (candidate.MatchesName(name))
             {
                 return candidate;
             }

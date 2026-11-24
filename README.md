@@ -16,6 +16,7 @@ generator. Both approaches use the same parser.
 - Fluent host configuration, central typed exception mappings and replaceable
   safe-default exception rendering.
 - Root directives that run before command dispatch.
+- Multicall executable-name dispatch to separate roots or mapped child paths.
 - Opt-in debugger-wait and shell-completion directives.
 - Reusable nested option packs.
 - Shell-independent command, option, and value completion.
@@ -183,6 +184,28 @@ to standard output and error. The synchronous `Run` overload accepts only
 synchronous additional directives; use `RunAsync` for these built-ins.
 An explicit `null` as the second argument is ambiguous with the directive-list
 overload; omit it or use `options: null` to select the host-options overload.
+
+## Multicall binaries
+
+`DispatchMulticallAsync` selects a root by the invoked executable filename
+matching its `Name` or `Aliases`. Explicit routes can start at a child without
+declaring another root:
+
+```csharp
+return await CliInvoker.DispatchMulticallAsync(
+    [ToolCommand.CreateModel(includeStandardHelp: true), OtherCommand.CreateModel(includeStandardHelp: true)],
+    routes: [new CliMulticallRoute("smurf", ["tool", "copy"])],
+    arguments: args);
+```
+
+A symlink named `smurf` invokes `tool/copy` directly. The host reads
+`CliHostOptions.ExecutableName` (process argv zero by default), not the resolved
+binary path. Unix matching is exact; Windows ignores casing and a trailing
+`.exe`. Invalid paths, duplicate executable routes, and unmatched names throw
+before invocation. Mapped paths do not alter argv or its diagnostic coordinates.
+See the paired [multicall example](examples/17-Multicall/) for publish and
+symlink commands, and [FEAT-17](docs/Requirements/FEAT-17-Multicall-Dispatch.md)
+for the full contract.
 
 ## Shell completion
 

@@ -8,6 +8,34 @@ and the installed [policy](../governance.md).
 
 ## Current baseline
 
+The shared `CommandDefinition.MatchesName` refactor passed all 156 Release
+runtime tests, including its focused canonical-name/alias test and existing
+parser, completion, and multicall regressions. Changed-file formatting and
+Governance validation passed. TRX and imported evidence are under
+`artifacts/test-results/command-name-helper/`. The full solution and native
+gate below precede this refactor and were not rerun for it.
+
+Multicall dispatch passed `bash scripts/verify.sh`: 206 Release tests
+(155 runtime, 45 generator, 6 managed AOT), strict build and formatting,
+Governance validation, tooling probes, and Linux x64 trimmed/NativeAOT
+publication and execution. The log is `artifacts/verification-multicall.log`;
+published evidence is under
+`artifacts/aot-verification/linux-x64/20261124T074544Z/`.
+Both managed and native AOT test runs passed all six tests with imported
+requirement metadata, including `VerifyMulticallDispatch` for FEAT-17-004.
+The paired multicall examples passed 42 process checks across managed,
+trimmed, and NativeAOT outputs: root names, aliases, a separate root,
+mapped child and descendant invocation, mapped help, and unmatched-name
+failure through real symlinks. These example checks are smoke evidence,
+not product MSTest acceptance. Windows normalization branches and other
+publication targets remain unexecuted and unverified.
+
+Six focused runtime tests separately passed with metadata-bearing TRX and
+imported FEAT-17-001 through FEAT-17-003 evidence under
+`artifacts/test-results/multicall/runtime/`. Generated/explicit managed
+acceptance also passed separately under
+`artifacts/test-results/multicall/aot-managed/`.
+
 After correcting the validation-example smoke expectation to match the
 existing public message, the final `bash scripts/verify.sh` gate passed:
 197 Release tests, strict build and formatting, tooling probes, Governance
@@ -181,6 +209,12 @@ is claimed.
 
 | Requirement | Validation method | Evidence or procedure | Owner | Environment / prerequisites | Gap or waiver details |
 | --- | --- | --- | --- | --- | --- |
+| FEAT-01-003 | portable automated | `CommandModelTests.MatchesName_UsesOrdinalCanonicalNamesAndAliases` | Mauve.Cli maintainers | .NET 11 | Passed in the 156-test Release runtime suite; metadata-bearing TRX and imported evidence under `artifacts/test-results/command-name-helper/`. |
+| FEAT-17-001 | portable automated | `MulticallDispatchTests.Route_SnapshotsPathsAndRejectsMalformedConfiguration`; `MulticallDispatchTests.Dispatch_RejectsInvalidOrConflictingRoutesBeforeCallbacks` | Mauve.Cli maintainers | .NET 11 | Passed: two tests; TRX and imported evidence under `artifacts/test-results/multicall/runtime/`. |
+| FEAT-17-002 | portable automated | `MulticallDispatchTests.Dispatch_SelectsImplicitRootsAndPlatformNormalizedExecutableNames`; `MulticallDispatchTests.Dispatch_RejectsInvalidOrConflictingRoutesBeforeCallbacks` | Mauve.Cli maintainers | .NET 11; platform-specific assertions | Passed: two tests on Linux x64; TRX and imported evidence under `artifacts/test-results/multicall/runtime/`. Windows branches remain unexecuted. |
+| FEAT-17-003 | portable automated | `MulticallDispatchTests.Dispatch_PreservesCanonicalAncestryArgumentsDirectivesAndOptionScope`; `MulticallDispatchTests.Dispatch_RendersMappedHelpWithoutRepeatingItsCommandPrefix`; `MulticallDispatchTests.Dispatch_PreservesCancellationExceptionsAndInvalidInputCoordinates` | Mauve.Cli maintainers | .NET 11 | Passed: three tests; TRX and imported evidence under `artifacts/test-results/multicall/runtime/`. |
+| FEAT-17-004 | portable automated | `AotAcceptanceTests.VerifyMulticallDispatch` | Mauve.Cli maintainers | .NET 11 | Passed: generated/explicit managed acceptance; TRX and imported evidence under `artifacts/test-results/multicall/aot-managed/`. |
+| FEAT-17-004 | environment-gated automated | `AotAcceptanceTests.VerifyMulticallDispatch`; `scripts/verify-multicall-examples.sh` via `scripts/verify-aot.sh` | Mauve.Cli maintainers | Linux x64; native compiler, linker and runtime packs | Passed: managed/native product TRX with exact six-test metadata parity and 42 real-symlink example process checks under `artifacts/aot-verification/linux-x64/20261124T074544Z/`. Example smoke checks are not MSTest evidence; other RIDs remain unverified. |
 | FEAT-06-005 | portable automated | `CliParserTests.Parse_BuiltInRulesAndCustomItemRejectionsUseValueCoordinates`; `CliParserTests.Parse_ExplainsCollectionAndCrossFailuresAndBoundsPublicMessages` | Mauve.Cli maintainers | .NET 11 | Passed: two tests; TRX and imported evidence under `artifacts/test-results/validation-reasons/`. |
 | FEAT-06-006 | portable automated | `CliParserTests.Parse_BuiltInRulesAndCustomItemRejectionsUseValueCoordinates`; `CliParserTests.Parse_CrossValidationTargetsAndContractFaultsAreDistinguished`; `CliParserTests.Parse_ExplainsCollectionAndCrossFailuresAndBoundsPublicMessages`; `CliInvokerTests.InvokeAsync_ValidationRejectionsDoNotInventEnvironmentOrDefaultCoordinates` | Mauve.Cli maintainers | .NET 11 | Passed: four tests; TRX and imported evidence under `artifacts/test-results/validation-reasons/`. |
 | FEAT-11-008 | portable automated | `CliModelGeneratorTests.Generate_RegistersValidationRulesAndCrossValueTargets`; `CliModelGeneratorTests.Generate_RejectsInvalidValidationDeclarations` | Mauve.Cli maintainers | .NET 11; Roslyn | Passed: two tests; TRX and imported evidence under `artifacts/test-results/validation-reasons/`. |

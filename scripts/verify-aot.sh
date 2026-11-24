@@ -310,7 +310,7 @@ for mode in managed native; do
     dotnet tool run governance -- test-results --trx "${reports[0]}" \
         --output "$evidence/$test_name-$mode-evidence.json"
     jq -e '
-        (.Tests | length == 5)
+        (.Tests | length == 6)
         and (.Tests | all(.Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-09" and .Status == "Passed" and .Passed == 1))
         and ([.Requirements[]
@@ -319,6 +319,8 @@ for mode in managed native; do
         and (.Features | any(.Id == "FEAT-13" and .Status == "Passed" and .Passed == 2))
         and (.Features | any(.Id == "FEAT-15" and .Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-16" and .Status == "Passed" and .Passed == 1))
+        and (.Features | any(.Id == "FEAT-17" and .Status == "Passed" and .Passed == 1))
+        and (.Requirements | any(.Id == "FEAT-17-004" and .Status == "Passed" and .Passed == 1))
         and ([.Requirements[]
             | select((.Id | startswith("FEAT-13-")) and .Id != "FEAT-13-003")
             | select(.Status == "Passed" and .Passed == 1)] | length == 3)
@@ -335,5 +337,6 @@ done
 sha256sum "$native/$test_name" | tee -a "$evidence/$test_name.log"
 
 bash scripts/verify-conversion-examples.sh "$evidence" "$compiler"
+bash scripts/verify-multicall-examples.sh "$evidence" "$compiler"
 
 echo "Trimmed examples and managed/NativeAOT test evidence: $evidence"

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,6 +18,42 @@ namespace Mauve.Cli.Aot.Tests;
 public sealed class AotAcceptanceTests
 {
     public TestContext TestContext { get; set; } = null!;
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-17")]
+    [TestProperty(Metadata.Requirement, "FEAT-17-004")]
+    public async Task VerifyMulticallDispatch()
+    {
+        CommandModel generated = AotMulticallRootCommand.CreateModel(includeStandardHelp: true);
+        PositionalDefinition name = new("name", typeof(string));
+        CommandModel explicitModel = CommandModel.Create(new CommandBuilder("multicall-aot").AddAlias("suite-aot")
+            .AddChild(new CommandBuilder("copy").AddAlias("cp").AddPositional(name)
+                .SetHandler((context, _) => context.TryGetPositionalValue(name, out string? value)
+                    ? value!.Length + context.ParseResult.SelectedPath.Count
+                    : throw new InvalidOperationException("The multicall name is unavailable."))),
+            includeStandardHelp: true);
+        CommandModel other = CommandModel.Create(new CommandBuilder("other-aot").SetHandler(static (_, _) => 7));
+        foreach (CommandModel model in new[] { generated, explicitModel })
+        {
+            using StringWriter output = new();
+            using StringWriter errors = new();
+            IReadOnlyList<CliMulticallRoute> routes = [new("smurf", ["suite-aot", "cp"])];
+            Assert.AreEqual(5, await CliInvoker.DispatchMulticallAsync([model, other], routes, ["Ada"],
+                new CliHostOptions(output, errors, executableName: "smurf"),
+                TestContext.CancellationToken).ConfigureAwait(false));
+            Assert.AreEqual(5, await CliInvoker.DispatchMulticallAsync([model, other], arguments: ["cp", "Ada"],
+                options: new CliHostOptions(output, errors, executableName: "suite-aot"),
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+            Assert.AreEqual(7, await CliInvoker.DispatchMulticallAsync([model, other], arguments: [],
+                options: new CliHostOptions(output, errors, executableName: "other-aot"),
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+            Assert.AreEqual(0, await CliInvoker.DispatchMulticallAsync([model, other], routes, ["--help"],
+                new CliHostOptions(output, errors, executableName: "smurf"),
+                TestContext.CancellationToken).ConfigureAwait(false));
+            StringAssert.Contains(output.ToString(), "Usage: smurf [OPTIONS] <name>", StringComparison.Ordinal);
+            Assert.AreEqual(string.Empty, errors.ToString());
+        }
+    }
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-09")]
@@ -54,7 +91,7 @@ public sealed class AotAcceptanceTests
     public async Task VerifyGeneratedAndExplicitValidation()
     {
         CommandModel generated = AotValidationCommand.CreateModel();
-        OptionDefinition tags = new("tags", typeof(System.Collections.Generic.IReadOnlyList<string>),
+        OptionDefinition tags = new("tags", typeof(IReadOnlyList<string>),
             OptionArity.RepeatedSingleCollection, elementType: typeof(string), isRequired: true,
             validators:
             [

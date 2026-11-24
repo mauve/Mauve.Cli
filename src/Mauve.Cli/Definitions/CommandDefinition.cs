@@ -114,6 +114,29 @@ public sealed class CommandDefinition
     /// <summary>Gets the canonical path components from the root to this command.</summary>
     public IReadOnlyList<string> Path => _path;
 
+    /// <summary>Matches this command's canonical name or an alias using ordinal case-sensitive comparison.</summary>
+    /// <param name="name">The command spelling to match.</param>
+    /// <returns><see langword="true"/> when the spelling matches the name or an alias.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+    public bool MatchesName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (string.Equals(Name, name, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        foreach (string alias in _aliases)
+        {
+            if (string.Equals(alias, name, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Finds a local option by its canonical name or alias.</summary>
     /// <param name="name">The exact option spelling.</param>
     /// <param name="option">The matching option, if found.</param>

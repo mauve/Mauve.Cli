@@ -54,6 +54,9 @@ multiple-parent reuse. `CliParserTests.Parse_SelectsCanonicalCommandPathsAndHono
 covers alias selection, canonical paths, and child-versus-positional
 precedence. Test-run evidence is recorded separately in the
 [validation ledger](../validation-gaps.md).
+`CommandModelTests.MatchesName_UsesOrdinalCanonicalNamesAndAliases` covers
+the shared `CommandDefinition.MatchesName` helper, including case-sensitive
+canonical and alias matching, nonmatches, and null rejection.
 
 ## Diagrams
 

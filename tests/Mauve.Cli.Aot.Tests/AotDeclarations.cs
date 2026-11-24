@@ -9,6 +9,26 @@ using Mauve.Cli.Validation;
 
 namespace Mauve.Cli.Aot.Tests;
 
+[CliCommand("multicall-aot", IsRoot = true, Aliases = ["suite-aot"])]
+[CliChild<AotMulticallCopyCommand>]
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated declaration supplies a static multicall model factory.")]
+internal sealed partial class AotMulticallRootCommand
+{
+}
+
+[CliCommand("copy", Aliases = ["cp"])]
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The generated multicall dispatcher constructs this command.")]
+internal sealed partial class AotMulticallCopyCommand
+{
+    [CliArgument]
+    public required string Name { get; init; }
+
+    [CliHandler]
+    internal int Run(CommandInvocationContext context) => Name.Length + context.ParseResult.SelectedPath.Count;
+}
+
 [CliCommand("exception-aot", IsRoot = true)]
 internal sealed partial class AotExceptionCommand
 {
