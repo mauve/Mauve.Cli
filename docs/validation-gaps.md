@@ -374,7 +374,7 @@ row fails the declaration gate.
 
 ## Untrusted-input testing evidence (2026-11-24)
 
-Separate from the ledger above; see `docs/untrusted-input-testing-audit.md`.
+Separate from the ledger above; see [`fuzzing.md`](fuzzing.md) for the procedures.
 
 - Runtime Release suite: 182 passed, 0 failed/skipped; metadata-bearing TRX
   imported with `governance test-results` (`artifacts/test-results/untrusted-input/`).
