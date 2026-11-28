@@ -94,9 +94,15 @@ command -v jq >/dev/null
         docs/Requirements/FEAT-16-Environment-Option-Binding.md \
         docs/Architecture/ADR-016-Environment-Option-Binding.md \
         scripts/verify-aot.sh \
+        scripts/verify-fileutils-examples.sh \
         scripts/verify-conversion-examples.sh \
         docs/Architecture/ADR-013-NativeAot-Support-Matrix.md \
         docs/Requirements/FEAT-13-NativeAot-And-Trimming.md
+    find examples/00-FileUtilities \
+        -type d \( -name bin -o -name obj \) -prune -o \
+        -type f \( -name '*.cs' -o -name '*.csproj' -o -name '*.props' \
+        -o -name 'packages.lock.json' -o -name '*.md' \) \
+        -print0 | sort -z | xargs -0 sha256sum
 } >"$evidence/environment.txt" 2>&1
 
 run_logged() {
@@ -337,5 +343,6 @@ sha256sum "$native/$test_name" | tee -a "$evidence/$test_name.log"
 
 bash scripts/verify-conversion-examples.sh "$evidence" "$compiler"
 bash scripts/verify-multicall-examples.sh "$evidence" "$compiler"
+bash scripts/verify-fileutils-examples.sh "$evidence" "$compiler"
 
 echo "Trimmed examples and managed/NativeAOT test evidence: $evidence"

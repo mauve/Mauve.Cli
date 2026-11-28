@@ -3,6 +3,8 @@
     <Project Path="fuzz/Mauve.Cli.Fuzzing/Mauve.Cli.Fuzzing.csproj" />
   </Folder>
   <Folder Name="/examples/">
+    <Project Path="examples/00-FileUtilities/Declarative/FileUtilities.Declarative.csproj" />
+    <Project Path="examples/00-FileUtilities/Manual/FileUtilities.Manual.csproj" />
     <Project Path="examples/01-Hello/Declarative/Hello.Declarative.csproj" />
     <Project Path="examples/01-Hello/Manual/Hello.Manual.csproj" />
     <Project Path="examples/02-Commands/Declarative/Commands.Declarative.csproj" />

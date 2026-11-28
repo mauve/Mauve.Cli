@@ -31,6 +31,7 @@ NuGet package yet.
 ## Try the examples
 
 ```sh
+dotnet run --project examples/00-FileUtilities/Declarative -- copy ./source.txt ./copy.txt --dry-run
 dotnet run --project examples/01-Hello/Declarative
 dotnet run --project examples/01-Hello/Manual
 dotnet run --project examples/02-Commands/Declarative -- greet Ada
@@ -43,7 +44,10 @@ dotnet run --project examples/14-ShortOptions/Declarative -- -vvaf
 
 Each [example](examples/) has a declarative, generated version and an
 explicit manual-model version. The examples print their results without
-changing files or contacting services.
+changing files or contacting services, except for the
+[FileUtilities example](examples/00-FileUtilities/), which performs real file
+copies unless `--dry-run` is supplied. Its README documents the write behavior
+and multicall usage.
 
 The [built-in types example](examples/12-BuiltInTypes/) lists every supported
 scalar and its strict input format, plus nullable, collection and union shapes.

@@ -6,6 +6,7 @@ commands to run both versions.
 
 | Example | What it shows |
 | --- | --- |
+| [File utilities](00-FileUtilities/) | A comprehensive file-tool application combining commands, typed options, validation, converters, environment binding, help, directives, completion, safe errors and multicall |
 | [Hello](01-Hello/) | A minimal command and handler |
 | [Commands](02-Commands/) | Child commands and aliases |
 | [Values](03-Values/) | Options and positional arguments |
@@ -24,7 +25,9 @@ commands to run both versions.
 | [Exception handling](16-ExceptionHandling/) | Direct exceptions, central mappings and a custom renderer with fluent host options |
 | [Multicall binary](17-Multicall/) | Symlink-name dispatch to separate roots or an explicitly mapped child command |
 
-These applications print results without changing files or contacting
-services. The Commands pair also serves as a representative trimmed and
-NativeAOT consumer; broader compatibility scenarios live in
+The focused examples print results without changing files or contacting
+services. **File utilities is the exception:** `copy` writes to the requested
+destination by default; pass `--dry-run` to preview without writing. Its
+README documents safe usage and test fixtures. The Commands pair also serves
+as a representative trimmed and NativeAOT consumer; broader compatibility scenarios live in
 `tests/Mauve.Cli.Aot.Tests`.
