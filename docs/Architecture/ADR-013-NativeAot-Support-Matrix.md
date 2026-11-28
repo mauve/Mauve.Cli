@@ -19,8 +19,10 @@ available in this environment.
   user-facing models, with linker and compiler warnings treated as errors.
 - `Mauve.Cli.Aot.Tests` must run the comprehensive generated and explicit
   parser matrix through managed MTP and as a NativeAOT MTP executable. Both
-  runs must report exactly two passing tests, covering FEAT-13 and FEAT-15,
-  with each feature's declared requirements.
+  runs must report the expected passing tests and behavioral requirement
+  metadata for FEAT-13 and FEAT-15. The FEAT-13-004 support boundary is
+  verified through this matrix and the native-host guard rather than inferred
+  from a tagged parser test.
 - `scripts/verify-aot.sh` is the reproducible local gate. It requires a native
   Linux x64 host, performs locked restores, preserves command output and
   environment/source/artifact hashes, and rejects generator assemblies in

@@ -40,8 +40,15 @@ public sealed class CliParserTests
         ParseResult item = parser.Parse(model, ["--tag=ok", "--tag", "bad"]);
         ParseResult inline = parser.Parse(model, ["--tag=ok", "--tag=x"]);
         ParseResult valid = parser.Parse(model, ["--count=10", "--tag=ok"]);
+        ParseResult minimum = parser.Parse(model, ["--count=1"]);
+        ParseResult below = parser.Parse(model, ["--count=0"]);
 
         Assert.AreEqual(ParseOutcome.Validated, valid.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, minimum.Outcome);
+        Assert.AreEqual(ParseOutcome.Invalid, below.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, below.Diagnostics[0].Code);
+        Assert.IsEmpty(below.Values);
+        Assert.ThrowsExactly<InvalidOperationException>(() => below.TryGetOptionValue(count, out int _));
         Assert.AreEqual("range.invalid", scalar.Diagnostics[0].FailureCode);
         Assert.AreEqual(0, scalar.Diagnostics[0].TokenIndex);
         Assert.AreEqual(1, scalar.Diagnostics[0].ValueTokenIndex);
@@ -55,6 +62,57 @@ public sealed class CliParserTests
         Assert.AreEqual(1, inline.Diagnostics[0].ValueTokenIndex);
         Assert.AreEqual(6, inline.Diagnostics[0].ValueOffset);
         Assert.Contains("Item 2: String length must be between 2 and 8 (inclusive).", inline.Diagnostics[0].ToString(), StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-005")]
+    public void Parse_ValidatesNonemptyAndOrdinalAllowedValuesUsingAnImmutableSet()
+    {
+        string[] allowed = ["fast", "slow"];
+        OptionDefinition mode = new("mode", typeof(string), OptionArity.RequiredScalar,
+            validators: [CliValidators.NotEmpty(), CliValidators.AllowedValues(allowed)]);
+        OptionDefinition tags = new("tag", typeof(IReadOnlyList<string>), OptionArity.RepeatedSingleCollection,
+            elementType: typeof(string), defaultValuePolicy: DefaultValuePolicy.Factory,
+            defaultValueFactory: static () => new List<string>(),
+            validators: [CliValidators.NotEmptyCollection<string>()]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(mode).AddOption(tags));
+        allowed[0] = "changed";
+        CliParser parser = new();
+
+        ParseResult valid = parser.Parse(model, ["--mode=fast", "--tag=x"]);
+        ParseResult whitespace = parser.Parse(model, ["--mode=  ", "--tag=x"]);
+        ParseResult wrongCase = parser.Parse(model, ["--mode=FAST", "--tag=x"]);
+        ParseResult changed = parser.Parse(model, ["--mode=changed", "--tag=x"]);
+        ParseResult emptyTags = parser.Parse(model, ["--mode=fast"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, valid.Outcome);
+        Assert.Contains(static diagnostic => diagnostic.FailureCode == "empty.invalid", whitespace.Diagnostics);
+        Assert.AreEqual("allowed.invalid", wrongCase.Diagnostics[0].FailureCode);
+        Assert.AreEqual("allowed.invalid", changed.Diagnostics[0].FailureCode);
+        Assert.Contains("'fast'", wrongCase.Diagnostics[0].ToString(), StringComparison.Ordinal);
+        Assert.AreEqual("empty.invalid", emptyTags.Diagnostics[0].FailureCode);
+        Assert.Contains("Collection must contain at least one item.", emptyTags.Diagnostics[0].ToString(), StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-005")]
+    public void Parse_ValidatesInclusiveTemporalRangeEndpoints()
+    {
+        OptionDefinition date = new("date", typeof(DateOnly), OptionArity.RequiredScalar,
+            validators: [CliValidators.Range(new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31))]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(date));
+        CliParser parser = new();
+
+        Assert.AreEqual(ParseOutcome.Validated, parser.Parse(model, ["--date=2024-01-01"]).Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, parser.Parse(model, ["--date=2024-12-31"]).Outcome);
+        ParseResult below = parser.Parse(model, ["--date=2023-12-31"]);
+        ParseResult above = parser.Parse(model, ["--date=2025-01-01"]);
+        Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, below.Diagnostics[0].Code);
+        Assert.AreEqual("range.invalid", below.Diagnostics[0].FailureCode);
+        Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, above.Diagnostics[0].Code);
+        Assert.AreEqual("range.invalid", above.Diagnostics[0].FailureCode);
     }
 
     [TestMethod]
@@ -178,6 +236,34 @@ public sealed class CliParserTests
             out IReadOnlyList<string>? paths));
         Assert.AreSequenceEqual(["-file", "a b", string.Empty], [.. paths!]);
         Assert.HasCount(arguments.Length, result.Arguments);
+        ParseResult empty = new CliParser().Parse(model, []);
+        Assert.AreEqual(ParseOutcome.Validated, empty.Outcome);
+        Assert.AreSame(model.Root, empty.SelectedCommand);
+        Assert.AreSequenceEqual(["tool"], [.. empty.SelectedPath.Select(static command => command.Name)]);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-03")]
+    [TestProperty(Metadata.Requirement, "FEAT-03-002")]
+    public void Parse_BindsRequiredOptionFormsWithOriginalTokenIndices()
+    {
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar, shortName: 'c');
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(count));
+        CliParser parser = new();
+        ParseResult inline = parser.Parse(model, ["--count=2"]);
+        ParseResult separated = parser.Parse(model, ["--count", "2"]);
+        ParseResult shortForm = parser.Parse(model, ["-c", "2"]);
+
+        foreach (ParseResult result in new[] { inline, separated, shortForm })
+        {
+            Assert.AreEqual(ParseOutcome.Validated, result.Outcome);
+            Assert.IsTrue(result.TryGetOptionValue(count, out int value));
+            Assert.AreEqual(2, value);
+        }
+
+        Assert.AreSequenceEqual([0], [.. inline.Values[0].TokenIndices]);
+        Assert.AreSequenceEqual([0, 1], [.. separated.Values[0].TokenIndices]);
+        Assert.AreSequenceEqual([0, 1], [.. shortForm.Values[0].TokenIndices]);
     }
 
     [TestMethod]
@@ -220,6 +306,12 @@ public sealed class CliParserTests
             out IReadOnlyList<string>? paths));
         Assert.AreSequenceEqual(["-file"], [.. paths!]);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknown.Diagnostics[0].Code);
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar);
+        CommandModel numeric = CommandModel.Create(new CommandBuilder("tool").AddOption(count));
+        ParseResult negative = new CliParser().Parse(numeric, ["--count=-2"]);
+        Assert.AreEqual(ParseOutcome.Validated, negative.Outcome);
+        Assert.IsTrue(negative.TryGetOptionValue(count, out int number));
+        Assert.AreEqual(-2, number);
     }
 
     [TestMethod]
@@ -280,12 +372,14 @@ public sealed class CliParserTests
                 ? ValueConversion.FromValue(AccessMode.Read)
                 : ValueConversion.Failure<AccessMode>("mode.unknown"));
         ConverterRegistry converters = builder.Build();
-        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
-            .AddOption(new OptionDefinition("--mode", typeof(AccessMode), OptionArity.RequiredScalar)));
+        OptionDefinition mode = new("--mode", typeof(AccessMode), OptionArity.RequiredScalar);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(mode));
 
         ParseResult result = new CliParser(converters).Parse(model, ["--mode=read"]);
 
         Assert.AreEqual(ParseOutcome.Validated, result.Outcome);
+        Assert.IsTrue(result.TryGetOptionValue(mode, out AccessMode value));
+        Assert.AreEqual(AccessMode.Read, value);
         Assert.ThrowsExactly<InvalidOperationException>(() => builder.Register(
             static (_, _) => ValueConversion.FromValue(AccessMode.Write)));
     }
@@ -366,6 +460,7 @@ public sealed class CliParserTests
         ParseResult enabled = new CliParser().Parse(model, ["--verbose"]);
         ParseResult disabled = new CliParser().Parse(model, ["--no-verbose"]);
         ParseResult spaceFalse = new CliParser().Parse(model, ["--verbose", "false"]);
+        ParseResult inlineFalse = new CliParser().Parse(model, ["--verbose=false"]);
         ParseResult invalid = new CliParser().Parse(model, ["--verbose=maybe"]);
         ParseResult repeated = new CliParser().Parse(model, ["--verbose", "--no-verbose"]);
         ParseResult unexpectedValue = new CliParser().Parse(model, ["--no-verbose=true"]);
@@ -376,6 +471,10 @@ public sealed class CliParserTests
         Assert.IsFalse(falseValue);
         Assert.IsTrue(spaceFalse.TryGetOptionValue(model.Root, model.Root.Options[0], out bool spaceFalseValue));
         Assert.IsFalse(spaceFalseValue);
+        Assert.AreEqual(ParseOutcome.Validated, inlineFalse.Outcome);
+        Assert.IsTrue(inlineFalse.TryGetOptionValue(model.Root, model.Root.Options[0], out bool inlineFalseValue));
+        Assert.IsFalse(inlineFalseValue);
+        Assert.AreEqual(ValuePresence.WithValue, inlineFalse.Values[0].Presence);
         Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalid.Diagnostics[0].Code);
         Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, repeated.Diagnostics[0].Code);
         Assert.AreEqual("Argument 2: Option '--verbose' cannot be repeated.", repeated.Diagnostics[0].ToString());
@@ -409,6 +508,8 @@ public sealed class CliParserTests
             .AddPositional(new PositionalDefinition("name", typeof(string))));
 
         ParseResult result = new CliParser().Parse(model, ["--filter", "child"]);
+        ParseResult absent = new CliParser().Parse(model, ["child"]);
+        ParseResult inline = new CliParser().Parse(model, ["--filter=x", "child"]);
 
         Assert.AreEqual(ParseOutcome.Validated, result.Outcome);
         Assert.IsTrue(result.TryGetOptionValue(model.Root, model.Root.Options[0], out string? filter));
@@ -417,6 +518,16 @@ public sealed class CliParserTests
         Assert.AreEqual("child", name);
         Assert.AreEqual(ValuePresence.Bare, result.Values[0].Presence);
         Assert.AreEqual(ValueOrigin.Explicit, result.Values[0].Origin);
+        Assert.AreEqual(ValuePresence.Absent, absent.Values[0].Presence);
+        Assert.AreEqual(ValueOrigin.Absent, absent.Values[0].Origin);
+        Assert.IsFalse(absent.TryGetOptionValue(model.Root, model.Root.Options[0], out string? _));
+        Assert.AreEqual(ParseOutcome.Validated, inline.Outcome);
+        Assert.IsTrue(inline.TryGetOptionValue(model.Root, model.Root.Options[0], out string? inlineValue));
+        Assert.AreEqual("x", inlineValue);
+        Assert.AreEqual(ValuePresence.WithValue, inline.Values[0].Presence);
+        Assert.AreEqual(ValueOrigin.Explicit, inline.Values[0].Origin);
+        Assert.IsTrue(inline.TryGetPositionalValue(model.Root, model.Root.Positionals[0], out string? inlineName));
+        Assert.AreEqual("child", inlineName);
     }
 
     [TestMethod]
@@ -488,7 +599,7 @@ public sealed class CliParserTests
     {
         CommandModel model = CreateLeafModel();
 
-        ParseResult rest = new CliParser().Parse(model, ["--", "a", "-b", "c"]);
+        ParseResult rest = new CliParser().Parse(model, ["a", "--", "-b", "c"]);
         ParseResult cluster = new CliParser().Parse(model, ["-ab"]);
 
         Assert.IsTrue(rest.TryGetPositionalValue(
@@ -529,15 +640,23 @@ public sealed class CliParserTests
         CliParser parser = new();
 
         ParseResult cluster = parser.Parse(model, ["-vaf"]);
+        ParseResult separate = parser.Parse(model, ["-v", "-a", "-f"]);
         ParseResult repeats = parser.Parse(model, ["--verbosity", "--verbosity", "-v"]);
 
         Assert.AreEqual(ParseOutcome.Validated, cluster.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, separate.Outcome);
         Assert.IsTrue(cluster.TryGetOptionValue(model.Root, verbose, out bool enabled));
         Assert.IsTrue(enabled);
         Assert.IsTrue(cluster.TryGetOptionValue(model.Root, verbosity, out int clusterCount));
         Assert.AreEqual(1, clusterCount);
         Assert.IsTrue(cluster.TryGetOptionValue(model.Root, filter, out string? bareFilter));
         Assert.AreEqual("bare", bareFilter);
+        Assert.IsTrue(separate.TryGetOptionValue(verbose, out bool separateEnabled));
+        Assert.AreEqual(enabled, separateEnabled);
+        Assert.IsTrue(separate.TryGetOptionValue(verbosity, out int separateCount));
+        Assert.AreEqual(clusterCount, separateCount);
+        Assert.IsTrue(separate.TryGetOptionValue(filter, out string? separateFilter));
+        Assert.AreEqual(bareFilter, separateFilter);
         Assert.IsTrue(repeats.TryGetOptionValue(model.Root, verbosity, out int repeatCount));
         Assert.AreEqual(2, repeatCount);
         Assert.AreEqual(ParseOutcome.Validated, new CliParser().Parse(model, []).Outcome);
@@ -554,21 +673,32 @@ public sealed class CliParserTests
         OptionDefinition verbose = new("verbose", typeof(bool), OptionArity.BooleanFlag, shortName: 'v');
         OptionDefinition count = new("count", typeof(int), OptionArity.Counting, shortName: 'a');
         OptionDefinition output = new("output", typeof(string), OptionArity.RequiredScalar, shortName: 'o');
+        OptionDefinition filter = new("filter", typeof(string), OptionArity.OptionalScalar,
+            allowsNull: true, bareValuePolicy: BareValuePolicy.Null, shortName: 'f');
         CommandModel model = CommandModel.Create(new CommandBuilder("tool")
             .AddOption(verbose)
             .AddOption(count)
-            .AddOption(output));
+            .AddOption(output)
+            .AddOption(filter));
         CliParser parser = new();
 
-        ParseResult valueTaking = parser.Parse(model, ["-vo"]);
-        ParseResult unknownCharacter = parser.Parse(model, ["-vz"]);
+        ParseResult valueTaking = parser.Parse(model, ["-vo", "-v"]);
+        ParseResult unknownCharacter = parser.Parse(model, ["-vz", "-v"]);
+        ParseResult optionalPrefix = parser.Parse(model, ["-fz", "-f"]);
         ParseResult wrongCase = parser.Parse(model, ["-VV"]);
+        ParseResult duplicate = parser.Parse(model, ["-v", "-v"]);
 
+        Assert.HasCount(1, valueTaking.Diagnostics);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, valueTaking.Diagnostics[0].Code);
         Assert.AreEqual("-vo", valueTaking.UnmatchedTokens[0].Value);
+        Assert.HasCount(1, unknownCharacter.Diagnostics);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, unknownCharacter.Diagnostics[0].Code);
         Assert.AreEqual("-vz", unknownCharacter.UnmatchedTokens[0].Value);
+        Assert.HasCount(1, optionalPrefix.Diagnostics);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, optionalPrefix.Diagnostics[0].Code);
+        Assert.AreEqual("-fz", optionalPrefix.UnmatchedTokens[0].Value);
         Assert.AreEqual(ParseDiagnosticCode.UnknownOption, wrongCase.Diagnostics[0].Code);
+        Assert.AreEqual(ParseDiagnosticCode.DuplicateOption, duplicate.Diagnostics[0].Code);
     }
 
     [TestMethod]
@@ -656,6 +786,7 @@ public sealed class CliParserTests
         ParseResult first = parser.Parse(model, []);
         ParseResult second = parser.Parse(model, []);
         ParseResult invalid = parser.Parse(model, ["--count=bad"]);
+        ParseResult explicitItems = parser.Parse(model, ["--items=explicit"]);
 
         Assert.AreEqual(2, factoryCalls);
         Assert.IsTrue(first.TryGetOptionValue(
@@ -668,6 +799,10 @@ public sealed class CliParserTests
             out IReadOnlyList<string>? secondItems));
         Assert.AreNotSame(firstItems, secondItems);
         Assert.AreEqual(ParseOutcome.Invalid, invalid.Outcome);
+        Assert.AreEqual(ParseOutcome.Validated, explicitItems.Outcome);
+        Assert.AreEqual(ValueOrigin.Explicit, explicitItems.Values[0].Origin);
+        Assert.IsTrue(explicitItems.TryGetOptionValue(model.Root, model.Root.Options[0], out IReadOnlyList<string>? supplied));
+        Assert.AreSequenceEqual(["explicit"], [.. supplied!]);
         Assert.AreEqual(2, factoryCalls);
     }
 
@@ -701,11 +836,40 @@ public sealed class CliParserTests
         ParseResult valid = parser.Parse(model, ["--count=10"]);
 
         Assert.AreEqual(ParseDiagnosticCode.ValidationFailed, rejectedDefault.Diagnostics[0].Code);
+        Assert.IsNull(rejectedDefault.Diagnostics[0].TokenIndex);
+        Assert.IsNull(rejectedDefault.Diagnostics[0].ValueTokenIndex);
+        Assert.IsNull(rejectedDefault.Diagnostics[0].ValueOffset);
         Assert.AreEqual(1, callsAfterDefault);
         Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalidConversion.Diagnostics[0].Code);
         Assert.AreEqual(1, callsAfterInvalidConversion);
         Assert.AreEqual(ParseOutcome.Validated, valid.Outcome);
         Assert.AreEqual(2, validationCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-06")]
+    [TestProperty(Metadata.Requirement, "FEAT-06-002")]
+    public void Parse_PropagatesFactoryFaultOnlyWhenDefaultIsNeeded()
+    {
+        int calls = 0;
+        InvalidOperationException fault = new("private factory detail");
+        OptionDefinition value = new("value", typeof(string), OptionArity.RequiredScalar,
+            defaultValuePolicy: DefaultValuePolicy.Factory,
+            defaultValueFactory: () =>
+            {
+                calls++;
+                throw fault;
+            });
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(value));
+        CliParser parser = new();
+
+        ParseResult explicitValue = parser.Parse(model, ["--value=provided"]);
+        ParseResult structuralError = parser.Parse(model, ["--unknown"]);
+        Assert.AreEqual(ParseOutcome.Validated, explicitValue.Outcome);
+        Assert.AreEqual(ParseOutcome.Invalid, structuralError.Outcome);
+        Assert.AreEqual(0, calls);
+        Assert.AreSame(fault, Assert.ThrowsExactly<InvalidOperationException>(() => parser.Parse(model, [])));
+        Assert.AreEqual(1, calls);
     }
 
     [TestMethod]
@@ -1133,12 +1297,16 @@ public sealed class CliParserTests
         ParseResult commandTypo = new CliParser().Parse(CommandModel.Create(root), ["copi"]);
         ParseResult optionTypo = new CliParser().Parse(CommandModel.Create(root), ["--ouptut"]);
         ParseResult hiddenTypo = new CliParser().Parse(CommandModel.Create(root), ["--secrett"]);
+        ParseResult unrelatedOption = new CliParser().Parse(CommandModel.Create(root), ["--xyz"]);
+        ParseResult unrelatedCommand = new CliParser().Parse(CommandModel.Create(root), ["xyz"]);
         string longName = string.Concat("--", new string('x', 130));
         ParseResult overlongTypo = new CliParser().Parse(CommandModel.Create(root), [longName]);
 
         Assert.AreSequenceEqual(["copy"], [.. commandTypo.Diagnostics[0].Suggestions]);
         Assert.AreSequenceEqual(["--output"], [.. optionTypo.Diagnostics[0].Suggestions]);
         Assert.IsEmpty(hiddenTypo.Diagnostics[0].Suggestions);
+        Assert.IsEmpty(unrelatedOption.Diagnostics[0].Suggestions);
+        Assert.IsEmpty(unrelatedCommand.Diagnostics[0].Suggestions);
         Assert.IsEmpty(overlongTypo.Diagnostics[0].Suggestions);
         Assert.AreEqual("Argument 1: Unknown command. Did you mean: copy?", commandTypo.Diagnostics[0].ToString());
         Assert.AreEqual("Argument 1: Unknown option. Did you mean: --output?", optionTypo.Diagnostics[0].ToString());
@@ -1213,6 +1381,11 @@ public sealed class CliParserTests
         ParseResult optionBeforeChild = new CliParser().Parse(
             CommandModel.Create(rootWithOption),
             ["--name", "copy", "copy"]);
+        OptionDefinition inheritedName = new("name", typeof(string), OptionArity.RequiredScalar, scope: OptionScope.Inherited);
+        CommandModel inheritedModel = CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(inheritedName)
+            .AddChild(new CommandBuilder("copy")));
+        ParseResult inheritedBeforeChild = new CliParser().Parse(inheritedModel, ["--name", "copy", "copy"]);
 
         Assert.AreEqual(ParseOutcome.Validated, selected.Outcome);
         Assert.IsTrue(selected.TryGetOptionValue(
@@ -1232,6 +1405,11 @@ public sealed class CliParserTests
             $"Argument 1: Option '{optionBeforeChild.Diagnostics[0].DefinitionName}' is not available for the selected command.",
             optionBeforeChild.Diagnostics[0].ToString());
         Assert.AreEqual(0, optionBeforeChild.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(ParseOutcome.Validated, inheritedBeforeChild.Outcome);
+        Assert.AreSequenceEqual(["tool", "copy"], [.. inheritedBeforeChild.SelectedPath.Select(static command => command.Name)]);
+        Assert.IsTrue(inheritedBeforeChild.TryGetOptionValue(inheritedName, out string? inheritedValue));
+        Assert.AreEqual("copy", inheritedValue);
+        Assert.AreSequenceEqual([0, 1], [.. inheritedBeforeChild.Values[0].TokenIndices]);
     }
 
     [TestMethod]
@@ -1317,7 +1495,10 @@ public sealed class CliParserTests
             .AddOption(verbose)
             .AddChild(new CommandBuilder("file")
                 .AddOption(region)
-                .AddChild(new CommandBuilder("copy")));
+                .AddChild(new CommandBuilder("copy")))
+            .AddChild(new CommandBuilder("other")
+                .AddOption(new OptionDefinition("branch-only", typeof(string), OptionArity.RequiredScalar,
+                    scope: OptionScope.Inherited)));
         CommandModel model = CommandModel.Create(root);
         CommandDefinition file = model.Root.Children[0];
         CliParser parser = new();
@@ -1325,6 +1506,7 @@ public sealed class CliParserTests
         ParseResult before = parser.Parse(model, ["--verbose", "file", "copy"]);
         ParseResult between = parser.Parse(model, ["file", "--region=west", "copy"]);
         ParseResult after = parser.Parse(model, ["file", "copy", "--verbose"]);
+        ParseResult sibling = parser.Parse(model, ["file", "copy", "--branch-only=value"]);
 
         Assert.AreEqual(ParseOutcome.Validated, before.Outcome);
         Assert.AreEqual(ParseOutcome.Validated, between.Outcome);
@@ -1335,6 +1517,12 @@ public sealed class CliParserTests
         Assert.IsTrue(afterValue);
         Assert.IsTrue(between.TryGetOptionValue(file, region, out string? regionValue));
         Assert.AreEqual("west", regionValue);
+        Assert.AreEqual(ParseOutcome.Invalid, sibling.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.UnknownOption, sibling.Diagnostics.Single().Code);
+        Assert.AreEqual(2, sibling.Diagnostics[0].TokenIndex);
+        Assert.AreSequenceEqual(["tool", "file", "copy"], [.. sibling.SelectedPath.Select(static command => command.Name)]);
+        Assert.AreEqual("--branch-only", sibling.UnmatchedTokens.Single().Value);
+        Assert.AreEqual("--branch-only=value", sibling.Arguments[2]);
     }
 
     [TestMethod]

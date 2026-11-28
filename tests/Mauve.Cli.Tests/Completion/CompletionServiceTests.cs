@@ -321,6 +321,9 @@ public sealed class CompletionServiceTests
         Assert.AreEqual(CompletionOutcome.ProviderFailed, failed.Outcome);
         Assert.IsFalse(failed.IsComplete);
         Assert.HasCount(1, failed.Candidates);
+        Assert.AreEqual("first", failed.Candidates[0].InsertionText);
+        Assert.DoesNotContain("private provider details", failed.Candidates[0].DisplayText);
+        Assert.IsNull(failed.Candidates[0].Description);
         Assert.AreEqual(CompletionOutcome.LimitReached, limited.Outcome);
         Assert.HasCount(128, limited.Candidates);
         Assert.IsFalse(limited.IsComplete);
@@ -331,6 +334,58 @@ public sealed class CompletionServiceTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-003")]
+    public async Task CompleteAsync_BoundsRawProviderValuesBeforeFilteringAndDeduplication()
+    {
+        OptionDefinition target = new("target", typeof(string), OptionArity.RequiredScalar);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(target));
+        CompletionService service = new();
+        const string active = "--target=match";
+
+        foreach (string value in new[] { "match", "other" })
+        {
+            foreach (int count in new[] { 512, 600 })
+            {
+                int yielded = 0;
+                CompletionProviderRegistry providers = new CompletionProviderRegistryBuilder()
+                    .Register(target, (_, _) => RepeatedValues(value, count, () => yielded++))
+                    .Build();
+                CompletionResult result = await service.CompleteAsync(
+                    new CompletionRequest(model, [active], 0, active.Length),
+                    providers, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.AreEqual(count == 512 ? CompletionOutcome.Completed : CompletionOutcome.LimitReached, result.Outcome);
+                Assert.AreEqual(count == 512, result.IsComplete);
+                Assert.AreEqual(count == 512 ? 512 : 513, yielded);
+                Assert.HasCount(value == "match" ? 1 : 0, result.Candidates);
+            }
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-003")]
+    public async Task CompleteAsync_RejectsOversizedProviderDisplayText()
+    {
+        OptionDefinition target = new("target", typeof(string), OptionArity.RequiredScalar);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(target));
+        CompletionProviderRegistry providers = new CompletionProviderRegistryBuilder()
+            .Register(target, static (_, _) => OversizedDisplayValue())
+            .Build();
+        const string active = "--target=";
+
+        CompletionResult result = await new CompletionService().CompleteAsync(
+            new CompletionRequest(model, [active], 0, active.Length),
+            providers, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(CompletionOutcome.LimitReached, result.Outcome);
+        Assert.IsFalse(result.IsComplete);
+        Assert.IsEmpty(result.Candidates);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-10")]
+    [TestProperty(Metadata.Requirement, "FEAT-10-002")]
     [TestProperty(Metadata.Requirement, "FEAT-10-003")]
     [TestProperty(Metadata.Requirement, "FEAT-10-004")]
     public async Task CompleteAsync_CancellationAndInvalidContextRemainExplicit()
@@ -393,14 +448,38 @@ public sealed class CompletionServiceTests
     [TestProperty(Metadata.Requirement, "FEAT-15-005")]
     public async Task CompleteAsync_SuggestsDirectivesBeforeTheFirstCommand()
     {
+        int handlerCalls = 0;
         DirectiveBuilder debug = new DirectiveBuilder("debug")
-            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+            .SetHandler((_, _) =>
+            {
+                handlerCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
         DirectiveBuilder format = new DirectiveBuilder("format")
             .AddValue(new DirectiveValueDefinition("format", typeof(Format)))
-            .SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+            .SetHandler((_, _) =>
+            {
+                handlerCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+        DirectiveBuilder hidden = new DirectiveBuilder("hidden") { IsHidden = true }
+            .SetHandler((_, _) =>
+            {
+                handlerCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
+        DirectiveBuilder secret = new DirectiveBuilder("secret")
+            .AddValue(new DirectiveValueDefinition("private", typeof(Format), isSensitive: true))
+            .SetHandler((_, _) =>
+            {
+                handlerCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
         CommandModel model = CommandModel.Create(new CommandBuilder("tool")
             .AddDirective(debug)
             .AddDirective(format)
+            .AddDirective(hidden)
+            .AddDirective(secret)
             .AddChild(new CommandBuilder("copy")));
         ConverterRegistry converters = new ConverterRegistryBuilder()
             .RegisterEnum([
@@ -419,12 +498,21 @@ public sealed class CompletionServiceTests
         CompletionResult afterCommand = await service.CompleteAsync(
             new CompletionRequest(model, ["copy", "[de"], 1, 3),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult hiddenNames = await service.CompleteAsync(
+            new CompletionRequest(model, ["[hid"], 0, 4),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        CompletionResult sensitiveValues = await service.CompleteAsync(
+            new CompletionRequest(model, ["[secret:pre"], 0, 11),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual("[debug]", names.Candidates.Single().InsertionText);
         Assert.AreEqual(CompletionCandidateKind.Directive, names.Candidates[0].Kind);
         Assert.AreEqual("[format:pretty]", values.Candidates.Single().InsertionText);
         Assert.AreEqual(CompletionCandidateKind.Value, values.Candidates[0].Kind);
         Assert.IsEmpty(afterCommand.Candidates);
+        Assert.IsEmpty(hiddenNames.Candidates);
+        Assert.IsEmpty(sensitiveValues.Candidates);
+        Assert.AreEqual(0, handlerCalls);
     }
 
     [TestMethod]
@@ -478,6 +566,26 @@ public sealed class CompletionServiceTests
             yield return new CompletionValue($"item-{index:D3}");
             await Task.Yield();
         }
+    }
+
+    private static async IAsyncEnumerable<CompletionValue> RepeatedValues(
+        string value,
+        int count,
+        Action onYield)
+    {
+        for (int index = 0; index < count; index++)
+        {
+            onYield();
+            yield return new CompletionValue(value);
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private static async IAsyncEnumerable<CompletionValue> OversizedDisplayValue()
+    {
+        yield return new CompletionValue("value", displayText: new string('x', 1024));
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private static async IAsyncEnumerable<CompletionValue> WaitingValues(

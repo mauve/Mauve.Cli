@@ -79,6 +79,30 @@ public sealed class BuiltInConversionTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-04")]
+    [TestProperty(Metadata.Requirement, "FEAT-04-002")]
+    public void Parse_DefaultNumericCultureIgnoresAmbientLocale()
+    {
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            CommandModel model = ScalarModel<Half>();
+            ParseResult invariant = new CliParser().Parse(model, ["--value=1.5"]);
+            ParseResult comma = new CliParser().Parse(model, ["--value=1,5"]);
+
+            Assert.AreEqual(ParseOutcome.Validated, invariant.Outcome);
+            Assert.IsTrue(invariant.TryGetOptionValue(model.Root, model.Root.Options[0], out Half value));
+            Assert.AreEqual((Half)1.5, value);
+            Assert.AreEqual(ParseOutcome.Invalid, comma.Outcome);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-04")]
     [TestProperty(Metadata.Requirement, "FEAT-04-001")]
     public void Parse_PathsAreLexicalAndNeedNotExist()
     {

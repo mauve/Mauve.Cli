@@ -92,6 +92,14 @@ defaults and validation. Environment values do not receive invented token
 indices. The host resolves only options absent from argv; environment
 collections replace rather than merge with argv collections.
 
+An already-validated predefined completion directive suppresses environment
+binding for the entire invocation. Earlier directive contexts therefore see
+argv values and applicable absent defaults, not environment values, even if an
+earlier directive stops processing before completion executes. This behavior
+is tied to the predefined registration, not its name; an application-defined
+directive named `completion` retains ordinary environment binding. Other
+parsing, default and validation behavior remains unchanged.
+
 An option uses `EnvironmentVariableBinding.Inherit`, `Enabled` or `Disabled`.
 The inherited host eligibility default is true, but the complete feature is
 disabled unless `CliHostOptions.EnableEnvironmentVariables` is true. The

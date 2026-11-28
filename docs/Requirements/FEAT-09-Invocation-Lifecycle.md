@@ -168,9 +168,9 @@ cover cancellation boundaries and completion precedence.
 covers exception identity and invocation isolation.
 `CliInvokerTests.Run_UsesConfiguredHostOutputAndExitCodes` and
 `CliInvokerTests.RunAsync_MapsPreCancellationToConfiguredExitCode` cover host
-output and exit policy. The generated default-argument path is also exercised
-by launching the published Todo CLI with process arguments in the trimmed
-and NativeAOT verification script. All these methods passed in the 111-test
+output and exit policy. Earlier published example checks forwarded process
+arguments explicitly; they did not exercise the omitted-argument path. These
+methods passed in the 111-test
 strict MTP suite; the verification gate also completed both example publish
 and run checks on Linux x64. `CliInvokerTests.RunAsync_RegistersDirectivesAndUsesInvocationWriters`
 and `CliInvokerTests.Run_RejectsAsynchronousOrDuplicateAdditionalDirectives`

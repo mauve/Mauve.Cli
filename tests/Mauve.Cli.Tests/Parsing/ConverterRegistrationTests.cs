@@ -43,8 +43,10 @@ public sealed class ConverterRegistrationTests
         Assert.AreEqual(ParseOutcome.Validated, result.Outcome);
         Assert.IsTrue(result.TryGetOptionValue(ordinary, out Code ordinaryValue));
         Assert.IsTrue(result.TryGetOptionValue(special, out Code specialValue));
+        Assert.IsTrue(result.TryGetOptionValue(host, out Guid hostValue));
         Assert.AreEqual(new Code(12), ordinaryValue);
         Assert.AreEqual(new Code(99), specialValue);
+        Assert.AreEqual(Guid.Empty, hostValue);
         Assert.IsTrue(result.TryGetPositionalValue(model.Root, codes, out IReadOnlyList<Code>? values));
         Assert.AreSequenceEqual([new Code(23), new Code(34)], values);
     }
@@ -77,6 +79,73 @@ public sealed class ConverterRegistrationTests
             await new CompletionService(converters).CompleteAsync(
                 new CompletionRequest(conflict, [], 0, 0), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         Assert.AreEqual(0, calls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-04")]
+    [TestProperty(Metadata.Requirement, "FEAT-04-001")]
+    public void Parse_RejectsUnknownEnumNamesAndNumericAliases()
+    {
+        OptionDefinition mode = new("--mode", typeof(Mode), OptionArity.RequiredScalar);
+        ConverterRegistry converters = new ConverterRegistryBuilder()
+            .RegisterEnum([new KeyValuePair<string, Mode>("Slow", Mode.Slow), new KeyValuePair<string, Mode>("Fast", Mode.Fast)])
+            .Build();
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddConverters(converters).AddOption(mode));
+        ParseResult valid = new CliParser().Parse(model, ["--mode=Fast"]);
+
+        Assert.AreEqual(ParseOutcome.Validated, valid.Outcome);
+        Assert.IsTrue(valid.TryGetOptionValue(mode, out Mode value));
+        Assert.AreEqual(Mode.Fast, value);
+
+        foreach (string input in new[] { "fast", "1", "Unknown" })
+        {
+            ParseResult invalid = new CliParser().Parse(model, ["--mode=" + input]);
+            Assert.AreEqual(ParseOutcome.Invalid, invalid.Outcome, input);
+            Assert.AreEqual(ParseDiagnosticCode.InvalidValue, invalid.Diagnostics[0].Code);
+            Assert.AreEqual("enum.unknown", invalid.Diagnostics[0].FailureCode);
+            Assert.IsFalse(invalid.Diagnostics[0].Message.Contains(input, StringComparison.Ordinal));
+            Assert.IsEmpty(invalid.Values);
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-04")]
+    [TestProperty(Metadata.Requirement, "FEAT-04-003")]
+    [TestProperty(Metadata.Requirement, "FEAT-04-004")]
+    public void Parse_ReportsRegisteredFailuresSafelyWithStableCoordinates()
+    {
+        const string secret = "sentinel-secret-value";
+        const string failureCode = "code.rejected";
+        OptionDefinition option = new("--secret", typeof(Code), OptionArity.RequiredScalar);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .RegisterConverter((_, _) => ValueConversion.Failure<Code>(failureCode))
+            .AddOption(option));
+        string[] arguments = ["--secret=" + secret];
+
+        ParseResult first = new CliParser().Parse(model, arguments);
+        ParseResult repeated = new CliParser().Parse(model, arguments);
+
+        Assert.AreEqual(ParseOutcome.Invalid, first.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, first.Diagnostics[0].Code);
+        Assert.AreEqual(failureCode, first.Diagnostics[0].FailureCode);
+        Assert.AreEqual(0, first.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(0, first.Diagnostics[0].ValueTokenIndex);
+        Assert.AreEqual(9, first.Diagnostics[0].ValueOffset);
+        Assert.AreEqual("--secret", first.Diagnostics[0].DefinitionName);
+        Assert.AreSequenceEqual(["tool"], first.Diagnostics[0].DefinitionPath);
+        Assert.IsFalse(first.Diagnostics[0].Message.Contains(secret, StringComparison.Ordinal));
+        Assert.IsFalse(first.Diagnostics[0].ToString().Contains(secret, StringComparison.Ordinal));
+        Assert.IsFalse(string.Join(Environment.NewLine, first.FormatDiagnostics()).Contains(secret, StringComparison.Ordinal));
+        Assert.IsEmpty(first.Values);
+
+        Assert.AreEqual(first.Outcome, repeated.Outcome);
+        Assert.AreEqual(first.Diagnostics[0].Code, repeated.Diagnostics[0].Code);
+        Assert.AreEqual(first.Diagnostics[0].FailureCode, repeated.Diagnostics[0].FailureCode);
+        Assert.AreEqual(first.Diagnostics[0].TokenIndex, repeated.Diagnostics[0].TokenIndex);
+        Assert.AreEqual(first.Diagnostics[0].ValueTokenIndex, repeated.Diagnostics[0].ValueTokenIndex);
+        Assert.AreEqual(first.Diagnostics[0].ValueOffset, repeated.Diagnostics[0].ValueOffset);
+        Assert.AreEqual(first.Diagnostics[0].DefinitionName, repeated.Diagnostics[0].DefinitionName);
+        Assert.AreSequenceEqual(first.Diagnostics[0].DefinitionPath, repeated.Diagnostics[0].DefinitionPath);
     }
 
     [TestMethod]

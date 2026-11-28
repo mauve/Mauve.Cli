@@ -318,6 +318,8 @@ public sealed class HelpDocumentTests
     public void Create_SanitizesMetadataAndSuppressesHiddenOrSensitiveDefaults()
     {
         int factoryCalls = 0;
+        int sensitiveFactoryCalls = 0;
+        const string sensitiveValue = "private-factory-value-7391";
         CommandBuilder root = new CommandBuilder("tool")
             .AddOption(new OptionDefinition(
                 "--safe",
@@ -337,7 +339,11 @@ public sealed class HelpDocumentTests
                 OptionArity.RequiredScalar,
                 isSensitive: true,
                 defaultValuePolicy: DefaultValuePolicy.Factory,
-                defaultValueFactory: () => "secret",
+                defaultValueFactory: () =>
+                {
+                    sensitiveFactoryCalls++;
+                    return sensitiveValue;
+                },
                 defaultDisplay: "secret display"))
             .AddOption(new OptionDefinition(
                 "--inert",
@@ -359,11 +365,13 @@ public sealed class HelpDocumentTests
         string rendered = HelpTextRenderer.Render(document);
 
         Assert.AreEqual(0, factoryCalls);
+        Assert.AreEqual(0, sensitiveFactoryCalls);
         Assert.IsTrue(document.OptionGroups[0].Options[0].Description.Contains('\n', StringComparison.Ordinal));
         Assert.IsFalse(rendered.Contains('\u001b', StringComparison.Ordinal));
         Assert.IsFalse(rendered.Contains('\u202e', StringComparison.Ordinal));
         Assert.IsTrue(rendered.Contains("--secret", StringComparison.Ordinal));
         Assert.IsFalse(rendered.Contains("secret display", StringComparison.Ordinal));
+        Assert.DoesNotContain(sensitiveValue, rendered);
         Assert.IsFalse(rendered.Contains("inert display", StringComparison.Ordinal));
         Assert.IsFalse(rendered.Contains("--hidden", StringComparison.Ordinal));
         Assert.IsTrue(rendered.Contains("static default", StringComparison.Ordinal));
@@ -378,8 +386,30 @@ public sealed class HelpDocumentTests
                 help.OptionGroups.SelectMany(static group => group.Options)
                     .Select(static option => string.Concat(option.Description, option.DefaultDisplay))));
         Assert.IsFalse(customOutput.Contains("secret display", StringComparison.Ordinal));
+        Assert.DoesNotContain(sensitiveValue, customOutput);
         Assert.IsFalse(customOutput.Contains('\u001b', StringComparison.Ordinal));
         Assert.IsTrue(customOutput.Contains("static default", StringComparison.Ordinal));
+        Assert.AreEqual(0, sensitiveFactoryCalls);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-003")]
+    public void Render_SeparatesTwoPackGroupsInDeclarationOrder()
+    {
+        CommandBuilder root = new CommandBuilder("tool")
+            .AddPack("network", new OptionPackBuilder().AddOption(
+                new OptionDefinition("host", typeof(string), OptionArity.RequiredScalar)), "Network")
+            .AddPack("output", new OptionPackBuilder().AddOption(
+                new OptionDefinition("format", typeof(string), OptionArity.RequiredScalar)), "Output");
+
+        string rendered = HelpTextRenderer.Render(HelpDocument.Create(CommandModel.Create(root)));
+
+        Assert.Contains("\n\nNetwork options:\n  --host <value>", rendered, StringComparison.Ordinal);
+        Assert.Contains("\n\nOutput options:\n  --format <value>", rendered, StringComparison.Ordinal);
+        Assert.IsLessThan(
+            rendered.IndexOf("Output options:", StringComparison.Ordinal),
+            rendered.IndexOf("Network options:", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -442,15 +472,27 @@ public sealed class HelpDocumentTests
     [TestProperty(Metadata.Requirement, "FEAT-15-005")]
     public void Create_ProjectsDirectivesBeforeTheFirstCommandWithoutSensitiveValueNames()
     {
+        int handlerCalls = 0;
         DirectiveBuilder debug = new("debug")
         {
             Description = "Enable diagnostic output."
         };
         _ = debug.AddValue(new DirectiveValueDefinition("text", typeof(string)));
         _ = debug.AddValue(new DirectiveValueDefinition("secret", typeof(string), isSensitive: true));
-        _ = debug.SetHandler(static (_, _) => DirectiveResult.ContinueProcessing);
+        _ = debug.SetHandler((_, _) =>
+        {
+            handlerCalls++;
+            return DirectiveResult.ContinueProcessing;
+        });
+        DirectiveBuilder hidden = new DirectiveBuilder("hidden-directive") { IsHidden = true }
+            .SetHandler((_, _) =>
+            {
+                handlerCalls++;
+                return DirectiveResult.ContinueProcessing;
+            });
         CommandModel model = CommandModel.Create(new CommandBuilder("tool")
             .AddDirective(debug)
+            .AddDirective(hidden)
             .AddChild(new CommandBuilder("copy")));
 
         HelpDocument help = HelpDocument.Create(model, model.Root.Children[0]);
@@ -460,5 +502,8 @@ public sealed class HelpDocumentTests
         Assert.AreEqual("[debug <text>]", help.Directives.Single().Syntax);
         Assert.IsTrue(rendered.Contains("Enable diagnostic output.", StringComparison.Ordinal));
         Assert.IsFalse(rendered.Contains("secret", StringComparison.Ordinal));
+        Assert.DoesNotContain("hidden-directive", rendered);
+        Assert.HasCount(1, help.Directives);
+        Assert.AreEqual(0, handlerCalls);
     }
 }

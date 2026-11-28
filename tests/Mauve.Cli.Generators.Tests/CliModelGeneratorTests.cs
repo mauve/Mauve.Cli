@@ -7,10 +7,12 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
+using Mauve.Cli.Validation;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -166,6 +168,117 @@ public sealed class CliModelGeneratorTests
             Assert.IsEmpty(generated.RunResult.Results.SelectMany(static run => run.GeneratedSources)
                 .Where(static source => source.SourceText.ToString().Contains("CreateModel", StringComparison.Ordinal)));
         }
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-008")]
+    public void Generate_ValidationDiagnosticsMatchEquivalentExplicitModel()
+    {
+        const string declaration = """
+            using System.Collections.Generic;
+            using Mauve.Cli.Declarations;
+            using Mauve.Cli.Validation;
+
+            namespace ValidationParityFixture;
+
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root
+            {
+                [CliOption(IsRequired = true)] [CliRange(1, 10)]
+                public int Count { get; init; }
+
+                [CliOption] [CliLength(2, 5, Target = CliValidationTarget.Items)]
+                [CliValidator<TagRule>(Target = CliValidationTarget.Items)]
+                public IReadOnlyList<string> Tags { get; init; }
+
+                [CliOption(IsRequired = true)]
+                public string Mode { get; init; }
+
+                [CliCrossValidator]
+                private static ValueValidationOutcome Check(int count, string mode)
+                    => count > 5 && mode == "fast"
+                        ? ValueValidationOutcome.FailureForParameter(
+                            "cross.invalid", 1, message: "Fast mode requires a count of at most 5.")
+                        : ValueValidationOutcome.Success;
+            }
+
+            public sealed class TagRule : ICliValidator<string>
+            {
+                public static ValueValidationOutcome Validate(string? value, ValidationContext context)
+                    => value == "bad"
+                        ? ValueValidationOutcome.Failure("tag.bad", message: "This tag is reserved.")
+                        : ValueValidationOutcome.Success;
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+        AssertNoErrors(generated);
+        Type rootType = EmitAndLoad(generated.OutputCompilation)
+            .GetType("ValidationParityFixture.Root", throwOnError: true)!;
+        CommandModel generatedModel = (CommandModel)rootType.GetMethod("CreateModel")!
+            .Invoke(null, [null, false])!;
+
+        OptionDefinition count = new(
+            "count",
+            typeof(int),
+            OptionArity.RequiredScalar,
+            isRequired: true,
+            validators: [CliValidators.Range(1, 10)]);
+        OptionDefinition tags = new(
+            "tags",
+            typeof(IReadOnlyList<string>),
+            OptionArity.GreedyCollection,
+            elementType: typeof(string),
+            validators:
+            [
+                CliValidators.Each<string>(CliValidators.StringLength(2, 5)),
+                CliValidators.Each<string>(new ValueValidator<string>(static (value, _) =>
+                    value == "bad"
+                        ? ValueValidationOutcome.Failure("tag.bad", message: "This tag is reserved.")
+                        : ValueValidationOutcome.Success))
+            ]);
+        OptionDefinition mode = new("mode", typeof(string), OptionArity.RequiredScalar, isRequired: true);
+        CommandModel explicitModel = CommandModel.Create(
+            new CommandBuilder("tool")
+                .AddOption(count)
+                .AddOption(tags)
+                .AddOption(mode)
+                .AddCrossValidator(context =>
+                {
+                    _ = context.TryGetOptionValue(count, out int countValue);
+                    _ = context.TryGetOptionValue(mode, out string? modeValue);
+                    return countValue > 5 && modeValue == "fast"
+                        ? ValueValidationOutcome.Failure(
+                            "cross.invalid",
+                            mode,
+                            message: "Fast mode requires a count of at most 5.")
+                        : ValueValidationOutcome.Success;
+                }));
+        CliParser parser = new();
+
+        ParseResult generatedRange = parser.Parse(generatedModel, ["--count=11", "--mode=slow"]);
+        ParseResult explicitRange = parser.Parse(explicitModel, ["--count=11", "--mode=slow"]);
+        ParseResult generatedItem = parser.Parse(generatedModel, ["--count=1", "--mode=slow", "--tags=good", "--tags=bad"]);
+        ParseResult explicitItem = parser.Parse(explicitModel, ["--count=1", "--mode=slow", "--tags=good", "--tags=bad"]);
+        ParseResult generatedCross = parser.Parse(generatedModel, ["--count=6", "--mode=fast"]);
+        ParseResult explicitCross = parser.Parse(explicitModel, ["--count=6", "--mode=fast"]);
+        ParseResult generatedValid = parser.Parse(
+            generatedModel, ["--count=5", "--tags=good", "--mode=fast"]);
+        ParseResult explicitValid = parser.Parse(
+            explicitModel, ["--count=5", "--tags=good", "--mode=fast"]);
+
+        Assert.AreEqual(ParseOutcome.Invalid, generatedRange.Outcome);
+        Assert.AreEqual("range.invalid", generatedRange.Diagnostics.Single().FailureCode);
+        Assert.AreEqual(ParseOutcome.Invalid, generatedItem.Outcome);
+        Assert.AreEqual("tag.bad", generatedItem.Diagnostics.Single().FailureCode);
+        Assert.AreEqual(ParseOutcome.Invalid, generatedCross.Outcome);
+        Assert.AreEqual("cross.invalid", generatedCross.Diagnostics.Single().FailureCode);
+        Assert.AreEqual(ParseOutcome.Validated, generatedValid.Outcome);
+        AssertDiagnosticsMatch(generatedRange, explicitRange);
+        AssertDiagnosticsMatch(generatedItem, explicitItem);
+        AssertDiagnosticsMatch(generatedCross, explicitCross);
+        AssertDiagnosticsMatch(generatedValid, explicitValid);
     }
 
     [TestMethod]
@@ -526,6 +639,131 @@ public sealed class CliModelGeneratorTests
         Assert.AreEqual(
             HelpTextRenderer.Render(HelpDocument.Create(explicitModel, explicitModel.Root.Children[0].Children[0], "runner")),
             HelpTextRenderer.Render(help));
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-006")]
+    public async Task Generate_DoesNotExpandExternalDocumentationIncludesOrExecuteExamples()
+    {
+        string includedSummary = $"ExternalIncludeSentinel-{Guid.NewGuid():N}";
+        string includeFileName = "external-doc.xml";
+        string externalXml = $"""
+            <doc>
+              <members>
+                <member name="T:XmlIncludeSecurityFixture.Root">
+                  <summary>{includedSummary}</summary>
+                  <example><code language="shell">tool --external-example "must-not-appear"</code></example>
+                </member>
+              </members>
+            </doc>
+            """;
+        TrackingXmlReferenceResolver resolver = new(externalXml);
+
+        const string declarationTemplate = """
+            using Mauve.Cli.Declarations;
+
+            namespace XmlIncludeSecurityFixture;
+
+            /// <include file="INCLUDE_SENTINEL" path="/doc/members/member[@name='T:XmlIncludeSecurityFixture.Root']/*" />
+            /// <example><code language="shell">tool --sentinel "do-not-evaluate"</code></example>
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root
+            {
+                [CliHandler]
+                private int Run()
+                {
+                    ExecutionProbe.RecordHandlerCall();
+                    return 0;
+                }
+            }
+
+            public static class ExecutionProbe
+            {
+                public static int HandlerCalls { get; private set; }
+
+                public static void RecordHandlerCall() => HandlerCalls++;
+            }
+            """;
+        string declaration = declarationTemplate.Replace(
+            "INCLUDE_SENTINEL", includeFileName, StringComparison.Ordinal);
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.Parse);
+        SyntaxTree tree = CSharpSyntaxTree.ParseText(
+            declaration,
+            parseOptions,
+            path: "XmlIncludeSecurityFixture.cs",
+            cancellationToken: TestContext.CancellationToken);
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "GeneratorFixture",
+            [tree],
+            GetReferences(),
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable,
+                xmlReferenceResolver: resolver));
+        GeneratorDriver driver = CreateDriver(parseOptions).RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out Compilation output,
+            out ImmutableArray<Diagnostic> diagnostics,
+            TestContext.CancellationToken);
+        GeneratorResult generated = new(driver.GetRunResult(), output, diagnostics);
+        Assert.AreEqual(0, resolver.ResolveCount);
+        Assert.AreEqual(0, resolver.OpenReadCount);
+        AssertNoErrors(generated);
+
+        Assembly fixture = EmitAndLoad(output);
+        Type rootType = fixture.GetType("XmlIncludeSecurityFixture.Root", throwOnError: true)!;
+        Type probeType = fixture.GetType("XmlIncludeSecurityFixture.ExecutionProbe", throwOnError: true)!;
+        CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!
+            .Invoke(null, [null, false])!;
+        HelpDocument help = HelpDocument.Create(model, model.Root, "tool");
+
+        Assert.IsNull(model.Root.Description);
+        Assert.AreSequenceEqual(["tool --sentinel \"do-not-evaluate\""], [.. help.Examples]);
+        Assert.DoesNotContain(
+            static source => source.Contains("ExternalIncludeSentinel-", StringComparison.Ordinal)
+                || source.Contains("must-not-appear", StringComparison.Ordinal),
+            GetGeneratedSources(driver));
+        Assert.AreEqual(0, (int)probeType.GetProperty("HandlerCalls")!.GetValue(null)!);
+
+        InvocationResult result = await new CliInvoker()
+            .InvokeAsync(model, [], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(InvocationOutcome.Completed, result.Outcome);
+        Assert.AreEqual(1, (int)probeType.GetProperty("HandlerCalls")!.GetValue(null)!);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-006")]
+    public void Generate_RejectsExternalEntityDocumentationWithoutResolvingIt()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+
+            /// <!DOCTYPE doc [<!ENTITY external SYSTEM "external.xml">]>
+            /// <summary>&external;</summary>
+            [CliCommand("tool", IsRoot = true)]
+            public partial class Root { }
+            """;
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview, DocumentationMode.Parse);
+        SyntaxTree tree = CSharpSyntaxTree.ParseText(declaration, parseOptions, path: "ExternalEntityFixture.cs",
+            cancellationToken: TestContext.CancellationToken);
+        TrackingXmlReferenceResolver resolver = new("<summary>external-sentinel</summary>");
+        CSharpCompilation compilation = CSharpCompilation.Create("ExternalEntityFixture", [tree], GetReferences(),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable, xmlReferenceResolver: resolver));
+        GeneratorDriver driver = CreateDriver(parseOptions).RunGeneratorsAndUpdateCompilation(
+            compilation, out _, out _, TestContext.CancellationToken);
+        GeneratorDriverRunResult result = driver.GetRunResult();
+
+        Assert.Contains(static diagnostic => diagnostic.Id == "MCLI002"
+            && diagnostic.GetMessage(CultureInfo.InvariantCulture).Contains("CLI documentation must be valid XML", StringComparison.Ordinal), result.Diagnostics);
+        Assert.DoesNotContain(static source => source.HintName.Contains("Root", StringComparison.Ordinal),
+            result.Results.SelectMany(static run => run.GeneratedSources));
+        Assert.AreEqual(0, resolver.ResolveCount);
+        Assert.AreEqual(0, resolver.OpenReadCount);
     }
 
     [TestMethod]
@@ -901,7 +1139,9 @@ public sealed class CliModelGeneratorTests
             .AsTask();
 
         await cancellationSource.CancelAsync().ConfigureAwait(false);
-        InvocationResult result = await running.ConfigureAwait(false);
+        InvocationResult result = await running
+            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.CancellationToken)
+            .ConfigureAwait(false);
 
         Assert.AreEqual(InvocationOutcome.Cancelled, result.Outcome);
     }
@@ -909,7 +1149,7 @@ public sealed class CliModelGeneratorTests
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-005")]
-    public void Generate_ConstrainsSynchronousEntrypointToSynchronousCommandTrees()
+    public async Task Generate_ConstrainsSynchronousEntrypointToSynchronousCommandTrees()
     {
         const string syncDeclaration = """
             using Mauve.Cli.Declarations;
@@ -956,12 +1196,23 @@ public sealed class CliModelGeneratorTests
             public partial class AsyncChild
             {
                 [CliHandler]
-                private Task Run() => Task.CompletedTask;
+                private async Task<int> Run()
+                {
+                    await Task.Yield();
+                    AsyncState.Completed = true;
+                    return 17;
+                }
+            }
+
+            public static class AsyncState
+            {
+                public static bool Completed { get; set; }
             }
 
             public static class AsyncEntrypoints
             {
-                public static Task<int> RunAsync() => CliInvoker.RunAsync<AsyncRoot>([]);
+                public static Task<int> RunAsync() => CliInvoker.RunAsync<AsyncRoot>(["child"]);
+                public static bool HandlerCompleted => AsyncState.Completed;
             }
             """;
 
@@ -971,6 +1222,19 @@ public sealed class CliModelGeneratorTests
         AssertNoErrors(async);
         Assert.IsEmpty(GetCompilerErrors(sync.OutputCompilation));
         Assert.IsEmpty(GetCompilerErrors(async.OutputCompilation));
+
+        Type syncEntrypoints = EmitAndLoad(sync.OutputCompilation)
+            .GetType("InvocationCapabilityFixture.SyncEntrypoints", throwOnError: true)!;
+        Assert.AreEqual(3, (int)syncEntrypoints.GetMethod("RunSync")!.Invoke(null, null)!);
+        Assert.AreEqual(3, await ((Task<int>)syncEntrypoints.GetMethod("RunAsync")!.Invoke(null, null)!)
+            .ConfigureAwait(false));
+        Assert.AreEqual(1, (int)syncEntrypoints.GetMethod("RunHandlerless")!.Invoke(null, null)!);
+
+        Type asyncEntrypoints = EmitAndLoad(async.OutputCompilation)
+            .GetType("InvocationCapabilityFixture.AsyncEntrypoints", throwOnError: true)!;
+        Assert.AreEqual(17, await ((Task<int>)asyncEntrypoints.GetMethod("RunAsync")!.Invoke(null, null)!)
+            .ConfigureAwait(false));
+        Assert.IsTrue((bool)asyncEntrypoints.GetProperty("HandlerCompleted")!.GetValue(null)!);
 
         Compilation rejectedSyncCall = AddSource(
             async.OutputCompilation,
@@ -1032,7 +1296,7 @@ public sealed class CliModelGeneratorTests
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
-    public void Generate_UpdatesAliasesAndProducesStableUnchangedOutput()
+    public async Task Generate_UpdatesAliasesAndProducesStableUnchangedOutput()
     {
         GeneratorDriver driver = CreateDriver();
         CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
@@ -1040,9 +1304,11 @@ public sealed class CliModelGeneratorTests
         CSharpCompilation firstInput = CreateCompilation(firstTree);
         driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _, TestContext.CancellationToken);
         string[] initialSources = GetGeneratedSources(driver);
+        string[] initialHintNames = GetGeneratedHintNames(driver);
 
         driver = driver.RunGeneratorsAndUpdateCompilation(firstInput, out _, out _, TestContext.CancellationToken);
         Assert.AreSequenceEqual(initialSources, GetGeneratedSources(driver));
+        Assert.AreSequenceEqual(initialHintNames, GetGeneratedHintNames(driver));
 
         string changedDeclaration = _validDeclaration.Replace(
             "Aliases = [\"c\"]",
@@ -1053,9 +1319,81 @@ public sealed class CliModelGeneratorTests
         Assert.IsFalse(diagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
         Assert.IsFalse(changedOutput.GetDiagnostics(TestContext.CancellationToken).Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
         Assert.Contains(static source => source.Contains("duplicate", StringComparison.Ordinal), GetGeneratedSources(driver));
+        Assert.AreSequenceEqual(initialHintNames, GetGeneratedHintNames(driver));
         Assert.AreNotEqual(
             string.Join(Environment.NewLine, initialSources),
             string.Join(Environment.NewLine, GetGeneratedSources(driver)));
+
+        Assembly changedFixture = EmitAndLoad(changedOutput);
+        Type rootType = changedFixture.GetType("GeneratorFixture.Root", throwOnError: true)!;
+        CommandModel changedModel = (CommandModel)rootType.GetMethod("CreateModel")!
+            .Invoke(null, [null, false])!;
+        InvocationResult newAlias = await new CliInvoker().InvokeAsync(
+            changedModel, ["duplicate", "--count=3", "file.txt"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        InvocationResult oldAlias = await new CliInvoker().InvokeAsync(
+            changedModel, ["c", "--count=3", "file.txt"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, newAlias.Outcome);
+        Assert.AreEqual(11, newAlias.ExitCode);
+        Assert.AreEqual(InvocationOutcome.InvalidInput, oldAlias.Outcome);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-002")]
+    public void Generate_RemovesPreviouslyGeneratedRootWhenIncrementalInputBecomesInvalid()
+    {
+        CSharpParseOptions parseOptions = new(LanguageVersion.Preview);
+        CSharpCompilation validInput = CreateCompilation(CSharpSyntaxTree.ParseText(
+            _validDeclaration,
+            parseOptions,
+            cancellationToken: TestContext.CancellationToken));
+        GeneratorDriver driver = CreateDriver(parseOptions)
+            .RunGeneratorsAndUpdateCompilation(
+                validInput,
+                out _,
+                out ImmutableArray<Diagnostic> validDiagnostics,
+                TestContext.CancellationToken);
+        Assert.IsFalse(validDiagnostics.Any(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+
+        string rootHintName = driver.GetRunResult().Results
+            .SelectMany(static result => result.GeneratedSources)
+            .Single(static source => source.HintName.Contains("Root", StringComparison.Ordinal)
+                && source.SourceText.ToString().Contains("CreateModel", StringComparison.Ordinal))
+            .HintName;
+        Assert.Contains(rootHintName, GetGeneratedHintNames(driver));
+
+        string invalidDeclaration = _validDeclaration.Replace(
+            "public int Count { get; init; }",
+            "public int Count { get; }",
+            StringComparison.Ordinal);
+        CSharpCompilation invalidInput = CreateCompilation(CSharpSyntaxTree.ParseText(
+            invalidDeclaration,
+            parseOptions,
+            cancellationToken: TestContext.CancellationToken));
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            invalidInput,
+            out Compilation invalidOutput,
+            out ImmutableArray<Diagnostic> invalidDiagnostics,
+            TestContext.CancellationToken);
+
+        Assert.IsTrue(invalidDiagnostics.Any(static diagnostic =>
+            diagnostic.Id == "MCLI002"
+                && diagnostic.Severity == DiagnosticSeverity.Error
+                && diagnostic.Location.IsInSource));
+        Assert.DoesNotContain(rootHintName, GetGeneratedHintNames(driver));
+        Assert.DoesNotContain(
+            static source => source.HintName.Contains("Root", StringComparison.Ordinal)
+                && source.SourceText.ToString().Contains("CreateModel", StringComparison.Ordinal),
+            driver.GetRunResult().Results.SelectMany(static result => result.GeneratedSources));
+
+        Compilation staleFactoryCall = AddSource(
+            invalidOutput,
+            "namespace GeneratorFixture; public static class StaleFactoryProbe { public static Mauve.Cli.Definitions.CommandModel Get() => Root.CreateModel(); }");
+        Assert.Contains(
+            static diagnostic => diagnostic.Id == "CS0117",
+            GetCompilerErrors(staleFactoryCall));
     }
 
     [TestMethod]
@@ -1133,7 +1471,6 @@ public sealed class CliModelGeneratorTests
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
-    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
     public void Generate_SupportsShortOnlyCountingOptions()
     {
         const string declaration = """
@@ -1148,7 +1485,7 @@ public sealed class CliModelGeneratorTests
                 [CliOption(ShortName = 'v', Arity = OptionArity.Counting)]
                 public int Verbosity { get; init; }
 
-                [CliOption(ShortName = 'c', Arity = OptionArity.Counting)]
+                [CliOption(ShortName = 'c', ShortAliases = ['q'], Arity = OptionArity.Counting)]
                 public int? NullableCount { get; init; }
             }
             """;
@@ -1160,20 +1497,48 @@ public sealed class CliModelGeneratorTests
         CommandModel model = (CommandModel)rootType.GetMethod("CreateModel")!.Invoke(null, [null, false])!;
         CliParser parser = new();
 
-        ParseResult repeated = parser.Parse(model, ["-vv", "-c"]);
+        ParseResult repeated = parser.Parse(model, ["-vv", "-q", "-c"]);
         ParseResult absent = parser.Parse(model, []);
 
         Assert.AreEqual(ParseOutcome.Validated, repeated.Outcome, string.Join(" | ", repeated.Diagnostics.Select(static diagnostic => diagnostic.ToString())));
         Assert.IsNull(model.Root.Options[0].LongName);
         Assert.AreEqual('v', model.Root.Options[0].ShortName);
+        Assert.AreEqual('c', model.Root.Options[1].ShortName);
+        Assert.AreSequenceEqual(['q'], [.. model.Root.Options[1].ShortAliases]);
         Assert.IsTrue(repeated.TryGetOptionValue(model.Root, model.Root.Options[0], out int verbosity));
         Assert.AreEqual(2, verbosity);
         Assert.IsTrue(repeated.TryGetOptionValue(model.Root, model.Root.Options[1], out int? nullableCount));
-        Assert.AreEqual(1, nullableCount);
+        Assert.AreEqual(2, nullableCount);
         Assert.IsTrue(absent.TryGetOptionValue(model.Root, model.Root.Options[0], out int absentVerbosity));
         Assert.AreEqual(0, absentVerbosity);
         Assert.IsTrue(absent.TryGetOptionValue(model.Root, model.Root.Options[1], out int? absentNullableCount));
         Assert.IsNull(absentNullableCount);
+    }
+
+    [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-004")]
+    public void Generate_RejectsDuplicateShortAliasesWithoutRegisteringRoot()
+    {
+        const string declaration = """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)]
+            public partial class Root
+            {
+                [CliOption(ShortName = 'v', ShortAliases = ['q', 'q'])]
+                public bool Verbose { get; init; }
+            }
+            """;
+
+        GeneratorResult generated = Generate(declaration);
+
+        Assert.Contains(
+            static diagnostic => diagnostic.Id == "MCLI002"
+                && diagnostic.Severity == DiagnosticSeverity.Error,
+            generated.GeneratorDiagnostics);
+        Assert.DoesNotContain(
+            static source => source.SourceText.ToString().Contains("CreateModel", StringComparison.Ordinal),
+            generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
     }
 
     [TestMethod]
@@ -1444,6 +1809,27 @@ public sealed class CliModelGeneratorTests
         Assert.AreSequenceEqual(
             [.. HelpDocument.Create(explicitModel).OptionGroups.Select(static group => group.Description)],
             [.. HelpDocument.Create(generatedModel).OptionGroups.Select(static group => group.Description)]);
+
+        string[] convertedArguments = ["--endpoint=https://example.test", "--retries=two"];
+        CliHostOptions conversionOptions = new(converters: new ConverterRegistryBuilder()
+            .Register(static (text, _) => text == "two"
+                ? ValueConversion.FromValue(2)
+                : ValueConversion.Failure<int>("invalid"))
+            .Build());
+        InvocationResult generatedConverted = await new CliInvoker().InvokeAsync(
+            generatedModel, convertedArguments, conversionOptions, TestContext.CancellationToken).ConfigureAwait(false);
+        InvocationResult explicitConverted = await new CliInvoker().InvokeAsync(
+            explicitModel, convertedArguments, conversionOptions, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, generatedConverted.Outcome);
+        Assert.AreEqual(explicitConverted.Outcome, generatedConverted.Outcome);
+        Assert.AreEqual(explicitInvocation.ExitCode, generatedConverted.ExitCode);
+        Assert.AreEqual(explicitConverted.ExitCode, generatedConverted.ExitCode);
+
+        ParseResult generatedUnregistered = new CliParser().Parse(generatedModel, convertedArguments);
+        ParseResult explicitUnregistered = new CliParser().Parse(explicitModel, convertedArguments);
+        Assert.AreEqual(ParseOutcome.Invalid, generatedUnregistered.Outcome);
+        Assert.AreEqual(ParseDiagnosticCode.InvalidValue, generatedUnregistered.Diagnostics.Single().Code);
+        AssertDiagnosticsMatch(generatedUnregistered, explicitUnregistered);
     }
 
     [TestMethod]
@@ -1731,6 +2117,7 @@ public sealed class CliModelGeneratorTests
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-002")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
     public void Generate_RejectsDuplicatePackAliasesWithoutRegisteringRoot()
     {
@@ -1765,6 +2152,7 @@ public sealed class CliModelGeneratorTests
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-002")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
     public void Generate_RejectsPackCyclesWithoutRegisteringRoot()
     {
@@ -1806,6 +2194,7 @@ public sealed class CliModelGeneratorTests
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-002")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
     public async Task Generate_AllowsPackTypeReuseOnDisjointCommands()
     {
@@ -1858,6 +2247,7 @@ public sealed class CliModelGeneratorTests
 
     [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-14")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-14-002")]
     [TestProperty(MSTestMetadata.Requirement, "FEAT-14-003")]
     public void Generate_RejectsDuplicateDirectPackTypesWithoutRegisteringRoot()
     {
@@ -2015,8 +2405,56 @@ public sealed class CliModelGeneratorTests
     }
 
     [TestMethod]
+    [TestProperty(MSTestMetadata.Feature, "FEAT-15")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-15-004")]
+    public void Generate_RejectsInvalidDirectiveDeclarationsWithoutRegisteringRoot()
+    {
+        string[] declarations =
+        [
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)]
+            [CliDirective<Directive>]
+            public partial class Root { }
+
+            [CliDirective]
+            public partial class Directive
+            {
+                [CliOption]
+                public int Value { get; init; }
+
+                [CliHandler]
+                private int Run() => Value;
+            }
+            """,
+            """
+            using Mauve.Cli.Declarations;
+            [CliCommand(IsRoot = true)]
+            public partial class Root
+            {
+                [CliDirective("version")]
+                private string Version() => "unsupported";
+            }
+            """
+        ];
+
+        foreach (string declaration in declarations)
+        {
+            GeneratorResult generated = Generate(declaration);
+            Assert.Contains(
+                static diagnostic => diagnostic.Id == "MCLI002"
+                    && diagnostic.Severity == DiagnosticSeverity.Error,
+                generated.GeneratorDiagnostics);
+            Assert.DoesNotContain(
+                static source => source.HintName.Contains("Root", StringComparison.Ordinal)
+                    && source.SourceText.ToString().Contains("CreateModel", StringComparison.Ordinal),
+                generated.RunResult.Results.SelectMany(static result => result.GeneratedSources));
+        }
+    }
+
+    [TestMethod]
     [TestProperty(MSTestMetadata.Feature, "FEAT-11")]
-    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-003")]
+    [TestProperty(MSTestMetadata.Requirement, "FEAT-11-001")]
     public async Task Generate_BindsTypeAndPropertyConvertersEnumsAndOrderedUnions()
     {
         const string source = """
@@ -2495,6 +2933,60 @@ public sealed class CliModelGeneratorTests
             .SelectMany(static result => result.GeneratedSources)
             .OrderBy(static source => source.HintName, StringComparer.Ordinal)
             .Select(static source => source.SourceText.ToString())];
+    }
+
+    private static string[] GetGeneratedHintNames(GeneratorDriver driver)
+    {
+        return [.. driver.GetRunResult().Results
+            .SelectMany(static result => result.GeneratedSources)
+            .Select(static source => source.HintName)
+            .OrderBy(static hintName => hintName, StringComparer.Ordinal)];
+    }
+
+    private static void AssertDiagnosticsMatch(ParseResult actual, ParseResult expected)
+    {
+        Assert.AreEqual(actual.Outcome, expected.Outcome);
+        Assert.HasCount(actual.Diagnostics.Count, expected.Diagnostics);
+
+        for (int index = 0; index < actual.Diagnostics.Count; index++)
+        {
+            ParseDiagnostic actualDiagnostic = actual.Diagnostics[index];
+            ParseDiagnostic expectedDiagnostic = expected.Diagnostics[index];
+            Assert.AreEqual(actualDiagnostic.Code, expectedDiagnostic.Code);
+            Assert.AreEqual(actualDiagnostic.Message, expectedDiagnostic.Message);
+            Assert.AreEqual(actualDiagnostic.TokenIndex, expectedDiagnostic.TokenIndex);
+            Assert.AreEqual(actualDiagnostic.ValueTokenIndex, expectedDiagnostic.ValueTokenIndex);
+            Assert.AreEqual(actualDiagnostic.ValueOffset, expectedDiagnostic.ValueOffset);
+            Assert.AreEqual(actualDiagnostic.DefinitionName, expectedDiagnostic.DefinitionName);
+            Assert.AreSequenceEqual(actualDiagnostic.DefinitionPath, expectedDiagnostic.DefinitionPath);
+            Assert.AreEqual(actualDiagnostic.FailureCode, expectedDiagnostic.FailureCode);
+            Assert.AreEqual(actualDiagnostic.ToString(), expectedDiagnostic.ToString());
+        }
+    }
+
+    private sealed class TrackingXmlReferenceResolver(string xml) : XmlReferenceResolver
+    {
+        public int ResolveCount { get; private set; }
+
+        public int OpenReadCount { get; private set; }
+
+        public override string? ResolveReference(string path, string? baseFilePath)
+        {
+            _ = baseFilePath;
+            ResolveCount++;
+            return path;
+        }
+
+        public override Stream OpenRead(string resolvedPath)
+        {
+            _ = resolvedPath;
+            OpenReadCount++;
+            return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(xml));
+        }
+
+        public override bool Equals(object? other) => ReferenceEquals(this, other);
+
+        public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
     }
 
     private void AssertNoErrors(GeneratorResult generated)

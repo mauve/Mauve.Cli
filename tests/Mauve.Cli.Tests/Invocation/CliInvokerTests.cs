@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Mauve.Cli.Conversion;
+using Mauve.Cli.Declarations;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Invocation;
 using Mauve.Cli.Parsing;
@@ -73,7 +74,7 @@ public sealed class CliInvokerTests
         int generatedExit = await CliInvoker.RunAsync<SyncHostCommand>(
             ["--help-tree"], custom, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(0, generatedExit);
-        Assert.AreNotEqual(string.Empty, customOutput.ToString());
+        Assert.AreEqual("host" + Environment.NewLine, customOutput.ToString());
     }
 
     [TestMethod]
@@ -150,6 +151,35 @@ public sealed class CliInvokerTests
 
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-001")]
+    public async Task InvokeAsync_RejectsEachInvalidLeafWithoutDispatchingRootOrLeaf()
+    {
+        int rootCalls = 0;
+        int leafCalls = 0;
+        OptionDefinition count = new("count", typeof(int), OptionArity.RequiredScalar,
+            isRequired: true, validators: [CliValidators.Range(1, 10)]);
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool")
+            .SetHandler((_, _) => rootCalls++)
+            .AddChild(new CommandBuilder("copy").AddOption(count).SetHandler((_, _) => leafCalls++)));
+
+        foreach ((string[] arguments, ParseDiagnosticCode expectedCode) in new[]
+        {
+            (new[] { "copy" }, ParseDiagnosticCode.MissingRequired),
+            (new[] { "copy", "--count=5", "--unknown" }, ParseDiagnosticCode.UnknownOption),
+            (new[] { "copy", "--count=11" }, ParseDiagnosticCode.ValidationFailed)
+        })
+        {
+            InvocationResult result = await new CliInvoker().InvokeAsync(model, arguments, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.AreEqual(InvocationOutcome.InvalidInput, result.Outcome);
+            Assert.Contains(diagnostic => diagnostic.Code == expectedCode, result.ParseResult!.Diagnostics);
+            Assert.AreEqual(0, rootCalls);
+            Assert.AreEqual(0, leafCalls);
+        }
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
     [TestProperty(Metadata.Requirement, "FEAT-09-002")]
     public async Task InvokeAsync_NormalizesSupportedHandlerReturnShapes()
     {
@@ -172,6 +202,52 @@ public sealed class CliInvokerTests
         Assert.AreEqual(12, taskCode.ExitCode);
         Assert.AreEqual(0, valueTask.ExitCode);
         Assert.AreEqual(13, valueTaskCode.ExitCode);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-002")]
+    public async Task InvokeAsync_WaitsForPendingHandlerAndMatchesSynchronousValueAndExitCode()
+    {
+        OptionDefinition value = new("value", typeof(int), OptionArity.RequiredScalar, isRequired: true);
+        TaskCompletionSource<int> entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int syncValue = 0;
+        CommandModel sync = CommandModel.Create(new CommandBuilder("tool").AddOption(value)
+            .SetHandler((context, _) =>
+            {
+                Assert.IsTrue(context.TryGetOptionValue(value, out syncValue));
+                return 23;
+            }));
+        CommandModel asyncModel = CommandModel.Create(new CommandBuilder("tool").AddOption(value)
+            .SetTaskHandlerWithExitCode(async (context, _) =>
+            {
+                Assert.IsTrue(context.TryGetOptionValue(value, out int asyncValue));
+                entered.SetResult(asyncValue);
+                await release.Task.ConfigureAwait(false);
+                return 23;
+            }));
+        CliInvoker invoker = new();
+        InvocationResult synchronous = await invoker.InvokeAsync(sync, ["--value=7"], TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Task<InvocationResult> pending = invoker.InvokeAsync(asyncModel, ["--value=7"], TestContext.CancellationToken).AsTask();
+        try
+        {
+            int asyncValue = await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(7, syncValue);
+            Assert.AreEqual(syncValue, asyncValue);
+            Assert.IsFalse(pending.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+        }
+
+        InvocationResult asynchronous = await pending.ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, synchronous.Outcome);
+        Assert.AreEqual(synchronous.Outcome, asynchronous.Outcome);
+        Assert.AreEqual(23, synchronous.ExitCode);
+        Assert.AreEqual(synchronous.ExitCode, asynchronous.ExitCode);
     }
 
     [TestMethod]
@@ -407,6 +483,70 @@ public sealed class CliInvokerTests
             cancellationSource.Token).ConfigureAwait(false);
 
         Assert.AreEqual(9, cancelled);
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    [SuppressMessage("Usage", "CA1849:Call async methods when in an async method", Justification = "Verifies both generated host entry points.")]
+    public async Task Run_GeneratedHostsShareEnvironmentBindingAndHonorExplicitArguments()
+    {
+        using StringWriter errors = new();
+        CliHostOptions options = new(standardError: errors, enableEnvironmentVariables: true,
+            environmentVariableLookup: static name => name == "GENERATED_HOST_COUNT" ? "17" : null);
+        InvocationResult invocation = await new CliInvoker().InvokeAsync(
+            GeneratedInvocationHostCommand.CreateModel(), [], options, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(InvocationOutcome.Completed, invocation.Outcome);
+        Assert.AreEqual(17, invocation.ExitCode);
+        Assert.AreEqual(17, CliInvoker.Run<GeneratedInvocationHostCommand>([], options, TestContext.CancellationToken));
+        Assert.AreEqual(17, await CliInvoker.RunAsync<GeneratedInvocationHostCommand>([], options, TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual(29, CliInvoker.Run<GeneratedInvocationHostCommand>(["--count=29"], options, TestContext.CancellationToken));
+        Assert.AreEqual(29, await CliInvoker.RunAsync<GeneratedInvocationHostCommand>(["--count=29"], options, TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual(string.Empty, errors.ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    [SuppressMessage("Usage", "CA1849:Call async methods when in an async method", Justification = "Compares default argument resolution for both generated host entry points.")]
+    public async Task Run_GeneratedHostsDefaultToCurrentProcessArguments()
+    {
+        string[] processArguments = Environment.GetCommandLineArgs()[1..];
+        using StringWriter defaultOutput = new();
+        using StringWriter defaultErrors = new();
+        using StringWriter explicitOutput = new();
+        using StringWriter explicitErrors = new();
+        CliHostOptions defaults = new(defaultOutput, defaultErrors);
+        CliHostOptions supplied = new(explicitOutput, explicitErrors);
+
+        int defaultSync = CliInvoker.Run<GeneratedInvocationHostCommand>(options: defaults, cancellationToken: TestContext.CancellationToken);
+        int explicitSync = CliInvoker.Run<GeneratedInvocationHostCommand>(processArguments, supplied, TestContext.CancellationToken);
+        Assert.AreEqual(explicitSync, defaultSync);
+        Assert.AreEqual(explicitOutput.ToString(), defaultOutput.ToString());
+        Assert.AreEqual(explicitErrors.ToString(), defaultErrors.ToString());
+
+        defaultOutput.GetStringBuilder().Clear();
+        defaultErrors.GetStringBuilder().Clear();
+        explicitOutput.GetStringBuilder().Clear();
+        explicitErrors.GetStringBuilder().Clear();
+        int defaultAsync = await CliInvoker.RunAsync<GeneratedInvocationHostCommand>(options: defaults, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        int explicitAsync = await CliInvoker.RunAsync<GeneratedInvocationHostCommand>(processArguments, supplied, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(explicitAsync, defaultAsync);
+        Assert.AreEqual(explicitOutput.ToString(), defaultOutput.ToString());
+        Assert.AreEqual(explicitErrors.ToString(), defaultErrors.ToString());
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-005")]
+    public void Run_GeneratedHostDoesNotExposeUnknownOptionTextInDiagnostics()
+    {
+        using StringWriter errors = new();
+        CliHostOptions options = new(standardError: errors);
+        int exit = CliInvoker.Run<GeneratedInvocationHostCommand>(
+            ["--private-secret\n\u001b"], options, TestContext.CancellationToken);
+        Assert.AreEqual(2, exit);
+        Assert.AreEqual("Argument 1: Unknown option." + Environment.NewLine, errors.ToString());
     }
 
     [TestMethod]
@@ -1297,4 +1437,15 @@ public sealed class CliInvokerTests
                 includeStandardHelp);
         }
     }
+
+}
+
+[CliCommand("generated-host", IsRoot = true)]
+public sealed partial class GeneratedInvocationHostCommand
+{
+    [CliOption]
+    public int? Count { get; init; }
+
+    [CliHandler]
+    public int Run() => Count ?? 0;
 }

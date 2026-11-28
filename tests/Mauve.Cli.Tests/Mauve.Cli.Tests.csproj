@@ -5,5 +5,19 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Mauve.Cli/Mauve.Cli.csproj" />
     <ProjectReference Include="../../src/Mauve.Cli.Generators/Mauve.Cli.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../Fixtures/InvocationArgvFixture/InvocationArgvFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <Target Name="CopyInvocationArgvFixture" AfterTargets="Build">
+    <MSBuild Projects="../Fixtures/InvocationArgvFixture/InvocationArgvFixture.csproj"
+             Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+      <Output TaskParameter="TargetOutputs" ItemName="_InvocationArgvFixture" />
+    </MSBuild>
+    <ItemGroup>
+      <_InvocationArgvFixtureFiles Include="@(_InvocationArgvFixture)" />
+      <_InvocationArgvFixtureFiles Include="@(_InvocationArgvFixture->'%(RootDir)%(Directory)%(Filename).runtimeconfig.json')" />
+      <_InvocationArgvFixtureFiles Include="@(_InvocationArgvFixture->'%(RootDir)%(Directory)%(Filename).deps.json')" />
+      <_InvocationArgvFixtureFiles Include="@(_InvocationArgvFixture->'%(RootDir)%(Directory)Mauve.Cli.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_InvocationArgvFixtureFiles)" DestinationFolder="$(OutDir)argv-fixture" />
+  </Target>
 </Project>

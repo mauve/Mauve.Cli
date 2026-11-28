@@ -27,7 +27,8 @@ public static class PredefinedDirectives
         DirectiveValueDefinition mode = new("mode", typeof(string));
         return new DirectiveBuilder("completion")
         {
-            Description = "Generate shell completion or handle a completion request."
+            Description = "Generate shell completion or handle a completion request.",
+            IsCompletion = true
         }.AddValue(mode).SetValueTaskHandler(async (context, cancellationToken) =>
         {
             if (!context.TryGetValue(mode, out string? selectedMode) || selectedMode is null)

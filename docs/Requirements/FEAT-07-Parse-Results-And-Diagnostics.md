@@ -105,6 +105,11 @@ escaped unexpected positional text by default, using at most 128 UTF-16 code
 units of the token before escaping. Pass `includeArgumentText: false` to
 either formatter to omit it; the unmodified token remains inspectable on the
 result. Unknown command and option text is not echoed.
+High-level `CliInvoker.Run`, `RunAsync`, and multicall dispatch preserve this
+default for compatibility. Hosts can suppress argument text in rendered parse
+diagnostics when output may contain secrets or be logged; inspectable results
+and custom callback or exception-renderer output remain the caller's
+responsibility.
 Callback validation failures supply a bounded reason identifier (at most
 64 ASCII letters/digits/dot/underscore/hyphen) and may supply an explicit
 public message. The default formatter appends the single-line, sanitized,
@@ -199,6 +204,8 @@ concurrent parses, categories and coordinates, input/diagnostic bounds,
 unmatched input, model limits and hidden/bounded suggestions. Boundary and
 arbitrary UTF-16 cases exercise preservation and result isolation; observed
 outcomes are recorded in the [validation ledger](../validation-gaps.md).
+Host diagnostic redaction tests cover the compatibility default, explicit
+suppression, and constructor/builder snapshot behavior.
 
 ## Diagrams
 

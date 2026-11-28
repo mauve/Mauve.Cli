@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
@@ -204,20 +205,39 @@ public sealed class ExceptionHostingTests
     public async Task Run_MapsAdditionalDirectivesWithoutDispatchingCommandsOrCatchingSetupFaults()
     {
         int commandCalls = 0;
+        int laterDirectiveCalls = 0;
         using StringWriter errors = new();
         CliHostOptions options = new CliHostOptionsBuilder().WithStandardError(errors)
             .MapException<Exception>(9, "Directive failure.").Build();
         DirectiveBuilder directive = new DirectiveBuilder("fault")
             .SetHandler(static int (_, _) => throw new IOException("Private directive failure."));
+        DirectiveBuilder later = new DirectiveBuilder("later").SetHandler((_, _) => laterDirectiveCalls++);
         CommandModel model = CommandModel.Create(new CommandBuilder("directive-fault")
             .AddDirective(directive)
+            .AddDirective(later)
             .SetHandler((_, _) => commandCalls++));
-        Assert.AreEqual(9, await CliInvoker.RunAsync(model, ["[fault]"], options, TestContext.CancellationToken).ConfigureAwait(false));
-        Assert.AreEqual(9, CliInvoker.Run<ExceptionHostCommand>(["[fault]"], [directive], options, TestContext.CancellationToken));
-        Assert.AreEqual(9, await CliInvoker.RunAsync<AsyncExceptionHostCommand>(["[fault]"], [directive], options, TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual(9, await CliInvoker.RunAsync(model, ["[fault]", "[later]"], options, TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.AreEqual(9, CliInvoker.Run<ExceptionHostCommand>(["[fault]", "[later]"], [directive, later], options, TestContext.CancellationToken));
+        Assert.AreEqual(9, await CliInvoker.RunAsync<AsyncExceptionHostCommand>(["[fault]", "[later]"], [directive, later], options, TestContext.CancellationToken).ConfigureAwait(false));
         Assert.AreEqual(0, commandCalls);
+        Assert.AreEqual(0, laterDirectiveCalls);
         Assert.ThrowsExactly<ArgumentException>(() => CliInvoker.Run<ExceptionHostCommand>(
             [], [directive, directive], options, TestContext.CancellationToken));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-006")]
+    public async Task Run_DoesNotMapAnInnerExceptionOfAnUnmappedOuterFault()
+    {
+        InvalidOperationException outer = new("Outer.", new IOException("Inner."));
+        using StringWriter errors = new();
+        CliHostOptions options = new CliHostOptionsBuilder().WithStandardError(errors)
+            .MapException<IOException>(9, "I/O failure.").Build();
+        InvalidOperationException actual = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+            await CliInvoker.RunAsync(CreateFaultModel(outer), [], options, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        Assert.AreSame(outer, actual);
+        Assert.AreEqual(string.Empty, errors.ToString());
     }
 
     [TestMethod]
@@ -260,9 +280,12 @@ public sealed class ExceptionHostingTests
             await CliInvoker.RunAsync(CreateFaultModel(failure), [], throwing, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         Assert.AreSame(rendererFault, actual);
 
-        using ThrowingWriter writer = new();
+        IOException writerFailure = new("Writer failure.");
+        using ThrowingWriter writer = new(writerFailure);
         CliHostOptions brokenWriter = new(standardError: writer, exceptionMappings: throwing.ExceptionMappings);
-        Assert.ThrowsExactly<IOException>(() => CliInvoker.Run(CreateFaultModel(failure), [], brokenWriter, TestContext.CancellationToken));
+        IOException actualWriterFailure = Assert.ThrowsExactly<IOException>(() =>
+            CliInvoker.Run(CreateFaultModel(failure), [], brokenWriter, TestContext.CancellationToken));
+        Assert.AreSame(writerFailure, actualWriterFailure);
     }
 
     [TestMethod]
@@ -284,9 +307,90 @@ public sealed class ExceptionHostingTests
         Assert.ThrowsExactly<InvalidOperationException>(() => mappings.Add(additions));
         mappings.Map<InvalidOperationException>(8, "Other.");
 
+        CliHostOptionsBuilder hostBuilder = new CliHostOptionsBuilder().MapException<IOException>(7, "I/O.");
+        CliHostOptions beforeRejectedAdd = hostBuilder.Build();
+        Assert.ThrowsExactly<InvalidOperationException>(() => hostBuilder.AddExceptionMappings(additions));
+        CliHostOptions afterRejectedAdd = hostBuilder.Build();
+        foreach (CliHostOptions snapshot in new[] { beforeRejectedAdd, afterRejectedAdd })
+        {
+            Assert.IsTrue(snapshot.ExceptionMappings.TryResolve(new IOException(), out CliExceptionResult? mapped));
+            Assert.AreEqual(7, mapped.ExitCode);
+            Assert.IsFalse(snapshot.ExceptionMappings.TryResolve(new InvalidOperationException(), out _));
+        }
+
+        hostBuilder.MapException<InvalidOperationException>(8, "Other.");
+        Assert.IsTrue(hostBuilder.Build().ExceptionMappings.TryResolve(new InvalidOperationException(), out _));
+
         CliHostOptions invalid = new(exceptionMappings: new ExceptionMappingRegistryBuilder()
             .Map<Exception>(1, static _ => null!).Build());
         Assert.ThrowsExactly<ArgumentNullException>(() => CliInvoker.Run<ExceptionHostCommand>([], invalid, TestContext.CancellationToken));
+    }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-09")]
+    [TestProperty(Metadata.Requirement, "FEAT-09-008")]
+    public async Task Builder_AndConstructorAgreeOnDiagnosticsCultureEnvironmentAndExceptionRendering()
+    {
+        using StringWriter builderOutput = new();
+        using StringWriter builderErrors = new();
+        using StringWriter constructorOutput = new();
+        using StringWriter constructorErrors = new();
+        CultureInfo culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        culture.NumberFormat.NumberDecimalSeparator = ",";
+        static string? Lookup(string name)
+        {
+            return name switch
+            {
+                "TEST_AMOUNT" => "1,5",
+                "TEST_ITEMS" => "alpha;beta",
+                _ => null
+            };
+        }
+        ExceptionMappingRegistry mappings = new ExceptionMappingRegistryBuilder().Map<IOException>(9, "Safe.").Build();
+        static string Render(CliExceptionRenderingContext context)
+        {
+            return "Rendered: " + context.Result.SafeMessage;
+        }
+        CliHostOptions builder = new CliHostOptionsBuilder()
+            .WithStandardOutput(builderOutput).WithStandardError(builderErrors)
+            .WithNumericCulture(culture).WithEnvironmentVariables(prefix: "TEST", lookup: Lookup, delimiter: ';')
+            .AddExceptionMappings(mappings).WithExceptionRenderer(Render).Build();
+        CliHostOptions constructor = new(standardOutput: constructorOutput, standardError: constructorErrors,
+            numericCulture: culture, enableEnvironmentVariables: true, environmentVariablePrefix: "TEST",
+            environmentVariableLookup: Lookup, environmentVariableDelimiter: ';',
+            exceptionMappings: mappings, exceptionRenderer: Render);
+        culture.NumberFormat.NumberDecimalSeparator = ".";
+
+        OptionDefinition amount = new("amount", typeof(double), OptionArity.RequiredScalar);
+        OptionDefinition items = new("items", typeof(IReadOnlyList<string>), OptionArity.GreedyCollection,
+            elementType: typeof(string));
+        CommandModel model = CommandModel.Create(new CommandBuilder("tool").AddOption(amount).AddOption(items)
+            .SetHandler((context, _) =>
+            {
+                Assert.IsTrue(context.TryGetOptionValue(amount, out double parsedAmount));
+                Assert.AreEqual(1.5, parsedAmount);
+                Assert.IsTrue(context.TryGetOptionValue(items, out IReadOnlyList<string>? parsedItems));
+                Assert.AreSequenceEqual(["alpha", "beta"], [.. parsedItems!]);
+                return 37;
+            }));
+        foreach (CliHostOptions options in new[] { builder, constructor })
+        {
+            Assert.AreEqual(37, await CliInvoker.RunAsync(model, [], options, TestContext.CancellationToken).ConfigureAwait(false));
+            Assert.AreEqual(2, await CliInvoker.RunAsync(model, ["--unknown"], options, TestContext.CancellationToken).ConfigureAwait(false));
+            Assert.AreEqual(9, await CliInvoker.RunAsync(CreateFaultModel(new IOException("secret")), [], options, TestContext.CancellationToken).ConfigureAwait(false));
+        }
+
+        string expectedErrors = "Argument 1: Unknown option." + Environment.NewLine + "Rendered: Safe." + Environment.NewLine;
+        Assert.AreEqual(expectedErrors, builderErrors.ToString());
+        Assert.AreEqual(expectedErrors, constructorErrors.ToString());
+        await builderOutput.WriteAsync("still open").ConfigureAwait(false);
+        await constructorOutput.WriteAsync("still open").ConfigureAwait(false);
+        await builderErrors.WriteAsync("still open").ConfigureAwait(false);
+        await constructorErrors.WriteAsync("still open").ConfigureAwait(false);
+        Assert.AreEqual("still open", builderOutput.ToString());
+        Assert.AreEqual("still open", constructorOutput.ToString());
+        Assert.AreEqual(expectedErrors + "still open", builderErrors.ToString());
+        Assert.AreEqual(expectedErrors + "still open", constructorErrors.ToString());
     }
 
     [TestMethod]
@@ -356,9 +460,9 @@ public sealed class ExceptionHostingTests
     private static CommandModel CreateFaultModel(Exception failure) =>
         CommandModel.Create(new CommandBuilder("fault").SetHandler((_, _) => throw failure));
 
-    private sealed class ThrowingWriter : StringWriter
+    private sealed class ThrowingWriter(IOException failure) : StringWriter
     {
-        public override void WriteLine(string? value) => throw new IOException("Writer failure.");
+        public override void WriteLine(string? value) => throw failure;
     }
 }
 

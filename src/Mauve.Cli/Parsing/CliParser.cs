@@ -218,12 +218,16 @@ public sealed class CliParser(
                 directivesValid);
         }
 
-        Dictionary<OptionDefinition, string> environmentValues = ResolveEnvironmentValues(
-            model,
-            effectiveOptions,
-            inScopeOccurrences,
-            hostOptions,
-            cancellationToken);
+        // Only the predefined registration carries this identity; names are application-controlled.
+        Dictionary<OptionDefinition, string> environmentValues =
+            parsedDirectives.Exists(static directive => directive.Definition.IsCompletion)
+                ? []
+                : ResolveEnvironmentValues(
+                    model,
+                    effectiveOptions,
+                    inScopeOccurrences,
+                    hostOptions,
+                    cancellationToken);
         ValidateRequiredInputs(
             selectedCommand,
             effectiveOptions,

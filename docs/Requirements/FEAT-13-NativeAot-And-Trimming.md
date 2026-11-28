@@ -74,7 +74,7 @@ without an owner and narrow tested rationale.
 
 | Consumer / environment | Current status | Future acceptance obligation |
 | --- | --- | --- |
-| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix, model-owned converters, ordered unions, nullable custom collections and directive scenarios run through managed MTP and as a NativeAOT MTP executable. Both TRX reports must contain two passing tests covering FEAT-13 and FEAT-15. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs, directives or invocation behavior. |
+| Focused Mauve.Cli.Aot.Tests, Linux x64 | The comprehensive generated and explicit matrix, model-owned converters, ordered unions, nullable custom collections and directive scenarios run through managed MTP and as a NativeAOT MTP executable. The gate requires six passing tests and checks their behavioral requirement metadata in both reports. | Repeat with `bash scripts/verify-aot.sh` when changing parser, generator, conversion, help, completion, packs, directives or invocation behavior. |
 | Generated `02-Commands/Declarative`, Linux x64 | Managed trimmed and NativeAOT publishes ran the generated Commands model with warnings treated as errors. | Run `bash scripts/verify-aot.sh` when changing the generator or example model. |
 | Explicit `02-Commands/Manual` without a generator reference, Linux x64 | Managed trimmed and NativeAOT publishes ran the explicit Commands model with warnings treated as errors. | Run `bash scripts/verify-aot.sh` when changing the runtime or example model. |
 | Generated and explicit `12-BuiltInTypes`, Linux x64 | Both variants passed distinct managed trimmed and NativeAOT publications, exercising every built-in scalar and representative nullable/collection/union values plus invalid input. | Run `bash scripts/verify-aot.sh` when changing conversions or example models. |
@@ -154,8 +154,10 @@ from historical executions above.
 managed trimmed publish/run and NativeAOT publish/run for both Commands
 examples and all four built-in/custom converter examples. It
 also runs the focused AOT tests through managed MTP and as a NativeAOT MTP
-executable, imports both TRX reports, and requires exact two-test parity. The
-focused scenario checks valid nested alias binding, inherited and nested pack
+executable, imports both TRX reports, and requires six passing tests in each.
+FEAT-13-004 is assessed through the documented support matrix and native-host
+guard rather than the parser scenario's test metadata. The focused scenario
+checks valid nested alias binding, inherited and nested pack
 values, custom and enum conversion, nullable values, help/completion without
 handler dispatch, invalid input without dispatch, and sequential invocation
 isolation. Both published example modes also check that the predefined debug

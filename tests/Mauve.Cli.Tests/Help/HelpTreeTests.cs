@@ -1,6 +1,11 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
+using Mauve.Cli.Conversion;
 using Mauve.Cli.Definitions;
 using Mauve.Cli.Help;
+using Mauve.Cli.Invocation;
+using Mauve.Cli.Validation;
 using Mauve.Governance.Testing.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -9,6 +14,63 @@ namespace Mauve.Cli.Tests.Help;
 [TestClass]
 public sealed class HelpTreeTests
 {
+    public required TestContext TestContext { get; set; }
+
+    [TestMethod]
+    [TestProperty(Metadata.Feature, "FEAT-08")]
+    [TestProperty(Metadata.Requirement, "FEAT-08-006")]
+    public async Task RunAsync_HelpTreeDoesNotInvokeApplicationCallbacks()
+    {
+        int converterCalls = 0;
+        int factoryCalls = 0;
+        int validatorCalls = 0;
+        int crossValidatorCalls = 0;
+        int handlerCalls = 0;
+        ConverterRegistry converters = new ConverterRegistryBuilder().Register((_, _) =>
+        {
+            converterCalls++;
+            return ValueConversion.Failure<int>("integer.invalid");
+        }).Build();
+        ValueValidator<int> validator = new((_, _) =>
+        {
+            validatorCalls++;
+            return ValueValidationOutcome.Success;
+        });
+        CommandBuilder child = new CommandBuilder("child")
+            .AddOption(new OptionDefinition("count", typeof(int), OptionArity.RequiredScalar,
+                validators: [validator]))
+            .AddOption(new OptionDefinition("label", typeof(string), OptionArity.RequiredScalar,
+                defaultValuePolicy: DefaultValuePolicy.Factory,
+                defaultValueFactory: () =>
+                {
+                    factoryCalls++;
+                    return "default";
+                }))
+            .AddCrossValidator(_ =>
+            {
+                crossValidatorCalls++;
+                return ValueValidationOutcome.Success;
+            })
+            .SetHandler((_, _) => handlerCalls++);
+        CommandModel model = CommandModel.Create(
+            new CommandBuilder("tool").AddChild(child), includeStandardHelp: true);
+        using StringWriter output = new();
+        using StringWriter errors = new();
+        CliHostOptions options = new(output, errors, converters: converters);
+
+        int exitCode = await CliInvoker.RunAsync(model, ["child", "--count=bad", "--help-tree"],
+            options, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("tool\n├── ... other commands omitted...\n└── child" + Environment.NewLine, output.ToString());
+        Assert.AreEqual(string.Empty, errors.ToString());
+        Assert.AreEqual(0, converterCalls);
+        Assert.AreEqual(0, factoryCalls);
+        Assert.AreEqual(0, validatorCalls);
+        Assert.AreEqual(0, crossValidatorCalls);
+        Assert.AreEqual(0, handlerCalls);
+    }
+
     [TestMethod]
     [TestProperty(Metadata.Feature, "FEAT-08")]
     [TestProperty(Metadata.Requirement, "FEAT-08-006")]

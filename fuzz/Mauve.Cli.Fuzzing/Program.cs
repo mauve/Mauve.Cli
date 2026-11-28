@@ -325,6 +325,17 @@ internal static class Program
         InvocationResult result = new CliInvoker().InvokeAsync(model, [], options).AsTask().GetAwaiter().GetResult();
         ParseResult parsed = result.ParseResult ?? throw new InvalidOperationException("CSV parse result missing.");
         Check(parsed.Diagnostics.Count <= Limits.MaximumDiagnostics, "CSV diagnostic count");
+        if (!encoded && !csv.Contains('"', StringComparison.Ordinal))
+        {
+            string[] expectedFields = csv.Split(',');
+            if (expectedFields.Length <= Limits.MaximumArgumentCount)
+            {
+                Check(result.Outcome == InvocationOutcome.Completed && dispatched == 1
+                    && parsed.TryGetOptionValue(items, out IReadOnlyList<string>? raw)
+                    && raw is not null && raw.SequenceEqual(expectedFields, StringComparer.Ordinal), "raw CSV fields");
+            }
+        }
+
         if (encoded && csv.Length <= Limits.MaximumTokenLength)
         {
             Check(result.Outcome == InvocationOutcome.Completed && dispatched == 1, "encoded CSV rejected");
@@ -409,12 +420,62 @@ internal static class Program
             && diagnostics.SequenceEqual(repeated.ParseResult!.Diagnostics.Select(static d => d.ToString(false)), StringComparer.Ordinal),
             "environment determinism");
 
+        int environmentCount = 1 + (input.Byte() % 100);
+        string environmentName = input.Text();
+        string explicitTag = input.Text();
         environment.Clear();
-        environment["TOOL_COUNT"] = input.Text();
+        environment["TOOL_COUNT"] = environmentCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        environment["TOOL_NAME"] = environmentName;
+        environment["TOOL_TAG"] = "old,other";
         RichModel.Reset();
-        InvocationResult explicitOption = new CliInvoker().InvokeAsync(rich.Model, ["--count=7"], Host()).AsTask().GetAwaiter().GetResult();
+        InvocationResult bound = new CliInvoker().InvokeAsync(rich.Model, [], Host()).AsTask().GetAwaiter().GetResult();
+        ParseResult boundParse = bound.ParseResult ?? throw new InvalidOperationException("Environment parse result missing.");
+        Check(bound.Outcome == InvocationOutcome.Completed && RichModel.Commands == 1
+            && boundParse.TryGetOptionValue(rich.Count, out int actualCount) && actualCount == environmentCount
+            && boundParse.TryGetOptionValue(rich.Name, out string? actualName) && actualName == environmentName
+            && boundParse.TryGetOptionValue(rich.Tags, out IReadOnlyList<string>? actualTags)
+            && actualTags is not null && actualTags.SequenceEqual(["old", "other"], StringComparer.Ordinal),
+            "environment typed values");
+        foreach (OptionDefinition option in (OptionDefinition[])[rich.Count, rich.Name, rich.Tags])
+        {
+            ParsedValue entry = boundParse.Values.Single(value => ReferenceEquals(value.Option, option));
+            Check(entry.Origin == ValueOrigin.Environment && entry.Presence == ValuePresence.WithValue
+                && entry.TokenIndices.Count == 0, "environment provenance");
+        }
+
+        environment.Clear();
+        RichModel.Reset();
+        InvocationResult defaults = new CliInvoker().InvokeAsync(rich.Model, [], Host()).AsTask().GetAwaiter().GetResult();
+        Check(defaults.Outcome == InvocationOutcome.Completed
+            && defaults.ParseResult!.TryGetOptionValue(rich.Count, out int defaultCount) && defaultCount == 5
+            && defaults.ParseResult.Values.Single(value => ReferenceEquals(value.Option, rich.Count)).Origin == ValueOrigin.Default,
+            "environment default");
+
+        environment["TOOL_COUNT"] = input.Text();
+        environment["TOOL_TAG"] = input.Text();
+        List<string> lookups = [];
+        CliHostOptions tracked = new(new StringWriter(), new StringWriter(), enableEnvironmentVariables: true,
+            environmentVariableLookup: key =>
+            {
+                lookups.Add(key);
+                return environment.GetValueOrDefault(key);
+            });
+        RichModel.Reset();
+        InvocationResult explicitOption = new CliInvoker().InvokeAsync(rich.Model, ["--count=7", "--tag=" + explicitTag], tracked)
+            .AsTask().GetAwaiter().GetResult();
         Check(explicitOption.Outcome == InvocationOutcome.Completed
-            && explicitOption.ParseResult!.TryGetOptionValue(rich.Count, out int explicitCount) && explicitCount == 7, "explicit option ignored environment");
+            && RichModel.Commands == 1
+            && explicitOption.ParseResult!.TryGetOptionValue(rich.Count, out int explicitCount) && explicitCount == 7
+            && explicitOption.ParseResult.TryGetOptionValue(rich.Tags, out IReadOnlyList<string>? explicitTags)
+            && explicitTags is not null && explicitTags.SequenceEqual([explicitTag], StringComparer.Ordinal)
+            && !lookups.Contains("TOOL_COUNT", StringComparer.Ordinal) && !lookups.Contains("TOOL_TAG", StringComparer.Ordinal),
+            "explicit options override environment");
+        foreach (OptionDefinition option in (OptionDefinition[])[rich.Count, rich.Tags])
+        {
+            ParsedValue entry = explicitOption.ParseResult!.Values.Single(value => ReferenceEquals(value.Option, option));
+            Check(entry.Origin == ValueOrigin.Explicit && entry.Presence == ValuePresence.WithValue
+                && entry.TokenIndices.Count > 0, "explicit provenance");
+        }
     }
 
     private static void Parser(ref Input input)

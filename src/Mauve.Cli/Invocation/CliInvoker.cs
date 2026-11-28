@@ -12,7 +12,7 @@ namespace Mauve.Cli.Invocation;
 /// <summary>Parses and invokes one selected command without terminating the process.</summary>
 public sealed class CliInvoker(CliParser? parser = null)
 {
-    private readonly CliParser _parser = parser ?? new CliParser();
+    private readonly CliParser? _parser = parser;
 
     /// <summary>Runs a synchronous generated command root using process arguments by default.</summary>
     /// <typeparam name="TCommand">A generated root whose complete command tree is synchronous.</typeparam>
@@ -306,7 +306,7 @@ public sealed class CliInvoker(CliParser? parser = null)
     /// <summary>Parses and invokes one command with explicit host configuration.</summary>
     /// <param name="model">The validated command model.</param>
     /// <param name="arguments">Tokens excluding the executable name.</param>
-    /// <param name="options">The host output, converter, and environment-binding settings.</param>
+    /// <param name="options">The host output, converter, and environment-binding settings. An explicitly supplied parser controls conversion and syntax instead.</param>
     /// <param name="cancellationToken">The caller-owned cancellation token.</param>
     /// <returns>The invocation outcome and any completed parse result.</returns>
     public ValueTask<InvocationResult> InvokeAsync(
@@ -336,7 +336,8 @@ public sealed class CliInvoker(CliParser? parser = null)
         ParseResult parseResult;
         try
         {
-            parseResult = _parser.ParseForInvocation(model, arguments, cancellationToken, hostOptions, initialPath);
+            CliParser parser = _parser ?? new CliParser(hostOptions.Converters, hostOptions.NumericCulture, hostOptions.Syntax);
+            parseResult = parser.ParseForInvocation(model, arguments, cancellationToken, hostOptions, initialPath);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -477,7 +478,7 @@ public sealed class CliInvoker(CliParser? parser = null)
                     options.HelpTreeRenderer);
                 return 0;
             case InvocationOutcome.InvalidInput:
-                foreach (string line in result.FormatDiagnostics())
+                foreach (string line in result.FormatDiagnostics(options.IncludeArgumentTextInDiagnostics))
                 {
                     options.StandardError.WriteLine(line);
                 }

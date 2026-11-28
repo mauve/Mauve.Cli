@@ -11,13 +11,15 @@ public sealed class DirectiveDefinition
         string? description,
         bool isHidden,
         DirectiveValueDefinition[] values,
-        DirectiveHandler? handler)
+        DirectiveHandler? handler,
+        bool isCompletion)
     {
         Name = name;
         Description = description;
         IsHidden = isHidden;
         Values = Array.AsReadOnly(values);
         Handler = handler;
+        IsCompletion = isCompletion;
     }
 
     /// <summary>Gets the canonical directive name.</summary>
@@ -33,4 +35,6 @@ public sealed class DirectiveDefinition
     public ReadOnlyCollection<DirectiveValueDefinition> Values { get; }
 
     internal DirectiveHandler? Handler { get; }
+
+    internal bool IsCompletion { get; }
 }

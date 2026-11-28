@@ -154,7 +154,9 @@ public sealed class DirectiveBuilder
         return this;
     }
 
-    internal DirectiveDefinition Build() => new(Name, Description, IsHidden, [.. _values], Handler);
+    internal DirectiveDefinition Build() => new(Name, Description, IsHidden, [.. _values], Handler, IsCompletion);
+
+    internal bool IsCompletion { get; set; }
 
     internal int ValueCount => _values.Count;
 

@@ -321,9 +321,8 @@ for mode in managed native; do
         and (.Features | any(.Id == "FEAT-16" and .Status == "Passed" and .Passed == 1))
         and (.Features | any(.Id == "FEAT-17" and .Status == "Passed" and .Passed == 1))
         and (.Requirements | any(.Id == "FEAT-17-004" and .Status == "Passed" and .Passed == 1))
-        and ([.Requirements[]
-            | select((.Id | startswith("FEAT-13-")) and .Id != "FEAT-13-003")
-            | select(.Status == "Passed" and .Passed == 1)] | length == 3)
+        and (.Requirements | any(.Id == "FEAT-13-001" and .Status == "Passed" and .Passed == 1))
+        and (.Requirements | any(.Id == "FEAT-13-002" and .Status == "Passed" and .Passed == 1))
         and (.Requirements | any(.Id == "FEAT-13-003" and .Status == "Passed" and .Passed == 2))
         and ([.Requirements[]
             | select(.Id | startswith("FEAT-15-"))

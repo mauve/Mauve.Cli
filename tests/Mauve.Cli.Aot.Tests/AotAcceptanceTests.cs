@@ -120,7 +120,6 @@ public sealed class AotAcceptanceTests
     [TestProperty(Metadata.Requirement, "FEAT-13-001")]
     [TestProperty(Metadata.Requirement, "FEAT-13-002")]
     [TestProperty(Metadata.Requirement, "FEAT-13-003")]
-    [TestProperty(Metadata.Requirement, "FEAT-13-004")]
     public async Task VerifyGeneratedAndExplicitScenarios()
     {
         CommandModel generated = AotRootCommand.CreateModel(includeStandardHelp: true);

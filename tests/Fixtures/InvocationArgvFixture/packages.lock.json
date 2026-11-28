@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net11.0": {
+      "Mauve.Governance.Logging.Analyzers": {
+        "type": "Direct",
+        "requested": "[0.14.0, )",
+        "resolved": "0.14.0",
+        "contentHash": "GH8mZ42pj8FTSBh2xAPFe5yvPlDfWKO+fiCbScvHC8RAagIvKGAYop2sJ7FhVmEAB2/WpL1iPkmY3VbcOp6lrg=="
+      },
+      "mauve.cli": {
+        "type": "Project"
+      }
+    }
+  }
+}

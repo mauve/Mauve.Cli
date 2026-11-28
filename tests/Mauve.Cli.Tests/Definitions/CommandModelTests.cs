@@ -151,6 +151,7 @@ public sealed class CommandModelTests
         Assert.AreEqual("Root command", model.Root.Description);
         Assert.HasCount(2, model.Root.Children);
         Assert.AreEqual("file", model.Root.Children[0].Name);
+        Assert.AreEqual("File operations", model.Root.Children[0].Description);
         Assert.AreEqual("list", model.Root.Children[1].Name);
         Assert.AreEqual("Copy a file", model.Root.Children[0].Children[0].LongDescription);
         Assert.AreSequenceEqual(["Mauve.Cli", "file", "copy"], [.. model.Root.Children[0].Children[0].Path]);
@@ -257,6 +258,22 @@ public sealed class CommandModelTests
                     aliases: [new OptionAlias("--verbose")])));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(collision));
 
+        CommandBuilder hiddenCollision = new CommandBuilder("tool")
+            .AddChild(new CommandBuilder("copy")
+                .AddOption(new OptionDefinition(
+                    "--child",
+                    typeof(bool),
+                    OptionArity.BooleanFlag,
+                    aliases: [new OptionAlias("--shared")])))
+            .AddOption(new OptionDefinition(
+                "--parent",
+                typeof(bool),
+                OptionArity.BooleanFlag,
+                aliases: [new OptionAlias("--shared")],
+                isHidden: true,
+                scope: OptionScope.Inherited));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(hiddenCollision));
+
         CommandBuilder disjoint = new CommandBuilder("tool")
             .AddOption(new OptionDefinition("--format", typeof(string), OptionArity.RequiredScalar))
             .AddChild(new CommandBuilder("copy")
@@ -274,7 +291,10 @@ public sealed class CommandModelTests
         CommandBuilder distinctBranches = new CommandBuilder("tool")
             .AddChild(new CommandBuilder("first").AddChild(new CommandBuilder("read")))
             .AddChild(new CommandBuilder("second").AddChild(new CommandBuilder("read")));
-        Assert.HasCount(2, CommandModel.Create(distinctBranches).Root.Children);
+        CommandModel model = CommandModel.Create(distinctBranches);
+        Assert.HasCount(2, model.Root.Children);
+        Assert.AreSequenceEqual(["tool", "first", "read"], model.Root.Children[0].Children.Single().Path);
+        Assert.AreSequenceEqual(["tool", "second", "read"], model.Root.Children[1].Children.Single().Path);
     }
 
     [TestMethod]
@@ -283,6 +303,8 @@ public sealed class CommandModelTests
     public void Create_RejectsEmptyOrMalformedCommandNames()
     {
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(new CommandBuilder(string.Empty)));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(
+            new CommandBuilder("tool").AddChild(new CommandBuilder(string.Empty))));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(new CommandBuilder("tool").AddChild(new CommandBuilder("bad_name"))));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(new CommandBuilder("bad root")));
     }
@@ -298,6 +320,10 @@ public sealed class CommandModelTests
         child.AddChild(root);
 
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(root));
+
+        CommandBuilder self = new("self");
+        self.AddChild(self);
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(self));
     }
 
     [TestMethod]
@@ -342,6 +368,15 @@ public sealed class CommandModelTests
         CommandDefinition shortModel = CommandModel.Create(new CommandBuilder("tool").AddOption(shortOnly)).Root;
         Assert.IsTrue(shortModel.TryGetOption("-o", out OptionDefinition? shortOption));
         Assert.AreSame(shortOnly, shortOption);
+
+        OptionDefinition primaryShort = new("output", typeof(string), OptionArity.RequiredScalar, shortName: 'o');
+        CommandDefinition primaryModel = CommandModel.Create(new CommandBuilder("tool").AddOption(primaryShort)).Root;
+        Assert.IsTrue(primaryModel.TryGetOption("--output", out OptionDefinition? longMatch));
+        Assert.IsTrue(primaryModel.TryGetOption("-o", out OptionDefinition? shortMatch));
+        Assert.AreSame(primaryShort, longMatch);
+        Assert.AreSame(longMatch, shortMatch);
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("bad name", typeof(string), OptionArity.RequiredScalar))));
     }
 
     [TestMethod]
@@ -386,13 +421,16 @@ public sealed class CommandModelTests
     public void Create_PreservesPositionalDeclarationOrder()
     {
         CommandBuilder root = new CommandBuilder("tool")
-            .AddPositional(new PositionalDefinition("source", typeof(string)))
+            .AddPositional(new PositionalDefinition("source", typeof(int), description: "Source count", isHidden: true))
             .AddPositional(new PositionalDefinition("destination", typeof(string)));
 
         CommandDefinition definition = CommandModel.Create(root).Root;
 
         Assert.AreSequenceEqual(
             ["source", "destination"], [.. definition.Positionals.Select(static positional => positional.Name)]);
+        Assert.AreEqual(typeof(int), definition.Positionals[0].ValueType);
+        Assert.IsTrue(definition.Positionals[0].IsHidden);
+        Assert.AreEqual("Source count", definition.Positionals[0].Description);
     }
 
     [TestMethod]
@@ -405,6 +443,8 @@ public sealed class CommandModelTests
             .AddPositional(new PositionalDefinition("source", typeof(string)));
 
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(duplicateNames));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(new CommandBuilder("tool")
+            .AddPositional(new PositionalDefinition(string.Empty, typeof(string)))));
     }
 
     [TestMethod]
@@ -421,6 +461,10 @@ public sealed class CommandModelTests
         CommandBuilder repeatedAlias = new CommandBuilder("tool")
             .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar, [new OptionAlias("-o"), new OptionAlias("-o")]));
         Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(repeatedAlias));
+
+        CommandBuilder repeatedLongName = new CommandBuilder("tool")
+            .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar, [new OptionAlias("--output")]));
+        Assert.ThrowsExactly<ArgumentException>(() => CommandModel.Create(repeatedLongName));
 
         CommandBuilder distinctCase = new CommandBuilder("tool")
             .AddOption(new OptionDefinition("--output", typeof(string), OptionArity.RequiredScalar))

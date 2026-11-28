@@ -13,6 +13,7 @@ public sealed class CliHostOptionsBuilder
 {
     private TextWriter? _standardOutput;
     private TextWriter? _standardError;
+    private bool _includeArgumentTextInDiagnostics = true;
     private int _helpWidth = 80;
     private Func<HelpDocument, int, string>? _helpRenderer;
     private Func<HelpTreeDocument, string>? _helpTreeRenderer;
@@ -48,6 +49,15 @@ public sealed class CliHostOptionsBuilder
     {
         ArgumentNullException.ThrowIfNull(writer);
         _standardError = writer;
+        return this;
+    }
+
+    /// <summary>Controls whether host diagnostics include unexpected positional text.</summary>
+    /// <param name="include">Whether to include escaped, bounded text; use false when output may contain secrets or be logged.</param>
+    /// <returns>This builder.</returns>
+    public CliHostOptionsBuilder WithArgumentTextInDiagnostics(bool include)
+    {
+        _includeArgumentTextInDiagnostics = include;
         return this;
     }
 
@@ -201,6 +211,7 @@ public sealed class CliHostOptionsBuilder
     /// <summary>Validates configuration and creates a fresh immutable snapshot without consuming the builder.</summary>
     /// <returns>The host options; subsequent builder changes do not modify these settings.</returns>
     public CliHostOptions Build() => new(
+        includeArgumentTextInDiagnostics: _includeArgumentTextInDiagnostics,
         standardOutput: _standardOutput,
         standardError: _standardError,
         helpWidth: _helpWidth,

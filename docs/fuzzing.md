@@ -55,7 +55,7 @@ The four targets use bounded binary inputs and public-API models:
 | --- | --- |
 | `completion` | Raw command-line tokenization and UTF-16 cursor mapping, then `CompletionService` (directives, short clusters, positionals, providers, cancellation) against the rich model. |
 | `shell` | Shell protocol validation and candidate encoding; no shell script is executed. |
-| `csv` | Environment collection binding with raw or independently encoded CSV; with selector bit 7 set, 14 typed environment variables (integers, enum, decimal, collections, validators, a sensitive value) bound against the rich model. |
+| `csv` | Environment collection binding with raw or independently encoded CSV; with selector bit 7 set, 14 typed environment variables (integers, enum, decimal, collections, validators, a sensitive value) bound against the rich model. Raw unquoted CSV has a field-value oracle; arbitrary quoted raw CSV is checked for safe outcomes rather than independently decoded. Controlled environment inputs also check typed values, provenance, explicit collection replacement and skipped lookups. |
 | `argv` | Argument, directive and option parsing, invoker dispatch, result isolation and string preservation against the rich model. |
 
 The rich model (`fuzz/Mauve.Cli.Fuzzing/RichModel.cs`) uses only public
